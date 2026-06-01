@@ -49,10 +49,18 @@ end
 ns.Reveal = Reveal
 
 -- ---------------------------------------------------------------------
--- Saved variable defaults (account-wide: accessibility needs don't
--- change per character or spec).
+-- Storage model:
+--   CueSenseDB (account-wide) = {
+--     seen     = { ... },                  -- WoW-wide catalog of observed auras
+--     profiles = { [key] = PROFILE, ... }, -- per-character tracked settings
+--   }
+-- The catalog is shared across all characters; tracked settings (cues,
+-- windows, channel, toggles) live in a per-character profile. Per-spec
+-- profiles + import/export build on this in a later step.
 -- ---------------------------------------------------------------------
-local defaults = {
+
+-- Defaults for one profile (the personal, per-character settings).
+local PROFILE_DEFAULTS = {
     enabled = true,
     channel = "Master",          -- default audio channel for cues
     audioEnabled = true,         -- master switch for sound cues
@@ -78,15 +86,31 @@ local defaults = {
             position = nil,
         },
     },
-    -- Watched auras, keyed by spellID-as-string -> cue config:
-    --   { applied=bool, faded=bool, sound=key|nil, channel=key|nil,
-    --     visual=bool, label=str }
+    -- Watched auras, keyed by spellID-as-string -> cue config.
     cues = {},
-    -- Registry of auras actually observed on the player, keyed by
-    -- spellID-as-string -> { name, icon }. Powers the "add" picker so it
-    -- only ever offers auras that genuinely track.
-    seen = {},
 }
+
+-- Defaults for the account-wide DB.
+local DB_DEFAULTS = {
+    -- Registry of auras observed on the player, keyed by spellID-as-string
+    -- -> { name, icon, kind, dungeon, source }. Account-wide (WoW-wide) so
+    -- it accumulates across every character and can be shared.
+    seen = {},
+    profiles = {},
+}
+
+-- The active profile (resolved on login). All tracked-setting reads go
+-- through this; `CueSenseDB.seen` stays account-wide.
+local activeProfile
+local function P() return activeProfile end
+ns.P = P
+
+-- Per-character profile key. (Per-spec keying is a later step.)
+local function ProfileKey()
+    local name = UnitName("player") or "Unknown"
+    local realm = GetRealmName() or "Realm"
+    return name .. "-" .. realm
+end
 
 -- Deep-merge defaults into the saved table without clobbering user
 -- values; type mismatches (corrupt SV) fall back to the default. The
@@ -230,7 +254,7 @@ local overlays = {}
 -- The per-kind visual config table (buff/debuff). Normalizes anything that
 -- isn't "debuff" to "buff".
 local function VisCfg(kind)
-    return CueSenseDB.visual[kind == "debuff" and "debuff" or "buff"]
+    return activeProfile.visual[kind == "debuff" and "debuff" or "buff"]
 end
 ns.VisCfg = VisCfg
 
@@ -254,7 +278,7 @@ local function MakeOverlay(kind)
 
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", function(self)
-        if CueSenseDB and not VisCfg(self.kind).locked then self:StartMoving() end
+        if activeProfile and not VisCfg(self.kind).locked then self:StartMoving() end
     end)
     f:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
@@ -294,7 +318,7 @@ end
 local function RestorePosition(kind)
     local f = overlays[kind]
     f:ClearAllPoints()
-    local p = CueSenseDB and VisCfg(kind).position
+    local p = activeProfile and VisCfg(kind).position
     if p and p.point then
         f:SetPoint(p.point, UIParent, p.relativePoint or p.point, p.x or 0, p.y or 0)
     else
@@ -354,15 +378,15 @@ MakeOverlay("debuff")
 local function FireCue(cue, spellName, eventKind)
     -- Respect the per-kind master switches (buffs vs debuffs).
     if cue.kind == "debuff" then
-        if not CueSenseDB.trackDebuffs then return end
-    elseif not CueSenseDB.trackBuffs then
+        if not activeProfile.trackDebuffs then return end
+    elseif not activeProfile.trackBuffs then
         return
     end
     local verb = (eventKind == "applied") and "gained" or "faded"
     local label = cue.label or spellName or "Aura"
     local snd = (eventKind == "applied") and cue.soundApplied or cue.soundFaded
-    if CueSenseDB.audioEnabled and snd then
-        PlaySoundEntry(snd, cue.channel or CueSenseDB.channel)
+    if activeProfile.audioEnabled and snd then
+        PlaySoundEntry(snd, cue.channel or activeProfile.channel)
     end
     local kind = (cue.kind == "debuff") and "debuff" or "buff"
     if cue.visual and VisCfg(kind).enabled and not ns.testMode then
@@ -375,11 +399,11 @@ end
 -- kind's window. Used by the per-row test buttons. Ignores the per-kind
 -- window "enabled" toggle so a test always shows something.
 function ns.PreviewCue(spellKey, eventKind)
-    local cue = CueSenseDB.cues[spellKey]
+    local cue = activeProfile.cues[spellKey]
     if not cue then return end
     eventKind = (eventKind == "faded") and "faded" or "applied"
     local snd = (eventKind == "applied") and cue.soundApplied or cue.soundFaded
-    if snd then PlaySoundEntry(snd, cue.channel or CueSenseDB.channel) end
+    if snd then PlaySoundEntry(snd, cue.channel or activeProfile.channel) end
     if cue.visual then
         local kind = (cue.kind == "debuff") and "debuff" or "buff"
         ShowVisual(kind, (cue.label or "Aura") .. " " .. (eventKind == "faded" and "faded" or "gained"))
@@ -389,14 +413,14 @@ end
 -- Preview a whole kind's window (test button under each tab).
 function ns.TestWindow(kind)
     kind = (kind == "debuff") and "debuff" or "buff"
-    PlaySoundEntry("rise", CueSenseDB.channel)
+    PlaySoundEntry("rise", activeProfile.channel)
     ShowVisual(kind, (kind == "debuff" and "Debuff" or "Buff") .. " test")
 end
 
 -- General test (/cue test, Audio panel button): a sound plus a flash on
 -- both windows so you can see where each one sits.
 function ns.PlayTestCue()
-    PlaySoundEntry("rise", CueSenseDB.channel)
+    PlaySoundEntry("rise", activeProfile.channel)
     ShowVisual("buff", "Buff test")
     ShowVisual("debuff", "Debuff test")
 end
@@ -464,8 +488,8 @@ local function RecordSeen(sid, data)
 end
 
 local function ScanPlayerAuras()
-    if not CueSenseDB or not CueSenseDB.enabled then return end
-    local cues = CueSenseDB.cues
+    if not activeProfile or not activeProfile.enabled then return end
+    local cues = activeProfile.cues
     local now = {}
 
     local function handle(data)
@@ -502,7 +526,7 @@ ns.ScanPlayerAuras = ScanPlayerAuras
 -- already up doesn't instantly announce it.
 local function SeedPresent()
     present = {}
-    local cues = CueSenseDB and CueSenseDB.cues or {}
+    local cues = activeProfile and activeProfile.cues or {}
     local function handle(data)
         if not data then return false end
         local sid = Reveal(data.spellId)
@@ -536,7 +560,7 @@ function ns.AddCue(spellID)
     else
         category = "Buffs"
     end
-    CueSenseDB.cues[tostring(spellID)] = {
+    activeProfile.cues[tostring(spellID)] = {
         applied      = true,
         faded        = true,
         soundApplied = "rise",   -- played when the aura is gained
@@ -556,14 +580,14 @@ end
 function ns.RemoveCue(spellID)
     spellID = tonumber(spellID)
     if not spellID then return false end
-    local existed = CueSenseDB.cues[tostring(spellID)] ~= nil
-    CueSenseDB.cues[tostring(spellID)] = nil
+    local existed = activeProfile.cues[tostring(spellID)] ~= nil
+    activeProfile.cues[tostring(spellID)] = nil
     return existed
 end
 
 function ns.CueCount()
     local n = 0
-    for _ in pairs(CueSenseDB.cues) do n = n + 1 end
+    for _ in pairs(activeProfile.cues) do n = n + 1 end
     return n
 end
 
@@ -613,50 +637,81 @@ end
 -- ---------------------------------------------------------------------
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
+eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
+
+local SETTING_KEYS = { "enabled", "channel", "audioEnabled",
+    "trackBuffs", "trackDebuffs", "visual", "cues" }
+
+-- Resolve (and on first run build) this character's profile. Deferred to
+-- PLAYER_LOGIN so UnitName/GetRealmName are reliable for the profile key.
+local function InitProfile()
+    local key = ProfileKey()
+
+    -- Migrate a pre-v0.10 flat layout (tracked settings at the DB top level)
+    -- into this character's profile — detected by any old setting key still
+    -- sitting at the top level. The `seen` catalog stays account-wide.
+    local hasFlat = false
+    for _, k in ipairs(SETTING_KEYS) do
+        if CueSenseDB[k] ~= nil then hasFlat = true; break end
+    end
+    if hasFlat then
+        local prof = CueSenseDB.profiles[key] or {}
+        for _, k in ipairs(SETTING_KEYS) do
+            if CueSenseDB[k] ~= nil then prof[k] = CueSenseDB[k]; CueSenseDB[k] = nil end
+        end
+        CueSenseDB.profiles[key] = prof
+    end
+
+    CueSenseDB.profiles[key] = CueSenseDB.profiles[key] or {}
+    activeProfile = CueSenseDB.profiles[key]
+    MigrateVisual(activeProfile)
+    MergeDefaults(activeProfile, PROFILE_DEFAULTS)
+    ValidateRanges(activeProfile)
+
+    -- Backfill kind/category onto cues created before v0.5.0, and remap any
+    -- sound key that no longer exists (e.g. the pre-v0.7 SOUNDKIT keys) onto
+    -- a bundled tone. `false` (None / silent) is preserved.
+    for _, cue in pairs(activeProfile.cues) do
+        if not cue.kind then cue.kind = "buff" end
+        if not cue.category then
+            cue.category = (cue.kind == "debuff") and "Debuffs" or "Buffs"
+        end
+        -- v0.9: split the single `sound` into separate gained/faded sounds.
+        if cue.sound ~= nil and cue.soundApplied == nil and cue.soundFaded == nil then
+            cue.soundApplied = cue.sound
+            cue.soundFaded = cue.sound
+            cue.sound = nil
+        end
+        if cue.soundApplied == nil then cue.soundApplied = "rise" end
+        if cue.soundFaded == nil then cue.soundFaded = "fall" end
+        for _, field in ipairs({ "soundApplied", "soundFaded" }) do
+            local v = cue[field]
+            if v then
+                local known = false
+                for _, e in ipairs(ns.SOUNDS) do
+                    if e.key == v then known = true; break end
+                end
+                if not known then cue[field] = (field == "soundFaded") and "fall" or "rise" end
+            end
+        end
+    end
+
+    RestorePosition("buff")
+    RestorePosition("debuff")
+    ns.InitOptions()
+end
 
 eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
         local name = ...
         if name ~= addonName then return end
         CueSenseDB = CueSenseDB or {}
-        MigrateVisual(CueSenseDB)
-        MergeDefaults(CueSenseDB, defaults)
-        ValidateRanges(CueSenseDB)
-        -- Backfill kind/category onto cues created before v0.5.0, and remap
-        -- any sound key that no longer exists (e.g. the pre-v0.7 SOUNDKIT
-        -- keys) onto a bundled tone. `false` (None / silent) is preserved.
-        for _, cue in pairs(CueSenseDB.cues) do
-            if not cue.kind then cue.kind = "buff" end
-            if not cue.category then
-                cue.category = (cue.kind == "debuff") and "Debuffs" or "Buffs"
-            end
-            -- v0.9: split the single `sound` into separate gained/faded
-            -- sounds, carrying the old value into both.
-            if cue.sound ~= nil and cue.soundApplied == nil and cue.soundFaded == nil then
-                cue.soundApplied = cue.sound
-                cue.soundFaded = cue.sound
-                cue.sound = nil
-            end
-            if cue.soundApplied == nil then cue.soundApplied = "rise" end
-            if cue.soundFaded == nil then cue.soundFaded = "fall" end
-            -- Remap any unknown sound key onto a bundled tone (false = silent
-            -- is preserved).
-            for _, field in ipairs({ "soundApplied", "soundFaded" }) do
-                local v = cue[field]
-                if v then
-                    local known = false
-                    for _, e in ipairs(ns.SOUNDS) do
-                        if e.key == v then known = true; break end
-                    end
-                    if not known then cue[field] = (field == "soundFaded") and "fall" or "rise" end
-                end
-            end
-        end
-        RestorePosition("buff")
-        RestorePosition("debuff")
-        ns.InitOptions()
+        MergeDefaults(CueSenseDB, DB_DEFAULTS)
+
+    elseif event == "PLAYER_LOGIN" then
+        InitProfile()
         chatPrint("loaded. Type |cffffd200/cue|r for commands.")
 
     elseif event == "PLAYER_ENTERING_WORLD" then
@@ -705,7 +760,7 @@ SlashCmdList["CUESENSE"] = function(msg)
         elseif cmd == "list" then
             local n = ns.CueCount()
             chatPrint("watching " .. n .. " aura" .. (n == 1 and "" or "s") .. ":")
-            for sid, cue in pairs(CueSenseDB.cues) do
+            for sid, cue in pairs(activeProfile.cues) do
                 local modes = {}
                 if cue.soundApplied or cue.soundFaded then modes[#modes + 1] = "sound" end
                 if cue.visual then modes[#modes + 1] = "visual" end
@@ -715,8 +770,8 @@ SlashCmdList["CUESENSE"] = function(msg)
             end
 
         elseif cmd == "toggle" then
-            CueSenseDB.enabled = not CueSenseDB.enabled
-            chatPrint(CueSenseDB.enabled and "|cff00ff00enabled|r" or "|cffff0000disabled|r")
+            activeProfile.enabled = not activeProfile.enabled
+            chatPrint(activeProfile.enabled and "|cff00ff00enabled|r" or "|cffff0000disabled|r")
             ns.RefreshOptions()
 
         elseif cmd == "lock" then
@@ -732,8 +787,8 @@ SlashCmdList["CUESENSE"] = function(msg)
                 .. "  (use |cffffd200/cue move debuff|r for the other one.)")
 
         elseif cmd == "reset" then
-            CueSenseDB.visual.buff.position = nil
-            CueSenseDB.visual.debuff.position = nil
+            activeProfile.visual.buff.position = nil
+            activeProfile.visual.debuff.position = nil
             RestorePosition("buff")
             RestorePosition("debuff")
             chatPrint("overlay positions reset.")
@@ -747,15 +802,15 @@ SlashCmdList["CUESENSE"] = function(msg)
             local seenN = 0
             for _ in pairs(CueSenseDB.seen) do seenN = seenN + 1 end
             chatPrint("status:")
-            print("  enabled:        " .. tostring(CueSenseDB.enabled))
+            print("  enabled:        " .. tostring(activeProfile.enabled))
             print("  watched auras:  " .. ns.CueCount())
             print("  auras seen:     " .. seenN)
-            local vb, vd = CueSenseDB.visual.buff, CueSenseDB.visual.debuff
+            local vb, vd = activeProfile.visual.buff, activeProfile.visual.debuff
             print("  buff window:    " .. tostring(vb.enabled)
                   .. " (scale " .. vb.scale .. ", " .. vb.duration .. "s)")
             print("  debuff window:  " .. tostring(vd.enabled)
                   .. " (scale " .. vd.scale .. ", " .. vd.duration .. "s)")
-            print("  audio channel:  " .. CueSenseDB.channel)
+            print("  audio channel:  " .. activeProfile.channel)
             print("  secret regime:  " .. tostring(issecret ~= nil))
 
         else
@@ -782,8 +837,8 @@ end
 -- ---------------------------------------------------------------------
 function CueSense_OnCompartmentClick(_, button)
     if button == "RightButton" then
-        CueSenseDB.enabled = not CueSenseDB.enabled
-        chatPrint(CueSenseDB.enabled and "|cff00ff00enabled|r" or "|cffff0000disabled|r")
+        activeProfile.enabled = not activeProfile.enabled
+        chatPrint(activeProfile.enabled and "|cff00ff00enabled|r" or "|cffff0000disabled|r")
     else
         ns.OpenOptions()
     end
@@ -792,7 +847,7 @@ end
 function CueSense_OnCompartmentEnter(_, button)
     GameTooltip:SetOwner(button, "ANCHOR_LEFT")
     GameTooltip:SetText("CueSense", 0.2, 0.86, 0.75)
-    GameTooltip:AddLine(CueSenseDB.enabled and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r", 1, 1, 1)
+    GameTooltip:AddLine(activeProfile.enabled and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r", 1, 1, 1)
     GameTooltip:AddLine("Watching " .. ns.CueCount() .. " aura(s)", 1, 1, 1)
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine("|cffffd200Left-click:|r options", 1, 1, 1)

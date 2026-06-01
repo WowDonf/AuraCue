@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.10.0
+
+- **Storage split (groundwork for profiles & sharing).** The catalog of
+  auras seen on you is now **account-wide** — it builds up once and is shared
+  across all your characters — while your tracked auras and settings live in
+  a **per-character profile**. Your existing setup migrates automatically on
+  first login; nothing to do. (Per-spec profiles and import/export build on
+  this next.)
+
 ## v0.9.1
 
 - **Search the aura picker.** A search box next to "Add an aura" filters the

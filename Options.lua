@@ -3,10 +3,8 @@
 -- =====================================================================
 -- Canvas categories don't clip or scroll their content; a ScrollFrame
 -- inside the canvas does. Same layout pattern as DontRelease/OutOfRange.
---
--- v0.1.0 exposes the global cue settings (visual look, audio channel)
--- and a test/reposition path. The per-aura watch list is managed via
--- /cue add|remove|list for now; an in-panel editor is a later phase.
+-- All tracked-setting reads go through ns.P() (the active profile); the
+-- account-wide seen catalog is reached via ns.GetSeenAuras().
 -- =====================================================================
 local _, ns = ...
 
@@ -169,14 +167,14 @@ y = y - 14
 AddHeader("General")
 
 AddCheckbox("Enable CueSense",
-    function() return CueSenseDB.enabled end,
-    function(v) CueSenseDB.enabled = v end)
+    function() return ns.P().enabled end,
+    function(v) ns.P().enabled = v end)
 AddCheckbox("Track buffs (helpful auras)",
-    function() return CueSenseDB.trackBuffs end,
-    function(v) CueSenseDB.trackBuffs = v end)
+    function() return ns.P().trackBuffs end,
+    function(v) ns.P().trackBuffs = v end)
 AddCheckbox("Track debuffs (harmful auras)",
-    function() return CueSenseDB.trackDebuffs end,
-    function(v) CueSenseDB.trackDebuffs = v end)
+    function() return ns.P().trackDebuffs end,
+    function(v) ns.P().trackDebuffs = v end)
 
 -- (Visual-window appearance is configured per-kind, under the Buffs /
 -- Debuffs tabs further down.)
@@ -187,8 +185,8 @@ AddCheckbox("Track debuffs (harmful auras)",
 AddHeader("Audio cue")
 
 AddCheckbox("Play sound cues",
-    function() return CueSenseDB.audioEnabled end,
-    function(v) CueSenseDB.audioEnabled = v end)
+    function() return ns.P().audioEnabled end,
+    function(v) ns.P().audioEnabled = v end)
 
 AddDescription("Master switch for all cue sounds. Each aura's sound (or no sound) " ..
     "is set per-row below; this is the audio channel they route through, so blind / " ..
@@ -200,10 +198,10 @@ channelDropdown:SetupMenu(function(_, root)
     for _, c in ipairs(ns.CHANNELS) do
         local key = c
         root:CreateRadio(key,
-            function() return CueSenseDB and CueSenseDB.channel == key end,
+            function() return ns.P() and ns.P().channel == key end,
             function()
-                if not CueSenseDB then return end
-                CueSenseDB.channel = key
+                if not ns.P() then return end
+                ns.P().channel = key
                 C_Timer.After(0, function() channelDropdown:GenerateMenu() end)
             end)
     end
@@ -216,7 +214,7 @@ AddButton("Play test cue", 160, function() ns.PlayTestCue() end)
 -- ---------------------------------------------------------------------
 -- Watched auras (in-panel editor)
 -- ---------------------------------------------------------------------
--- The list below is rebuilt on demand from CueSenseDB.cues. Rows are
+-- The list below is rebuilt on demand from ns.P().cues. Rows are
 -- pooled (created once, reused) and the scroll content height is
 -- recomputed from the editor's bottom each rebuild. Forward-declare the
 -- pieces that reference each other (rows reference RebuildList to refresh
@@ -232,7 +230,7 @@ local MakeHeader
 local UpdateTabs
 
 -- The visual-window config for the tab currently being edited.
-local function ActiveVis() return CueSenseDB.visual[activeTab] end
+local function ActiveVis() return ns.P().visual[activeTab] end
 
 AddHeader("Watched auras")
 
@@ -287,7 +285,7 @@ addDD:SetupMenu(function(_, root)
     -- SetupMenu populates once at load, before ADDON_LOADED creates the
     -- saved variables. Bail until the DB exists; the menu regenerates on
     -- every open, so it fills in normally once the player is logged in.
-    if not CueSenseDB then return end
+    if not ns.P() then return end
     -- Cap the menu height so a long list scrolls instead of running off
     -- the bottom of the screen (reported at 1920x1080).
     if root.SetScrollMode then root:SetScrollMode(GetScreenHeight() * 0.6) end
@@ -302,14 +300,14 @@ addDD:SetupMenu(function(_, root)
             shown = shown + 1
             local icon = sp.icon or 134400
             local label = string.format("|T%d:16:16:0:0|t %s", icon, nm)
-            if CueSenseDB.cues[tostring(sid)] then
+            if ns.P().cues[tostring(sid)] then
                 label = label .. "  |cff808080(watching)|r"
             end
             if sp.secret then
                 label = label .. "  |cffff6060(may be hidden in instances)|r"
             end
             local btn = root:CreateButton(label, function()
-                if CueSenseDB.cues[tostring(sid)] then
+                if ns.P().cues[tostring(sid)] then
                     addStatus:SetText("|cffffd200Already watching " .. nm .. ".|r")
                     return
                 end
@@ -361,7 +359,7 @@ local function DoAdd()
         addStatus:SetText("|cffff6060Enter a spell ID number.|r")
         return
     end
-    if CueSenseDB.cues[tostring(id)] then
+    if ns.P().cues[tostring(id)] then
         addStatus:SetText("|cffffd200Already watching that.|r")
         return
     end
@@ -406,8 +404,8 @@ y = y - 30
 
 UpdateTabs = function()
     local b, d = 0, 0
-    if CueSenseDB then
-        for _, cue in pairs(CueSenseDB.cues) do
+    if ns.P() then
+        for _, cue in pairs(ns.P().cues) do
             if cue.kind == "debuff" then d = d + 1 else b = b + 1 end
         end
     end
@@ -530,7 +528,7 @@ MakeRow = function(i)
     -- Hover the row to see the aura's source (mob / dungeon) when known.
     row:EnableMouse(true)
     row:SetScript("OnEnter", function(self)
-        local cue = self.spellID and CueSenseDB.cues[self.spellID]
+        local cue = self.spellID and ns.P().cues[self.spellID]
         if not cue then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         local sid = tonumber(self.spellID)
@@ -557,7 +555,7 @@ MakeRow = function(i)
         cb:SetSize(24, 24)
         cb:SetPoint("TOPLEFT", row, "TOPLEFT", xoff, -3)
         cb:SetScript("OnClick", function(self)
-            local cue = row.spellID and CueSenseDB.cues[row.spellID]
+            local cue = row.spellID and ns.P().cues[row.spellID]
             if cue then cue[field] = self:GetChecked() and true or false end
         end)
         return cb
@@ -575,11 +573,11 @@ MakeRow = function(i)
         dd:SetupMenu(function(_, rootMenu)
             rootMenu:CreateRadio("None (silent)",
                 function()
-                    local c = row.spellID and CueSenseDB.cues[row.spellID]
+                    local c = row.spellID and ns.P().cues[row.spellID]
                     return c and not c[field]
                 end,
                 function()
-                    local c = row.spellID and CueSenseDB.cues[row.spellID]
+                    local c = row.spellID and ns.P().cues[row.spellID]
                     if not c then return end
                     c[field] = false
                     C_Timer.After(0, function() dd:GenerateMenu() end)
@@ -588,14 +586,14 @@ MakeRow = function(i)
                 local key = item.key
                 rootMenu:CreateRadio(item.label,
                     function()
-                        local c = row.spellID and CueSenseDB.cues[row.spellID]
+                        local c = row.spellID and ns.P().cues[row.spellID]
                         return c and c[field] == key
                     end,
                     function()
-                        local c = row.spellID and CueSenseDB.cues[row.spellID]
+                        local c = row.spellID and ns.P().cues[row.spellID]
                         if not c then return end
                         c[field] = key
-                        ns.PlaySoundEntry(key, c.channel or CueSenseDB.channel)
+                        ns.PlaySoundEntry(key, c.channel or ns.P().channel)
                         C_Timer.After(0, function() dd:GenerateMenu() end)
                     end)
             end
@@ -647,7 +645,7 @@ MakeRow = function(i)
     -- changed (avoids a rebuild — and re-entrant focus events — when the
     -- box is left untouched).
     row.cat:SetScript("OnEditFocusLost", function(self)
-        local cue = row.spellID and CueSenseDB.cues[row.spellID]
+        local cue = row.spellID and ns.P().cues[row.spellID]
         if not cue then return end
         local t = (self:GetText() or ""):trim()
         local newCat = (t ~= "" and t) or ((cue.kind == "debuff") and "Debuffs" or "Buffs")
@@ -657,7 +655,7 @@ MakeRow = function(i)
     end)
     row.cat:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
     row.cat:SetScript("OnEscapePressed", function(self)
-        local cue = row.spellID and CueSenseDB.cues[row.spellID]
+        local cue = row.spellID and ns.P().cues[row.spellID]
         self:SetText(cue and cue.category or "")
         self:ClearFocus()
     end)
@@ -667,12 +665,12 @@ MakeRow = function(i)
 end
 
 RebuildList = function()
-    if not CueSenseDB then return end
+    if not ns.P() then return end
 
     -- Group cues by category. Buffs/Debuffs are the default groups; a
     -- user-typed category re-files an aura under its own heading.
     local groups, total = {}, 0
-    for sid, cue in pairs(CueSenseDB.cues) do
+    for sid, cue in pairs(ns.P().cues) do
         local k = (cue.kind == "debuff") and "debuff" or "buff"
         if k == activeTab then
             local cat = cue.category or ((k == "debuff") and "Debuffs" or "Buffs")
@@ -710,7 +708,7 @@ RebuildList = function()
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", editor, "TOPLEFT", 0, -yOff)
             row.spellID = sid
-            local cue = CueSenseDB.cues[sid]
+            local cue = ns.P().cues[sid]
             local nm = cue.label or C_Spell.GetSpellName(tonumber(sid)) or "Unknown"
             row.name:SetText(nm .. "  |cff808080(" .. sid .. ")|r")
             row.applied:SetChecked(cue.applied and true or false)
@@ -745,7 +743,7 @@ ns.RebuildList = RebuildList
 -- Refresh + registration
 -- ---------------------------------------------------------------------
 local function RefreshAll()
-    if not CueSenseDB then return end
+    if not ns.P() then return end
     for _, w in ipairs(widgets) do
         if w.Refresh then w.Refresh() end
     end
