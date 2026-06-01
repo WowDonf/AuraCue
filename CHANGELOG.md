@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.11.0
+
+- **Buffs and Debuffs are now separate pages in the settings list**, instead
+  of tabs inside one panel. The main CueSense page holds the general and
+  audio settings; "Buffs" and "Debuffs" each get their own page (in the left
+  sidebar) with that kind's window appearance and its watched-aura editor.
+  Cleaner and less cluttered, and each picker only offers auras of its kind.
+
 ## v0.10.4
 
 - Fix the "Audio channel" label overlapping the description above it (long

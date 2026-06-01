@@ -54,7 +54,8 @@ Tip: look up spell IDs on Wowhead — the ID is in the page URL.
 - **Audio cue:** a master "Play sound cues" switch and the channel sounds
   route through. Any aura can be set to "None (silent)" for visual-only.
 - **Buffs vs debuffs:** track buffs and debuffs independently, and manage
-  them on separate tabs. Debuffs file themselves under the dungeon they were
+  each on its own page in the settings list (CueSense ▸ Buffs / Debuffs).
+  Debuffs file themselves under the dungeon they were
   first seen in; hover a row to see its source mob (when the game exposes
   it). Type a Group name on any row to re-file it under your own heading.
 - **Watched auras:** pick from a list of auras you've actually had (shown
