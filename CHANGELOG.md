@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.14.1
+
+- **Fix: cues now work in combat.** Watched auras were all reported as
+  "faded" the moment combat started and "gained" again when it ended. The
+  game hides aura spell IDs during combat, and the tracker was reading them
+  to match; it now checks each watched aura by its known ID instead, which
+  works in and out of combat.
+
 ## v0.14.0
 
 - **Import / export.** A new Sharing section on the main page lets you export

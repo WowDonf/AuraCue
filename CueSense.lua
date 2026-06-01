@@ -516,24 +516,51 @@ local function RecordSeen(sid, data)
     }
 end
 
+-- Presence test for ONE watched aura, by its known spell ID. We query the
+-- ID we already have rather than reading spellIds off the aura list, because
+-- in combat those spellIds are secret values — reading them fails, which made
+-- every watched aura look "faded" the moment combat started. Querying a known
+-- ID is the sanctioned path and works in and out of combat.
+local GetPlayerAura = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
+local function PlayerHasAura(sid)
+    if not sid then return false end
+    if GetPlayerAura then
+        return GetPlayerAura(sid) ~= nil
+    end
+    -- Fallback for clients without the API (reads spellIds; out-of-combat only).
+    local found = false
+    local function h(data)
+        if data and Reveal(data.spellId) == sid then found = true; return true end
+        return false
+    end
+    AuraUtil.ForEachAura("player", "HELPFUL", nil, h, true)
+    if not found then AuraUtil.ForEachAura("player", "HARMFUL", nil, h, true) end
+    return found
+end
+
+-- Catalogue auras currently readable on the player (for the picker). This
+-- still reads spellIds, so it's best-effort and mostly fills out of combat;
+-- it does NOT drive cues.
+local function CatalogVisibleAuras()
+    local function handle(data)
+        if not data then return false end
+        local sid = Reveal(data.spellId)
+        if sid then RecordSeen(sid, data) end
+        return false
+    end
+    AuraUtil.ForEachAura("player", "HELPFUL", nil, handle, true)
+    AuraUtil.ForEachAura("player", "HARMFUL", nil, handle, true)
+end
+
 local function ScanPlayerAuras()
     if not activeProfile or not activeProfile.enabled then return end
     local cues = activeProfile.cues
+
+    -- Diff watched auras by querying each known ID (combat-safe).
     local now = {}
-
-    local function handle(data)
-        if not data then return false end
-        local sid = Reveal(data.spellId)        -- non-secret for the player's own auras
-        if sid then
-            RecordSeen(sid, data)
-            if cues[tostring(sid)] then now[sid] = true end
-        end
-        return false                            -- never early-out; scan all
+    for key in pairs(cues) do
+        if PlayerHasAura(tonumber(key)) then now[tonumber(key)] = true end
     end
-
-    -- usePackedAura=true -> handler receives an aura-data table
-    AuraUtil.ForEachAura("player", "HELPFUL", nil, handle, true)
-    AuraUtil.ForEachAura("player", "HARMFUL", nil, handle, true)
 
     for sid in pairs(now) do
         if not present[sid] then
@@ -548,6 +575,8 @@ local function ScanPlayerAuras()
         end
     end
     present = now
+
+    CatalogVisibleAuras()
 end
 ns.ScanPlayerAuras = ScanPlayerAuras
 
@@ -555,18 +584,11 @@ ns.ScanPlayerAuras = ScanPlayerAuras
 -- already up doesn't instantly announce it.
 local function SeedPresent()
     present = {}
-    local cues = activeProfile and activeProfile.cues or {}
-    local function handle(data)
-        if not data then return false end
-        local sid = Reveal(data.spellId)
-        if sid then
-            RecordSeen(sid, data)
-            if cues[tostring(sid)] then present[sid] = true end
-        end
-        return false
+    local cues = activeProfile and activeProfile.cues
+    if not cues then return end
+    for key in pairs(cues) do
+        if PlayerHasAura(tonumber(key)) then present[tonumber(key)] = true end
     end
-    AuraUtil.ForEachAura("player", "HELPFUL", nil, handle, true)
-    AuraUtil.ForEachAura("player", "HARMFUL", nil, handle, true)
 end
 
 -- ---------------------------------------------------------------------
