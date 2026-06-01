@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.4.0
+
+- **The "add" list now only shows auras that actually track.** It's built
+  from auras seen on you (filling in as they appear), instead of your whole
+  spellbook — so abilities that put no aura on you (interrupts, direct
+  damage, target debuffs) no longer clutter the list or get added by
+  mistake. Adding by spell ID is still there for auras you haven't had yet.
+  New `/cue forget` clears the remembered-aura list.
+- **The move overlay now looks like a window.** While repositioning it
+  shows a bordered box with an "X" in the corner to close/lock it, matching
+  the OutOfRange movable frame.
+- **The add list scrolls** instead of running off the bottom of the screen
+  at 1920x1080 and similar resolutions.
+
 ## v0.3.2
 
 - Flag auras that the client reports as hidden in instanced content

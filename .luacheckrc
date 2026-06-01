@@ -25,14 +25,14 @@ globals = {
 -- Blizzard / WoW API globals the addon only reads from.
 read_globals = {
     -- Frame + UI infrastructure
-    "CreateFrame", "UIParent",
+    "CreateFrame", "UIParent", "GetScreenHeight",
     "Settings", "SettingsPanel", "HideUIPanel",
     "ColorPickerFrame",
     "GameTooltip",
     -- Sound
     "PlaySound", "PlaySoundFile", "SOUNDKIT",
     -- Auras / spell data
-    "C_UnitAuras", "AuraUtil", "C_Spell", "C_SpellBook", "Enum",
+    "C_UnitAuras", "AuraUtil", "C_Spell",
     -- Secret-value regime (Midnight 12.0+); nil on older clients
     "issecretvalue", "C_Secrets",
     -- Timing

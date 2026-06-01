@@ -67,6 +67,10 @@ local defaults = {
     --   { applied=bool, faded=bool, sound=key|nil, channel=key|nil,
     --     visual=bool, label=str }
     cues = {},
+    -- Registry of auras actually observed on the player, keyed by
+    -- spellID-as-string -> { name, icon }. Powers the "add" picker so it
+    -- only ever offers auras that genuinely track.
+    seen = {},
 }
 
 -- Deep-merge defaults into the saved table without clobbering user
@@ -161,7 +165,7 @@ ns.PlaySoundEntry = PlaySoundEntry
 -- A single center-screen flash line, reused by every cue, the test
 -- button, and reposition mode.
 -- ---------------------------------------------------------------------
-local overlay = CreateFrame("Frame", "CueSenseOverlay", UIParent)
+local overlay = CreateFrame("Frame", "CueSenseOverlay", UIParent, "BackdropTemplate")
 ns.overlay = overlay
 overlay:SetSize(560, 90)
 overlay:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -186,18 +190,26 @@ overlay:SetScript("OnDragStop", function(self)
     CueSenseDB.visual.position = { point = point, relativePoint = relativePoint, x = x, y = y }
 end)
 
--- "Done" button: only shown while repositioning, so the overlay can be
--- locked from the screen instead of forcing a /cue lock. Sits just below
--- the overlay and rides along with it (child frame).
-overlay.done = CreateFrame("Button", nil, overlay, "UIPanelButtonTemplate")
-overlay.done:SetSize(170, 26)
-overlay.done:SetPoint("TOP", overlay, "BOTTOM", 0, -10)
-overlay.done:SetText("Done — lock here")
-overlay.done:Hide()
-overlay.done:SetScript("OnClick", function()
+-- Close button shown only while repositioning, so the overlay can be
+-- locked from the screen (mirrors the OutOfRange movable frame). Sits in
+-- the top-right corner and rides along with the overlay (child frame).
+overlay.closeBtn = CreateFrame("Button", nil, overlay, "UIPanelCloseButton")
+overlay.closeBtn:SetSize(28, 28)
+overlay.closeBtn:SetPoint("TOPRIGHT", overlay, "TOPRIGHT", 4, 4)
+overlay.closeBtn:Hide()
+overlay.closeBtn:SetScript("OnClick", function()
     ns.SetRepositionMode(false)
     ns.OpenOptions()
 end)
+
+-- Backdrop applied only in reposition mode, so the box is visible to grab;
+-- live cues draw as plain text with no border.
+local REPOSITION_BACKDROP = {
+    bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile     = true, tileSize = 16, edgeSize = 16,
+    insets   = { left = 4, right = 4, top = 4, bottom = 4 },
+}
 
 local function RestorePosition()
     overlay:ClearAllPoints()
@@ -246,18 +258,22 @@ function ns.SetRepositionMode(on)
     if on then
         CueSenseDB.visual.locked = false
         fadeDuration = 0
+        overlay:SetBackdrop(REPOSITION_BACKDROP)
+        overlay:SetBackdropColor(0, 0, 0, 0.6)
+        overlay:SetBackdropBorderColor(0.20, 0.86, 0.75, 1)
         overlay:EnableMouse(true)
-        overlay.text:SetText("CueSense — drag to move")
+        overlay.text:SetText("CueSense — drag to move, X to close")
         overlay.text:SetTextColor(CueSenseDB.visual.color.r, CueSenseDB.visual.color.g, CueSenseDB.visual.color.b)
         overlay:SetScale(CueSenseDB.visual.scale or 1.0)
         overlay:SetAlpha(1)
         RestorePosition()
-        overlay.done:Show()
+        overlay.closeBtn:Show()
         overlay:Show()
     else
         CueSenseDB.visual.locked = true
+        overlay.closeBtn:Hide()
+        overlay:SetBackdrop(nil)
         overlay:EnableMouse(false)
-        overlay.done:Hide()
         fadeDuration = 0
         overlay:Hide()
     end
@@ -293,6 +309,19 @@ end
 -- list, and is robust to refreshes and stack changes.
 local present = {}
 
+-- Record an aura we've seen on the player into the registry the picker
+-- draws from. Only the first sighting matters; later sightings are cheap
+-- no-ops. Name/icon are Reveal-guarded (non-secret for player auras).
+local function RecordSeen(sid, data)
+    if not CueSenseDB.seen then CueSenseDB.seen = {} end
+    local key = tostring(sid)
+    if CueSenseDB.seen[key] then return end
+    CueSenseDB.seen[key] = {
+        name = Reveal(data.name) or C_Spell.GetSpellName(sid),
+        icon = Reveal(data.icon),
+    }
+end
+
 local function ScanPlayerAuras()
     if not CueSenseDB or not CueSenseDB.enabled then return end
     local cues = CueSenseDB.cues
@@ -301,8 +330,9 @@ local function ScanPlayerAuras()
     local function handle(data)
         if not data then return false end
         local sid = Reveal(data.spellId)        -- non-secret for the player's own auras
-        if sid and cues[tostring(sid)] then
-            now[sid] = true
+        if sid then
+            RecordSeen(sid, data)
+            if cues[tostring(sid)] then now[sid] = true end
         end
         return false                            -- never early-out; scan all
     end
@@ -335,7 +365,10 @@ local function SeedPresent()
     local function handle(data)
         if not data then return false end
         local sid = Reveal(data.spellId)
-        if sid and cues[tostring(sid)] then present[sid] = true end
+        if sid then
+            RecordSeen(sid, data)
+            if cues[tostring(sid)] then present[sid] = true end
+        end
         return false
     end
     AuraUtil.ForEachAura("player", "HELPFUL", nil, handle, true)
@@ -395,40 +428,22 @@ function ns.IsSpellAuraSecret(spellID)
     return false
 end
 
--- Enumerate the player's known, active (non-passive) spells with their
--- icon + name, so the options panel can offer a pick-from-a-list "Add"
--- instead of forcing a raw spell ID. Sorted by name; deduped. Returns
--- a list of { spellID, name, icon }. Empty if the spellbook API is
--- unavailable (older clients) — the by-ID path still works.
-function ns.GetKnownSpells()
-    local out, seen = {}, {}
-    local SB = C_SpellBook
-    if not (SB and SB.GetNumSpellBookSkillLines and SB.GetSpellBookItemInfo) then
-        return out
-    end
-    local bank = (Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player) or 0
-    local spellType = Enum and Enum.SpellBookItemType and Enum.SpellBookItemType.Spell
-    local numLines = SB.GetNumSpellBookSkillLines() or 0
-    for line = 1, numLines do
-        local lineInfo = SB.GetSpellBookSkillLineInfo(line)
-        if lineInfo then
-            local offset = lineInfo.itemIndexOffset or 0
-            local count = lineInfo.numSpellBookItems or 0
-            for i = offset + 1, offset + count do
-                local info = SB.GetSpellBookItemInfo(i, bank)
-                if info and info.spellID and not info.isPassive
-                   and ((not spellType) or info.itemType == spellType)
-                   and not seen[info.spellID] then
-                    seen[info.spellID] = true
-                    out[#out + 1] = {
-                        spellID = info.spellID,
-                        name    = info.name or C_Spell.GetSpellName(info.spellID),
-                        icon    = info.iconID,
-                        secret  = ns.IsSpellAuraSecret(info.spellID),
-                    }
-                end
-            end
-        end
+-- List auras we've actually seen on the player, with icon + name, for the
+-- "add" picker. Because every entry was a real aura on the player, every
+-- entry genuinely tracks — spellbook abilities that apply no self-aura
+-- (interrupts, direct damage, target debuffs) never show up. Sorted by
+-- name. Returns { spellID, name, icon, secret }.
+function ns.GetSeenAuras()
+    local out = {}
+    local seen = CueSenseDB and CueSenseDB.seen or {}
+    for key, info in pairs(seen) do
+        local sid = tonumber(key)
+        out[#out + 1] = {
+            spellID = sid,
+            name    = info.name or C_Spell.GetSpellName(sid) or ("Spell " .. key),
+            icon    = info.icon or 134400,
+            secret  = ns.IsSpellAuraSecret(sid),
+        }
     end
     table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)
     return out
@@ -526,10 +541,18 @@ SlashCmdList["CUESENSE"] = function(msg)
             RestorePosition()
             chatPrint("overlay position reset.")
 
+        elseif cmd == "forget" then
+            CueSenseDB.seen = {}
+            chatPrint("cleared the remembered-aura list (it refills as auras appear on you).")
+            ns.RefreshOptions()
+
         elseif cmd == "status" then
+            local seenN = 0
+            for _ in pairs(CueSenseDB.seen) do seenN = seenN + 1 end
             chatPrint("status:")
             print("  enabled:        " .. tostring(CueSenseDB.enabled))
             print("  watched auras:  " .. ns.CueCount())
+            print("  auras seen:     " .. seenN)
             print("  visual:         " .. tostring(CueSenseDB.visual.enabled)
                   .. " (scale " .. CueSenseDB.visual.scale
                   .. ", " .. CueSenseDB.visual.duration .. "s)")
@@ -546,6 +569,7 @@ SlashCmdList["CUESENSE"] = function(msg)
             print("  |cffffd200/cue toggle|r          enable/disable")
             print("  |cffffd200/cue unlock|r / |cffffd200lock|r   move the overlay")
             print("  |cffffd200/cue reset|r           reset overlay position")
+            print("  |cffffd200/cue forget|r          clear the remembered-aura list")
             print("  |cffffd200/cue status|r          print current settings")
         end
     end)

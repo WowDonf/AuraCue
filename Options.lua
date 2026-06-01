@@ -298,27 +298,31 @@ local addStatus = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSma
 addStatus:SetWidth(500)
 addStatus:SetJustifyH("LEFT")
 
--- Primary "Add": pick a spell from your spellbook, shown with its icon
--- and name. Selecting one starts watching its aura.
+-- Primary "Add": pick from auras seen on you, shown with icon + name.
+-- Only auras you've actually had appear here, so everything listed
+-- genuinely tracks (abilities that put no aura on you never show up).
 local pickLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 pickLabel:SetPoint("TOPLEFT", LEFT, y)
-pickLabel:SetText("Add a spell:")
+pickLabel:SetText("Add an aura:")
 
 local addDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
 addDD:SetPoint("LEFT", pickLabel, "RIGHT", 12, 0)
 addDD:SetSize(280, 30)
-addDD:SetDefaultText("Choose a spell to watch")
+addDD:SetDefaultText("Choose an aura you've had")
 addDD:SetupMenu(function(_, root)
     -- SetupMenu populates once at load, before ADDON_LOADED creates the
     -- saved variables. Bail until the DB exists; the menu regenerates on
     -- every open, so it fills in normally once the player is logged in.
     if not CueSenseDB then return end
-    local spells = ns.GetKnownSpells()
-    if #spells == 0 then
-        root:CreateButton("|cff808080No spells found — use spell ID below|r", function() end)
+    -- Cap the menu height so a long list scrolls instead of running off
+    -- the bottom of the screen (reported at 1920x1080).
+    if root.SetScrollMode then root:SetScrollMode(GetScreenHeight() * 0.6) end
+    local auras = ns.GetSeenAuras()
+    if #auras == 0 then
+        root:CreateButton("|cff808080No auras seen yet — get buffed or fight, then reopen|r", function() end)
         return
     end
-    for _, sp in ipairs(spells) do
+    for _, sp in ipairs(auras) do
         local sid = sp.spellID
         local icon = sp.icon or 134400
         local label = string.format("|T%d:16:16:0:0|t %s", icon, sp.name or ("Spell " .. sid))
@@ -342,8 +346,9 @@ addDD:SetupMenu(function(_, root)
 end)
 y = y - 38
 
--- Secondary "Add": by raw spell ID, for auras that aren't in your
--- spellbook (trinket procs, set bonuses, debuffs applied by others).
+-- Secondary "Add": by raw spell ID, for an aura you haven't had yet (so
+-- it isn't in the list above) — a boss debuff, a proc, another player's
+-- buff. The list above fills in on its own as auras appear on you.
 local addLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 addLabel:SetPoint("TOPLEFT", LEFT, y)
 addLabel:SetText("…or by spell ID:")
