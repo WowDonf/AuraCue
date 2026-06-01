@@ -1,0 +1,509 @@
+-- =====================================================================
+-- CueSense - Core
+-- =====================================================================
+-- Accessibility cue layer for World of Warcraft: Midnight (12.x).
+-- Translates the player's OWN auras into configurable cues — a sound,
+-- an on-screen visual flash, or both — so a player who can't perceive
+-- one channel still gets the other. This is the audio<->visual bridge.
+--
+-- DESIGN CONSTRAINT (Midnight "Secret Values"). Inside raid encounters,
+-- M+, and PvP the client masks combat data from addons: tainted code may
+-- not read, compare, or do arithmetic on a "secret" value. The player's
+-- OWN auras and casts are explicitly NON-secret, so CueSense deliberately
+-- stays on the safe side of that wall by tracking only player-owned data.
+-- Every value that *could* ever be secret is still routed through
+-- IsSecret() / Reveal() so a later enemy/whitelist phase can extend the
+-- engine without risking "attempt to perform arithmetic on a secret
+-- value" errors. The full API feasibility map lives in the project notes.
+-- =====================================================================
+
+local addonName, ns = ...
+ns.addonName = addonName
+
+-- Chat helper: prefixes addon-originated lines with a teal [CueSense] tag.
+-- Use for prefixed lines; raw print() for indented continuation lines.
+local function chatPrint(msg)
+    print("|cff33ddbb[CueSense]|r " .. msg)
+end
+ns.chatPrint = chatPrint
+
+-- ---------------------------------------------------------------------
+-- Secret-value safety (Midnight 12.0+)
+-- ---------------------------------------------------------------------
+-- issecretvalue() exists only on clients running the secret-values
+-- regime; it's nil on older builds, where nothing is secret. Never test
+-- or read a possibly-secret value except through these two helpers.
+local issecret = _G.issecretvalue
+local function IsSecret(v)
+    if issecret then return issecret(v) end
+    return false
+end
+ns.IsSecret = IsSecret
+
+-- Return v if it is safe to read, otherwise `fallback`. Guards every
+-- field we pull off an aura/cast payload.
+local function Reveal(v, fallback)
+    if v == nil or IsSecret(v) then return fallback end
+    return v
+end
+ns.Reveal = Reveal
+
+-- ---------------------------------------------------------------------
+-- Saved variable defaults (account-wide: accessibility needs don't
+-- change per character or spec).
+-- ---------------------------------------------------------------------
+local defaults = {
+    enabled = true,
+    channel = "Master",          -- default audio channel for cues
+    visual = {
+        enabled  = true,
+        color    = { r = 0.20, g = 0.86, b = 0.75 },
+        scale    = 1.0,
+        duration = 1.5,          -- seconds the flash text stays up
+        locked   = true,
+        position = nil,          -- { point, relativePoint, x, y }
+    },
+    -- Watched auras, keyed by spellID-as-string -> cue config:
+    --   { applied=bool, faded=bool, sound=key|nil, channel=key|nil,
+    --     visual=bool, label=str }
+    cues = {},
+}
+
+-- Deep-merge defaults into the saved table without clobbering user
+-- values; type mismatches (corrupt SV) fall back to the default. The
+-- user-owned `cues` map is left untouched (defaults.cues is empty).
+local function MergeDefaults(target, source)
+    for k, v in pairs(source) do
+        local defaultType = type(v)
+        local savedType = type(target[k])
+        if defaultType == "table" then
+            if savedType ~= "table" then target[k] = {} end
+            MergeDefaults(target[k], v)
+        elseif target[k] == nil then
+            target[k] = v
+        elseif savedType ~= defaultType then
+            target[k] = v
+        end
+    end
+    return target
+end
+
+local function ValidateRanges(db)
+    local v = db.visual
+    if type(v) ~= "table" then v = {}; db.visual = v end
+
+    if type(v.scale) ~= "number" then v.scale = 1.0 end
+    v.scale = math.max(0.5, math.min(3.0, v.scale))
+
+    if type(v.duration) ~= "number" then v.duration = 1.5 end
+    v.duration = math.max(0.5, math.min(8.0, v.duration))
+
+    local c = v.color
+    if type(c) ~= "table" then
+        v.color = { r = 0.20, g = 0.86, b = 0.75 }
+    else
+        c.r = (type(c.r) == "number") and math.max(0, math.min(1, c.r)) or 0.20
+        c.g = (type(c.g) == "number") and math.max(0, math.min(1, c.g)) or 0.86
+        c.b = (type(c.b) == "number") and math.max(0, math.min(1, c.b)) or 0.75
+    end
+
+    local validChannel = false
+    for _, ch in ipairs(ns.CHANNELS) do
+        if db.channel == ch then validChannel = true; break end
+    end
+    if not validChannel then db.channel = "Master" end
+end
+ns.ValidateRanges = ValidateRanges
+
+-- ---------------------------------------------------------------------
+-- Bundled sound choices.
+-- v0 uses built-in SOUNDKIT entries so the addon ships with zero audio
+-- assets and loads everywhere. Distinct custom .ogg cues come in a later
+-- phase via tools/. `key` is the stable DB value.
+-- ---------------------------------------------------------------------
+ns.SOUNDS = {
+    { key = "Chime",  label = "Chime",        kit = "ALARM_CLOCK_WARNING_1" },
+    { key = "Alarm",  label = "Alarm",        kit = "ALARM_CLOCK_WARNING_2" },
+    { key = "Buzz",   label = "Buzzer",       kit = "ALARM_CLOCK_WARNING_3" },
+    { key = "Ready",  label = "Ready ping",   kit = "READY_CHECK" },
+    { key = "Ping",   label = "Map ping",     kit = "MAP_PING" },
+    { key = "Warn",   label = "Raid warning", kit = "RAID_WARNING" },
+}
+
+ns.CHANNELS = { "Master", "SFX", "Music", "Ambience", "Dialog" }
+
+-- Resolve a sound key to (playable, isFile): a SOUNDKIT numeric id, or a
+-- file path for future bundled .ogg cues.
+local function ResolveSound(key)
+    if not key then return nil, false end
+    for _, e in ipairs(ns.SOUNDS) do
+        if e.key == key then
+            if e.file then return e.file, true end
+            if e.kit  then return SOUNDKIT[e.kit], false end
+            return nil, false
+        end
+    end
+    return nil, false
+end
+
+local function PlaySoundEntry(key, channel)
+    local playable, isFile = ResolveSound(key)
+    if not playable then return false end
+    if isFile then
+        return (PlaySoundFile(playable, channel or "Master"))
+    end
+    return (PlaySound(playable, channel or "Master"))
+end
+ns.PlaySoundEntry = PlaySoundEntry
+
+-- ---------------------------------------------------------------------
+-- Visual overlay frame (non-secure: combat lockdown doesn't touch it).
+-- A single center-screen flash line, reused by every cue, the test
+-- button, and reposition mode.
+-- ---------------------------------------------------------------------
+local overlay = CreateFrame("Frame", "CueSenseOverlay", UIParent)
+ns.overlay = overlay
+overlay:SetSize(560, 90)
+overlay:SetFrameStrata("FULLSCREEN_DIALOG")
+overlay:SetFrameLevel(200)
+overlay:SetClampedToScreen(true)
+overlay:EnableMouse(false)   -- click-through until reposition mode turns it on
+overlay:SetMovable(true)
+overlay:Hide()
+
+overlay.text = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+overlay.text:SetAllPoints()
+overlay.text:SetJustifyH("CENTER")
+overlay.text:SetJustifyV("MIDDLE")
+
+overlay:RegisterForDrag("LeftButton")
+overlay:SetScript("OnDragStart", function(self)
+    if CueSenseDB and not CueSenseDB.visual.locked then self:StartMoving() end
+end)
+overlay:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local point, _, relativePoint, x, y = self:GetPoint()
+    CueSenseDB.visual.position = { point = point, relativePoint = relativePoint, x = x, y = y }
+end)
+
+local function RestorePosition()
+    overlay:ClearAllPoints()
+    local p = CueSenseDB and CueSenseDB.visual and CueSenseDB.visual.position
+    if p and p.point then
+        overlay:SetPoint(p.point, UIParent, p.relativePoint or p.point, p.x or 0, p.y or 0)
+    else
+        overlay:SetPoint("CENTER", UIParent, "CENTER", 0, 160)
+    end
+end
+ns.RestorePosition = RestorePosition
+
+-- Hold-then-fade animation driven by OnUpdate (full alpha for the first
+-- 60% of the duration, linear fade for the rest).
+local fadeElapsed, fadeDuration = 0, 0
+overlay:SetScript("OnUpdate", function(self, dt)
+    if fadeDuration <= 0 then return end          -- idle / reposition mode
+    fadeElapsed = fadeElapsed + dt
+    local fadeStart = fadeDuration * 0.6
+    if fadeElapsed >= fadeDuration then
+        fadeDuration = 0
+        self:SetAlpha(0)
+        self:Hide()
+    elseif fadeElapsed <= fadeStart then
+        self:SetAlpha(1)
+    else
+        self:SetAlpha((fadeDuration - fadeElapsed) / (fadeDuration - fadeStart))
+    end
+end)
+
+local function ShowVisual(message)
+    local v = CueSenseDB.visual
+    overlay.text:SetText(message)
+    overlay.text:SetTextColor(v.color.r, v.color.g, v.color.b)
+    overlay:SetScale(v.scale or 1.0)
+    overlay:SetAlpha(1)
+    fadeElapsed, fadeDuration = 0, (v.duration or 1.5)
+    overlay:Show()
+end
+ns.ShowVisual = ShowVisual
+
+-- Reposition / preview mode: pins the overlay open and mouse-interactive
+-- so the user can drag it, then re-locks on exit.
+function ns.SetRepositionMode(on)
+    ns.testMode = on and true or false
+    if on then
+        CueSenseDB.visual.locked = false
+        fadeDuration = 0
+        overlay:EnableMouse(true)
+        overlay.text:SetText("CueSense — drag to move")
+        overlay.text:SetTextColor(CueSenseDB.visual.color.r, CueSenseDB.visual.color.g, CueSenseDB.visual.color.b)
+        overlay:SetScale(CueSenseDB.visual.scale or 1.0)
+        overlay:SetAlpha(1)
+        RestorePosition()
+        overlay:Show()
+    else
+        CueSenseDB.visual.locked = true
+        overlay:EnableMouse(false)
+        fadeDuration = 0
+        overlay:Hide()
+    end
+end
+
+-- ---------------------------------------------------------------------
+-- Cue dispatch
+-- ---------------------------------------------------------------------
+local function FireCue(cue, spellName, eventKind)
+    local verb = (eventKind == "applied") and "gained" or "faded"
+    local label = cue.label or spellName or "Aura"
+    if cue.sound then
+        PlaySoundEntry(cue.sound, cue.channel or CueSenseDB.channel)
+    end
+    if cue.visual and CueSenseDB.visual.enabled and not ns.testMode then
+        ShowVisual(label .. " " .. verb)
+    end
+end
+
+-- Play a one-off sample using the global defaults (test button / slash).
+function ns.PlayTestCue()
+    PlaySoundEntry("Chime", CueSenseDB.channel)
+    if CueSenseDB.visual.enabled then ShowVisual("CueSense test") end
+end
+
+-- ---------------------------------------------------------------------
+-- Player aura tracking engine
+-- ---------------------------------------------------------------------
+-- `present` is the set of watched spellIDs currently on the player. On
+-- every UNIT_AURA we rescan and diff: newly-present -> "applied",
+-- newly-absent -> "faded". A full rescan (vs. parsing UNIT_AURA's
+-- incremental updateInfo) is simpler and plenty fast for a small watch
+-- list, and is robust to refreshes and stack changes.
+local present = {}
+
+local function ScanPlayerAuras()
+    if not CueSenseDB or not CueSenseDB.enabled then return end
+    local cues = CueSenseDB.cues
+    local now = {}
+
+    local function handle(data)
+        if not data then return false end
+        local sid = Reveal(data.spellId)        -- non-secret for the player's own auras
+        if sid and cues[tostring(sid)] then
+            now[sid] = true
+        end
+        return false                            -- never early-out; scan all
+    end
+
+    -- usePackedAura=true -> handler receives an aura-data table
+    AuraUtil.ForEachAura("player", "HELPFUL", nil, handle, true)
+    AuraUtil.ForEachAura("player", "HARMFUL", nil, handle, true)
+
+    for sid in pairs(now) do
+        if not present[sid] then
+            local cue = cues[tostring(sid)]
+            if cue and cue.applied then FireCue(cue, C_Spell.GetSpellName(sid), "applied") end
+        end
+    end
+    for sid in pairs(present) do
+        if not now[sid] then
+            local cue = cues[tostring(sid)]
+            if cue and cue.faded then FireCue(cue, C_Spell.GetSpellName(sid), "faded") end
+        end
+    end
+    present = now
+end
+ns.ScanPlayerAuras = ScanPlayerAuras
+
+-- Re-seed `present` without firing, so adding a cue for an aura that's
+-- already up doesn't instantly announce it.
+local function SeedPresent()
+    present = {}
+    local cues = CueSenseDB and CueSenseDB.cues or {}
+    local function handle(data)
+        if not data then return false end
+        local sid = Reveal(data.spellId)
+        if sid and cues[tostring(sid)] then present[sid] = true end
+        return false
+    end
+    AuraUtil.ForEachAura("player", "HELPFUL", nil, handle, true)
+    AuraUtil.ForEachAura("player", "HARMFUL", nil, handle, true)
+end
+
+-- ---------------------------------------------------------------------
+-- Watch-list mutation (driven by slash commands; the in-panel editor is
+-- a later phase)
+-- ---------------------------------------------------------------------
+function ns.AddCue(spellID)
+    spellID = tonumber(spellID)
+    if not spellID then return false end
+    local name = C_Spell.GetSpellName(spellID)
+    CueSenseDB.cues[tostring(spellID)] = {
+        applied = true,
+        faded   = true,
+        sound   = "Chime",
+        channel = nil,        -- nil = follow the global default channel
+        visual  = true,
+        label   = name,
+    }
+    SeedPresent()
+    return true, name
+end
+
+function ns.RemoveCue(spellID)
+    spellID = tonumber(spellID)
+    if not spellID then return false end
+    local existed = CueSenseDB.cues[tostring(spellID)] ~= nil
+    CueSenseDB.cues[tostring(spellID)] = nil
+    return existed
+end
+
+function ns.CueCount()
+    local n = 0
+    for _ in pairs(CueSenseDB.cues) do n = n + 1 end
+    return n
+end
+
+-- ---------------------------------------------------------------------
+-- Events
+-- ---------------------------------------------------------------------
+local eventFrame = CreateFrame("Frame")
+eventFrame:RegisterEvent("ADDON_LOADED")
+eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
+
+eventFrame:SetScript("OnEvent", function(_, event, ...)
+    if event == "ADDON_LOADED" then
+        local name = ...
+        if name ~= addonName then return end
+        CueSenseDB = CueSenseDB or {}
+        MergeDefaults(CueSenseDB, defaults)
+        ValidateRanges(CueSenseDB)
+        RestorePosition()
+        ns.InitOptions()
+        chatPrint("loaded. Type |cffffd200/cue|r for commands.")
+
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        SeedPresent()
+
+    elseif event == "UNIT_AURA" then
+        ScanPlayerAuras()
+    end
+end)
+
+-- ---------------------------------------------------------------------
+-- Slash commands
+-- ---------------------------------------------------------------------
+SLASH_CUESENSE1 = "/cue"
+SLASH_CUESENSE2 = "/cuesense"
+
+SlashCmdList["CUESENSE"] = function(msg)
+    local ok, err = pcall(function()
+        msg = (msg or ""):lower():trim()
+        local cmd, rest = msg:match("^(%S+)%s*(.-)$")
+        cmd = cmd or ""
+
+        if cmd == "" or cmd == "config" or cmd == "options" then
+            ns.OpenOptions()
+
+        elseif cmd == "test" then
+            ns.PlayTestCue()
+
+        elseif cmd == "add" then
+            local okAdd, name = ns.AddCue(rest)
+            if okAdd then
+                chatPrint("watching |cffffd200" .. rest .. "|r" .. (name and (" (" .. name .. ")") or "") .. ".")
+                ns.RefreshOptions()
+            else
+                chatPrint("usage: |cffffd200/cue add <spellID>|r")
+            end
+
+        elseif cmd == "remove" or cmd == "rem" then
+            if ns.RemoveCue(rest) then
+                chatPrint("stopped watching |cffffd200" .. rest .. "|r.")
+                ns.RefreshOptions()
+            else
+                chatPrint("not watching spell |cffffd200" .. tostring(rest) .. "|r.")
+            end
+
+        elseif cmd == "list" then
+            local n = ns.CueCount()
+            chatPrint("watching " .. n .. " aura" .. (n == 1 and "" or "s") .. ":")
+            for sid, cue in pairs(CueSenseDB.cues) do
+                local modes = {}
+                if cue.sound  then modes[#modes + 1] = "sound" end
+                if cue.visual then modes[#modes + 1] = "visual" end
+                print(string.format("  |cffffd200%s|r  %s  [%s]", sid,
+                    cue.label or (C_Spell.GetSpellName(tonumber(sid)) or "?"),
+                    table.concat(modes, "+")))
+            end
+
+        elseif cmd == "toggle" then
+            CueSenseDB.enabled = not CueSenseDB.enabled
+            chatPrint(CueSenseDB.enabled and "|cff00ff00enabled|r" or "|cffff0000disabled|r")
+            ns.RefreshOptions()
+
+        elseif cmd == "lock" then
+            ns.SetRepositionMode(false)
+            chatPrint("overlay |cffff0000locked|r.")
+
+        elseif cmd == "unlock" or cmd == "move" then
+            ns.SetRepositionMode(true)
+            chatPrint("overlay |cff00ff00unlocked|r — drag to move, then |cffffd200/cue lock|r.")
+
+        elseif cmd == "reset" then
+            CueSenseDB.visual.position = nil
+            RestorePosition()
+            chatPrint("overlay position reset.")
+
+        elseif cmd == "status" then
+            chatPrint("status:")
+            print("  enabled:        " .. tostring(CueSenseDB.enabled))
+            print("  watched auras:  " .. ns.CueCount())
+            print("  visual:         " .. tostring(CueSenseDB.visual.enabled)
+                  .. " (scale " .. CueSenseDB.visual.scale
+                  .. ", " .. CueSenseDB.visual.duration .. "s)")
+            print("  audio channel:  " .. CueSenseDB.channel)
+            print("  secret regime:  " .. tostring(issecret ~= nil))
+
+        else
+            chatPrint("commands:")
+            print("  |cffffd200/cue|r                 open options")
+            print("  |cffffd200/cue test|r            preview a cue")
+            print("  |cffffd200/cue add <spellID>|r   watch an aura")
+            print("  |cffffd200/cue remove <spellID>|r stop watching")
+            print("  |cffffd200/cue list|r            list watched auras")
+            print("  |cffffd200/cue toggle|r          enable/disable")
+            print("  |cffffd200/cue unlock|r / |cffffd200lock|r   move the overlay")
+            print("  |cffffd200/cue reset|r           reset overlay position")
+            print("  |cffffd200/cue status|r          print current settings")
+        end
+    end)
+    if not ok then
+        chatPrint("slash error: " .. tostring(err))
+    end
+end
+
+-- ---------------------------------------------------------------------
+-- Addon compartment hooks (wired via the AddonCompartmentFunc* TOC fields)
+-- ---------------------------------------------------------------------
+function CueSense_OnCompartmentClick(_, button)
+    if button == "RightButton" then
+        CueSenseDB.enabled = not CueSenseDB.enabled
+        chatPrint(CueSenseDB.enabled and "|cff00ff00enabled|r" or "|cffff0000disabled|r")
+    else
+        ns.OpenOptions()
+    end
+end
+
+function CueSense_OnCompartmentEnter(_, button)
+    GameTooltip:SetOwner(button, "ANCHOR_LEFT")
+    GameTooltip:SetText("CueSense", 0.2, 0.86, 0.75)
+    GameTooltip:AddLine(CueSenseDB.enabled and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r", 1, 1, 1)
+    GameTooltip:AddLine("Watching " .. ns.CueCount() .. " aura(s)", 1, 1, 1)
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine("|cffffd200Left-click:|r options", 1, 1, 1)
+    GameTooltip:AddLine("|cffffd200Right-click:|r toggle enabled", 1, 1, 1)
+    GameTooltip:Show()
+end
+
+function CueSense_OnCompartmentLeave()
+    GameTooltip:Hide()
+end

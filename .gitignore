@@ -1,0 +1,27 @@
+# BigWigs packager build artifacts
+.release/
+.pkg/
+release/
+*.zip
+
+# Python tooling (asset/build scripts under tools/)
+__pycache__/
+*.pyc
+tools/.venv/
+
+# Editor / IDE
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+*.swo
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Lua bytecode / backups (if you ever run luac locally)
+*.luac
+*.lua.bak
