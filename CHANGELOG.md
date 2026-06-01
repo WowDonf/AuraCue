@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.13.0
+
+- **Per-spec profiles.** Your tracked auras and window settings are now saved
+  separately for each character *and* specialization, and switch automatically
+  when you change spec — so a tank and a healer spec can watch different
+  things. The main page shows which spec you're editing. Your existing setup
+  moves into your current spec on first login.
+
 ## v0.12.1
 
 - Left-clicking the minimap button now opens *and* closes the options (it

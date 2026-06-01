@@ -35,8 +35,8 @@ read_globals = {
     "C_UnitAuras", "AuraUtil", "C_Spell",
     -- Instance / unit identity (cue provenance: dungeon + source mob)
     "IsInInstance", "GetInstanceInfo", "UnitExists", "UnitName",
-    -- Character identity (per-character profile key)
-    "GetRealmName",
+    -- Character / spec identity (per-character, per-spec profile keys)
+    "GetRealmName", "GetSpecialization", "GetSpecializationInfo",
     -- Secret-value regime (Midnight 12.0+); nil on older clients
     "issecretvalue", "C_Secrets",
     -- Timing

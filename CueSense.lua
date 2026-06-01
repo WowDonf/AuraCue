@@ -107,11 +107,33 @@ local activeProfile
 local function P() return activeProfile end
 ns.P = P
 
--- Per-character profile key. (Per-spec keying is a later step.)
+-- Profile keys. CharKey identifies the character; ProfileKey adds the
+-- current specialization, so each spec keeps its own tracked auras and
+-- window setup.
+local function CharKey()
+    return (UnitName("player") or "Unknown") .. "-" .. (GetRealmName() or "Realm")
+end
+
+local function CurrentSpecID()
+    local idx = GetSpecialization and GetSpecialization()
+    if idx then
+        local id = GetSpecializationInfo and GetSpecializationInfo(idx)
+        if id then return id end
+    end
+    return 0   -- no spec yet (low level) or API missing
+end
+
 local function ProfileKey()
-    local name = UnitName("player") or "Unknown"
-    local realm = GetRealmName() or "Realm"
-    return name .. "-" .. realm
+    return CharKey() .. "|" .. CurrentSpecID()
+end
+
+function ns.CurrentSpecName()
+    local idx = GetSpecialization and GetSpecialization()
+    if idx then
+        local _, name = GetSpecializationInfo(idx)
+        if name then return name end
+    end
+    return "No spec"
 end
 
 -- Deep-merge defaults into the saved table without clobbering user
@@ -647,46 +669,21 @@ local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
 
 local SETTING_KEYS = { "enabled", "channel", "audioEnabled",
     "trackBuffs", "trackDebuffs", "visual", "cues" }
 
--- Resolve (and on first run build) this character's profile. Deferred to
--- PLAYER_LOGIN so UnitName/GetRealmName are reliable for the profile key.
-local function InitProfile()
-    local key = ProfileKey()
-
-    -- Migrate a pre-v0.10 flat layout (tracked settings at the DB top level)
-    -- into this character's profile — detected by any old setting key still
-    -- sitting at the top level. The `seen` catalog stays account-wide.
-    local hasFlat = false
-    for _, k in ipairs(SETTING_KEYS) do
-        if CueSenseDB[k] ~= nil then hasFlat = true; break end
-    end
-    if hasFlat then
-        local prof = CueSenseDB.profiles[key] or {}
-        for _, k in ipairs(SETTING_KEYS) do
-            if CueSenseDB[k] ~= nil then prof[k] = CueSenseDB[k]; CueSenseDB[k] = nil end
-        end
-        CueSenseDB.profiles[key] = prof
-    end
-
-    CueSenseDB.profiles[key] = CueSenseDB.profiles[key] or {}
-    activeProfile = CueSenseDB.profiles[key]
-    MigrateVisual(activeProfile)
-    MergeDefaults(activeProfile, PROFILE_DEFAULTS)
-    ValidateRanges(activeProfile)
-
-    -- Backfill kind/category onto cues created before v0.5.0, and remap any
-    -- sound key that no longer exists (e.g. the pre-v0.7 SOUNDKIT keys) onto
-    -- a bundled tone. `false` (None / silent) is preserved.
-    for _, cue in pairs(activeProfile.cues) do
+-- Heal a cue table: backfill kind/category, split the old single sound into
+-- gained/faded, and remap any unknown sound key onto a bundled tone (`false`
+-- = None / silent is preserved). Shared by login and profile import.
+local function BackfillCues(cues)
+    for _, cue in pairs(cues) do
         if not cue.kind then cue.kind = "buff" end
         if not cue.category then
             cue.category = (cue.kind == "debuff") and "Debuffs" or "Buffs"
         end
-        -- v0.9: split the single `sound` into separate gained/faded sounds.
         if cue.sound ~= nil and cue.soundApplied == nil and cue.soundFaded == nil then
             cue.soundApplied = cue.sound
             cue.soundFaded = cue.sound
@@ -705,7 +702,51 @@ local function InitProfile()
             end
         end
     end
+end
+ns.BackfillCues = BackfillCues
 
+-- Point activeProfile at the current character+spec profile, creating it (or
+-- migrating an older per-character profile into it) as needed. Heals it with
+-- defaults / validation / cue backfill. Used at login and on spec change.
+local function SetActiveProfile()
+    local key = ProfileKey()
+
+    -- Migrate a pre-per-spec profile (keyed by character only) into the
+    -- current spec the first time we see this spec.
+    local charKey = CharKey()
+    if CueSenseDB.profiles[charKey] and not CueSenseDB.profiles[key] then
+        CueSenseDB.profiles[key] = CueSenseDB.profiles[charKey]
+        CueSenseDB.profiles[charKey] = nil
+    end
+
+    CueSenseDB.profiles[key] = CueSenseDB.profiles[key] or {}
+    activeProfile = CueSenseDB.profiles[key]
+    MigrateVisual(activeProfile)
+    MergeDefaults(activeProfile, PROFILE_DEFAULTS)
+    ValidateRanges(activeProfile)
+    BackfillCues(activeProfile.cues)
+end
+ns.SetActiveProfile = SetActiveProfile
+
+-- Full init at PLAYER_LOGIN (player + spec are reliable here).
+local function InitProfile()
+    -- Migrate a pre-v0.10 flat layout (tracked settings at the DB top level)
+    -- into this character's per-character profile; SetActiveProfile then moves
+    -- it into the current spec.
+    local hasFlat = false
+    for _, k in ipairs(SETTING_KEYS) do
+        if CueSenseDB[k] ~= nil then hasFlat = true; break end
+    end
+    if hasFlat then
+        local charKey = CharKey()
+        local prof = CueSenseDB.profiles[charKey] or {}
+        for _, k in ipairs(SETTING_KEYS) do
+            if CueSenseDB[k] ~= nil then prof[k] = CueSenseDB[k]; CueSenseDB[k] = nil end
+        end
+        CueSenseDB.profiles[charKey] = prof
+    end
+
+    SetActiveProfile()
     RestorePosition("buff")
     RestorePosition("debuff")
     ns.InitOptions()
@@ -721,6 +762,19 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "PLAYER_LOGIN" then
         InitProfile()
         chatPrint("loaded. Type |cffffd200/cue|r for commands.")
+
+    elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
+        -- Fires for group members too; only react to our own change, and
+        -- only once the addon has finished its login init.
+        local unit = ...
+        if unit and unit ~= "player" then return end
+        if not activeProfile then return end
+        SetActiveProfile()
+        present = {}
+        SeedPresent()
+        RestorePosition("buff")
+        RestorePosition("debuff")
+        if ns.RefreshOptions then ns.RefreshOptions() end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         SeedPresent()

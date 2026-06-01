@@ -229,7 +229,19 @@ do
     local subFS = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     subFS:SetPoint("TOPLEFT", LEFT, main.y)
     subFS:SetText("Turn your own auras into sound and/or on-screen cues. Configure buffs and debuffs in the sections to the left.")
-    main.y = main.y - 20
+    main.y = main.y - 18
+
+    -- Per-spec profile indicator.
+    local profFS = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    profFS:SetPoint("TOPLEFT", LEFT, main.y)
+    profFS:SetWidth(520)
+    profFS:SetJustifyH("LEFT")
+    profFS.Refresh = function()
+        local spec = ns.CurrentSpecName and ns.CurrentSpecName() or "?"
+        profFS:SetText("Tracked auras and settings are saved per character and spec. Editing: |cffffd200" .. spec .. "|r.")
+    end
+    main.widgets[#main.widgets + 1] = profFS
+    main.y = main.y - 18
 
     main.Header("General")
     main.Check("Enable CueSense",
