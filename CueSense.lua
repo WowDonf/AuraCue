@@ -470,12 +470,16 @@ local function RecordSeen(sid, data)
     if not CueSenseDB.seen then CueSenseDB.seen = {} end
     local key = tostring(sid)
     local harmful = Reveal(data.isHarmful) and true or false
+    -- isFromPlayerOrPlayerPet is a never-secret field: it tells us the aura
+    -- was applied by the player (or pet), i.e. "cast by myself".
+    local mine = Reveal(data.isFromPlayerOrPlayerPet) and true or false
     local existing = CueSenseDB.seen[key]
     if existing then
         -- Backfill provenance we couldn't capture on first sighting (e.g.
         -- first seen in the open world, later re-seen inside a dungeon).
         if not existing.dungeon then existing.dungeon = CurrentDungeon() end
         if not existing.source then existing.source = ResolveSource(data, harmful) end
+        if existing.mine == nil then existing.mine = mine end
         return
     end
     CueSenseDB.seen[key] = {
@@ -484,6 +488,7 @@ local function RecordSeen(sid, data)
         kind    = harmful and "debuff" or "buff",
         dungeon = CurrentDungeon(),
         source  = ResolveSource(data, harmful),
+        mine    = mine,
     }
 end
 
@@ -626,6 +631,7 @@ function ns.GetSeenAuras()
             icon    = info.icon or 134400,
             secret  = ns.IsSpellAuraSecret(sid),
             kind    = info.kind or "buff",
+            mine    = info.mine and true or false,
         }
     end
     table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)

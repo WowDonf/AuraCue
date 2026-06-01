@@ -256,6 +256,7 @@ addStatus:SetJustifyH("LEFT")
 -- Only auras you've actually had appear here, so everything listed
 -- genuinely tracks (abilities that put no aura on you never show up).
 local pickerSearch = ""
+local pickerMineOnly = false   -- filter the picker to auras the player cast
 
 local pickLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 pickLabel:SetPoint("TOPLEFT", LEFT, y)
@@ -345,7 +346,8 @@ UpdateSearchResults = function()
     local shown, more = 0, 0
     for _, sp in ipairs(auras) do
         local nm = sp.name or ("Spell " .. sp.spellID)
-        if nm:lower():find(pickerSearch, 1, true) or tostring(sp.spellID):find(pickerSearch, 1, true) then
+        local matchText = nm:lower():find(pickerSearch, 1, true) or tostring(sp.spellID):find(pickerSearch, 1, true)
+        if matchText and (not pickerMineOnly or sp.mine) then
             if shown < MAX_RESULTS then
                 shown = shown + 1
                 local b = resultBtns[shown] or MakeResultBtn(shown)
@@ -401,9 +403,10 @@ addDD:SetupMenu(function(_, root)
     for _, sp in ipairs(auras) do
         local sid = sp.spellID
         local nm = sp.name or ("Spell " .. sid)
-        if pickerSearch == ""
-           or nm:lower():find(pickerSearch, 1, true)
-           or tostring(sid):find(pickerSearch, 1, true) then
+        local matchText = pickerSearch == ""
+            or nm:lower():find(pickerSearch, 1, true)
+            or tostring(sid):find(pickerSearch, 1, true)
+        if matchText and (not pickerMineOnly or sp.mine) then
             shown = shown + 1
             local icon = sp.icon or 134400
             local label = string.format("|T%d:16:16:0:0|t %s", icon, nm)
@@ -439,6 +442,14 @@ addDD:SetupMenu(function(_, root)
     end
 end)
 y = y - 38
+
+AddCheckbox("Only show auras I cast",
+    function() return pickerMineOnly end,
+    function(v)
+        pickerMineOnly = v
+        addDD:GenerateMenu()
+        UpdateSearchResults()
+    end)
 
 -- Secondary "Add": by raw spell ID, for an aura you haven't had yet (so
 -- it isn't in the list above) — a boss debuff, a proc, another player's

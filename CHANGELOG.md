@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.2
+
+- **"Only show auras I cast" filter** on the aura picker — narrows the list
+  (and the live search) to auras you applied yourself, instead of every aura
+  that's ever landed on you.
+
 ## v0.10.1
 
 - **Live aura search.** Typing in the search box now shows matching auras
