@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.1
+
+- **Search the aura picker.** A search box next to "Add an aura" filters the
+  list by name or spell ID.
+- **Spell tooltips on highlight.** Highlighting an aura in the picker now
+  shows that spell's tooltip.
+- **Better hover info.** Hovering a watched aura shows its spell tooltip
+  (plus source / dungeon when known) instead of "source unknown".
+
 ## v0.9.0
 
 - **Separate sounds for gained vs faded.** Each watched aura now has two

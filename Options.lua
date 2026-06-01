@@ -257,14 +257,32 @@ addStatus:SetJustifyH("LEFT")
 -- Primary "Add": pick from auras seen on you, shown with icon + name.
 -- Only auras you've actually had appear here, so everything listed
 -- genuinely tracks (abilities that put no aura on you never show up).
+local pickerSearch = ""
+
 local pickLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 pickLabel:SetPoint("TOPLEFT", LEFT, y)
 pickLabel:SetText("Add an aura:")
 
 local addDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
 addDD:SetPoint("LEFT", pickLabel, "RIGHT", 12, 0)
-addDD:SetSize(280, 30)
+addDD:SetSize(240, 30)
 addDD:SetDefaultText("Choose an aura you've had")
+
+-- Search field: filters the picker by name or spell ID.
+local searchLabel = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+searchLabel:SetPoint("LEFT", addDD, "RIGHT", 16, 0)
+searchLabel:SetText("Search")
+local searchBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+searchBox:SetPoint("LEFT", searchLabel, "RIGHT", 8, 0)
+searchBox:SetSize(140, 22)
+searchBox:SetAutoFocus(false)
+searchBox:SetFontObject("ChatFontNormal")
+searchBox:SetScript("OnTextChanged", function(self)
+    pickerSearch = (self:GetText() or ""):lower():trim()
+    addDD:GenerateMenu()
+end)
+searchBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
+
 addDD:SetupMenu(function(_, root)
     -- SetupMenu populates once at load, before ADDON_LOADED creates the
     -- saved variables. Bail until the DB exists; the menu regenerates on
@@ -274,30 +292,45 @@ addDD:SetupMenu(function(_, root)
     -- the bottom of the screen (reported at 1920x1080).
     if root.SetScrollMode then root:SetScrollMode(GetScreenHeight() * 0.6) end
     local auras = ns.GetSeenAuras()
-    if #auras == 0 then
-        root:CreateButton("|cff808080No auras seen yet — get buffed or fight, then reopen|r", function() end)
-        return
-    end
+    local shown = 0
     for _, sp in ipairs(auras) do
         local sid = sp.spellID
-        local icon = sp.icon or 134400
-        local label = string.format("|T%d:16:16:0:0|t %s", icon, sp.name or ("Spell " .. sid))
-        if CueSenseDB.cues[tostring(sid)] then
-            label = label .. "  |cff808080(watching)|r"
-        end
-        if sp.secret then
-            label = label .. "  |cffff6060(may be hidden in instances)|r"
-        end
-        root:CreateButton(label, function()
+        local nm = sp.name or ("Spell " .. sid)
+        if pickerSearch == ""
+           or nm:lower():find(pickerSearch, 1, true)
+           or tostring(sid):find(pickerSearch, 1, true) then
+            shown = shown + 1
+            local icon = sp.icon or 134400
+            local label = string.format("|T%d:16:16:0:0|t %s", icon, nm)
             if CueSenseDB.cues[tostring(sid)] then
-                addStatus:SetText("|cffffd200Already watching " .. (sp.name or sid) .. ".|r")
-                return
+                label = label .. "  |cff808080(watching)|r"
             end
-            ns.AddCue(sid)
-            addStatus:SetText("|cff60ff60Added " .. (sp.name or sid) .. ".|r")
-            if watchInfo.Refresh then watchInfo.Refresh() end
-            RebuildList()
-        end)
+            if sp.secret then
+                label = label .. "  |cffff6060(may be hidden in instances)|r"
+            end
+            local btn = root:CreateButton(label, function()
+                if CueSenseDB.cues[tostring(sid)] then
+                    addStatus:SetText("|cffffd200Already watching " .. nm .. ".|r")
+                    return
+                end
+                ns.AddCue(sid)
+                addStatus:SetText("|cff60ff60Added " .. nm .. ".|r")
+                if watchInfo.Refresh then watchInfo.Refresh() end
+                RebuildList()
+            end)
+            -- Show the spell's own tooltip while the entry is highlighted.
+            if btn and btn.SetTooltip then
+                btn:SetTooltip(function(tooltip)
+                    if tooltip and tooltip.SetSpellByID then tooltip:SetSpellByID(sid) end
+                end)
+            end
+        end
+    end
+    if shown == 0 then
+        root:CreateButton(
+            (#auras == 0) and "|cff808080No auras seen yet — get buffed or fight, then reopen|r"
+            or "|cff808080No matches for that search|r",
+            function() end)
     end
 end)
 y = y - 38
@@ -500,12 +533,14 @@ MakeRow = function(i)
         local cue = self.spellID and CueSenseDB.cues[self.spellID]
         if not cue then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(cue.label or "Aura", 1, 1, 1)
+        local sid = tonumber(self.spellID)
+        if sid and GameTooltip.SetSpellByID then
+            GameTooltip:SetSpellByID(sid)          -- the spell's own tooltip
+        else
+            GameTooltip:SetText(cue.label or "Aura", 1, 1, 1)
+        end
         if cue.source then GameTooltip:AddLine("Source: " .. cue.source, 0.8, 0.8, 0.8) end
         if cue.dungeon then GameTooltip:AddLine("Dungeon: " .. cue.dungeon, 0.8, 0.8, 0.8) end
-        if not cue.source and not cue.dungeon then
-            GameTooltip:AddLine("Source unknown (hidden in instances)", 0.6, 0.6, 0.6)
-        end
         GameTooltip:Show()
     end)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
