@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.7.0
+
+- **Distinct bundled cue sounds.** Ships eight short, easy-to-tell-apart
+  tones — Rise, Fall, Ping, Beep, Double, Triple, Chirp, Thud — so you can
+  give different auras different sounds and recognize them by ear. Replaces
+  the previous built-in game sounds.
+- **Addon icon.** CueSense now has its own icon in the addon list and
+  compartment button.
+
 ## v0.6.1
 
 - Debuffs taken in Delves (and other scenario-based content) now file under

@@ -2,8 +2,9 @@
 ## Title: CueSense
 ## Notes: Accessibility cue layer. Turns your own buffs and debuffs into a sound, an on-screen flash, or both — an audio/visual bridge for deaf and blind players.
 ## Author: WowDonf
-## Version: v0.6.1
+## Version: v0.7.0
 ## SavedVariables: CueSenseDB
+## IconTexture: Interface\AddOns\CueSense\Icon
 ## Category-enUS: CueSense
 ## AddonCompartmentFunc: CueSense_OnCompartmentClick
 ## AddonCompartmentFuncOnEnter: CueSense_OnCompartmentEnter

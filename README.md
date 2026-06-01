@@ -67,7 +67,6 @@ Tip: look up spell IDs on Wowhead — the ID is in the page URL.
 
 ## Roadmap
 
-- Distinct bundled cue sounds
 - Player cast-bar / interrupt-window cues
 - Private-aura applied cues (boss debuffs surfaced as a visual flash)
 - Resource / health threshold cues
