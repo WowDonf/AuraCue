@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.10.3
+
+- Fix the divider between tracked auras being overlapped by the row's sound
+  dropdowns (rows now have enough height for both lines plus the divider).
+
 ## v0.10.2
 
 - **"Only show auras I cast" filter** on the aura picker — narrows the list

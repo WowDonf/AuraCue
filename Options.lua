@@ -219,7 +219,7 @@ AddButton("Play test cue", 160, function() ns.PlayTestCue() end)
 -- recomputed from the editor's bottom each rebuild. Forward-declare the
 -- pieces that reference each other (rows reference RebuildList to refresh
 -- after a remove; RebuildList builds rows via MakeRow).
-local ROW_H = 54   -- two lines: name/toggles/group on top, sounds below
+local ROW_H = 64   -- two lines (name/toggles/group, then sounds) + a gap for the divider
 local HEADER_H = 22
 local rows = {}
 local headers = {}
