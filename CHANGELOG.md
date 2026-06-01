@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.15.0
+
+- **Self-buff cues now work in instances (delves / dungeons).** The game
+  blocks reading your auras there, but not your own spell casts — so cues for
+  a buff you cast yourself now fire from the cast: "gained" the moment you
+  cast it, and "faded" after its duration (learned automatically while you're
+  in the open world). Works for buffs whose aura matches the cast spell.
+
 ## v0.14.2
 
 - **Stop watched auras flipping to "faded" when combat starts.** If a read

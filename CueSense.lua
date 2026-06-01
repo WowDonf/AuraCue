@@ -458,6 +458,7 @@ end
 -- incremental updateInfo) is simpler and plenty fast for a small watch
 -- list, and is robust to refreshes and stack changes.
 local present = {}
+local castFade = {}   -- spellID -> token, for cast-driven faded timers
 
 -- Record an aura we've seen on the player into the registry the picker
 -- draws from. Only the first sighting matters; later sightings are cheap
@@ -531,8 +532,8 @@ local function ReadAura(sid)
     if GetPlayerAura then
         local a = GetPlayerAura(sid)
         if a == nil then return "absent" end
-        if IsSecret(a) then return "unknown" end
-        return "present"
+        if IsSecret(a) then return "unknown", a end
+        return "present", a
     end
     -- Fallback for clients without the API (reads spellIds; out-of-combat only).
     local found = false
@@ -568,9 +569,15 @@ local function ScanPlayerAuras()
 
     for key, cue in pairs(cues) do
         local sid = tonumber(key)
-        local state = ReadAura(sid)
+        local state, data = ReadAura(sid)
         if state == "present" then
             newPresent[sid] = true
+            -- Learn the buff's duration while it's readable (open world), so
+            -- cast-driven tracking can time its faded cue inside instances.
+            if data then
+                local d = Reveal(data.duration)
+                if d and d > 0 then cue.castDuration = d end
+            end
             if not present[sid] and cue.applied then
                 FireCue(cue, C_Spell.GetSpellName(sid), "applied")
             end
@@ -602,6 +609,35 @@ local function SeedPresent()
     if not cues then return end
     for key in pairs(cues) do
         if ReadAura(tonumber(key)) == "present" then present[tonumber(key)] = true end
+    end
+end
+
+-- Cast-driven tracking. Your own casts are NOT secret even in instances, so
+-- when you cast a watched aura's spell we can fire its "gained" cue (and,
+-- using the duration we learned in the open world, schedule its "faded")
+-- even where reading the aura directly is blocked. Assumes the cast spell id
+-- matches the aura spell id (true for most self-buffs).
+local function OnSelfCast(spellID)
+    if not activeProfile then return end
+    local cue = activeProfile.cues[tostring(spellID)]
+    if not cue then return end
+    if not present[spellID] and cue.applied then
+        FireCue(cue, C_Spell.GetSpellName(spellID), "applied")
+    end
+    present[spellID] = true
+
+    local dur = cue.castDuration
+    if cue.faded and dur and dur > 0 then
+        castFade[spellID] = (castFade[spellID] or 0) + 1
+        local token = castFade[spellID]
+        C_Timer.After(dur + 0.2, function()
+            -- Only fire if this is still the latest cast and the aura isn't
+            -- readably still up (a refresh in the open world would show it).
+            if castFade[spellID] == token and present[spellID] and ReadAura(spellID) ~= "present" then
+                FireCue(cue, C_Spell.GetSpellName(spellID), "faded")
+                present[spellID] = nil
+            end
+        end)
     end
 end
 
@@ -708,6 +744,7 @@ eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")   -- combat ended: re-sync
 eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
+eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 
 local SETTING_KEYS = { "enabled", "channel", "audioEnabled",
     "trackBuffs", "trackDebuffs", "visual", "cues" }
@@ -821,6 +858,10 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
 
     elseif event == "UNIT_AURA" then
         ScanPlayerAuras()
+
+    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+        local unit, _, spellID = ...
+        if unit == "player" and spellID then OnSelfCast(spellID) end
     end
 end)
 
