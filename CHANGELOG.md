@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.17.0
+
+- **Consistent, predictable cues.** Each watched aura now uses one fixed
+  tracking method instead of switching between several:
+  - A buff **you cast** is tracked by your cast — same behavior in every zone,
+    including instances (gained on cast, faded on its duration).
+  - Anything else is tracked by reading the aura, which the game only allows
+    outside instanced combat — so there it stays quiet instead of firing
+    wrong.
+  - Hover a watched aura to see which method it's using.
+- Removed the old "hold and re-check on combat end" behavior that caused
+  late/bursted faded cues. Combat now ends with a silent re-sync.
+
 ## v0.16.0
 
 - **Debuff cues in instances (private auras).** Most boss / mob debuffs in

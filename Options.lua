@@ -672,6 +672,11 @@ local function BuildKindPanel(kind)
             end
             if cue.source then GameTooltip:AddLine("Source: " .. cue.source, 0.8, 0.8, 0.8) end
             if cue.dungeon then GameTooltip:AddLine("Dungeon: " .. cue.dungeon, 0.8, 0.8, 0.8) end
+            if cue.castSeen then
+                GameTooltip:AddLine("Tracked by: your cast — works in instances.", 0.5, 0.85, 0.5)
+            else
+                GameTooltip:AddLine("Tracked by: aura read — open world only. Cast it once to switch to cast tracking.", 0.75, 0.72, 0.45)
+            end
             GameTooltip:Show()
         end)
         row:SetScript("OnLeave", function() GameTooltip:Hide() end)

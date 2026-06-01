@@ -563,33 +563,34 @@ end
 
 local function ScanPlayerAuras()
     if not activeProfile or not activeProfile.enabled then return end
-    local cues = activeProfile.cues
-    local inCombat = InCombatLockdown()
-    local newPresent = {}
 
+    -- Aura reads are masked during instanced combat. Rather than guess (which
+    -- caused storms and combat-end bursts), freeze read-tracked auras while
+    -- masked and re-sync silently when combat ends. Cast-tracked auras are
+    -- driven by cast events and keep working here.
+    if IsInInstance() and InCombatLockdown() then return end
+
+    local cues = activeProfile.cues
+    local newPresent = {}
     for key, cue in pairs(cues) do
         local sid = tonumber(key)
-        local state, data = ReadAura(sid)
-        if state == "present" then
-            newPresent[sid] = true
-            -- Learn the buff's duration while it's readable (open world), so
-            -- cast-driven tracking can time its faded cue inside instances.
-            if data then
-                local d = Reveal(data.duration)
-                if d and d > 0 then cue.castDuration = d end
-            end
-            if not present[sid] and cue.applied then
-                FireCue(cue, C_Spell.GetSpellName(sid), "applied")
-            end
-        elseif state == "unknown" then
-            -- Masked read: hold whatever we last knew, don't fire.
+        if cue.castSeen then
+            -- Cast-tracked: owned entirely by cast events + the faded timer,
+            -- so reads never touch its state (consistent in every zone).
             newPresent[sid] = present[sid]
         else
-            -- "absent". In combat that may just be a hidden read, so don't
-            -- declare a known aura faded — hold it and re-check when combat
-            -- ends (PLAYER_REGEN_ENABLED re-scans). Out of combat it's real.
-            if inCombat and present[sid] then
-                newPresent[sid] = present[sid]
+            local state, data = ReadAura(sid)
+            if state == "present" then
+                newPresent[sid] = true
+                if data then
+                    local d = Reveal(data.duration)   -- learn duration for cast timing
+                    if d and d > 0 then cue.castDuration = d end
+                end
+                if not present[sid] and cue.applied then
+                    FireCue(cue, C_Spell.GetSpellName(sid), "applied")
+                end
+            elseif state == "unknown" then
+                newPresent[sid] = present[sid]   -- secret-masked: hold
             elseif present[sid] and cue.faded then
                 FireCue(cue, C_Spell.GetSpellName(sid), "faded")
             end
@@ -621,10 +622,23 @@ local function OnSelfCast(spellID)
     if not activeProfile then return end
     local cue = activeProfile.cues[tostring(spellID)]
     if not cue then return end
+    -- Once we've seen its cast, this cue is cast-tracked from now on — the
+    -- same behavior in every zone (the read scanner leaves it alone).
+    cue.castSeen = true
     if not present[spellID] and cue.applied then
         FireCue(cue, C_Spell.GetSpellName(spellID), "applied")
     end
     present[spellID] = true
+
+    -- Learn the buff's duration just after the cast (readable in the open
+    -- world) so the faded timer is accurate, including later in instances.
+    C_Timer.After(0.1, function()
+        local _, data = ReadAura(spellID)
+        if data then
+            local d = Reveal(data.duration)
+            if d and d > 0 then cue.castDuration = d end
+        end
+    end)
 
     local dur = cue.castDuration
     if cue.faded and dur and dur > 0 then
@@ -893,7 +907,9 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         SeedPresent()
 
     elseif event == "PLAYER_REGEN_ENABLED" then
-        ScanPlayerAuras()   -- combat ended: reads are reliable again
+        -- Combat ended: reads are reliable again. Re-sync silently (no cues)
+        -- so we don't fire a burst for changes that happened while masked.
+        SeedPresent()
 
     elseif event == "UNIT_AURA" then
         ScanPlayerAuras()
