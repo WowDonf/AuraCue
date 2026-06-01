@@ -53,7 +53,12 @@ local function AddDescription(text)
     fs:SetWidth(520)
     fs:SetJustifyH("LEFT")
     fs:SetText(text)
-    y = y - (fs:GetStringHeight() + 10)
+    -- GetStringHeight can under-report before the panel is first shown, which
+    -- overlaps the next widget. Reserve the larger of the measured height and
+    -- a conservative char-count estimate (~64 chars per 520px line).
+    local measured = fs:GetStringHeight() or 0
+    local approx = math.ceil(#text / 64) * 13
+    y = y - (math.max(measured, approx) + 12)
 end
 
 local function AddCheckbox(label, getter, setter)
@@ -249,7 +254,7 @@ widgets[#widgets + 1] = watchInfo
 -- Feedback line (declared first so the picker / by-ID closures below can
 -- reference it).
 local addStatus = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-addStatus:SetWidth(500)
+addStatus:SetWidth(250)
 addStatus:SetJustifyH("LEFT")
 
 -- Primary "Add": pick from auras seen on you, shown with icon + name.
@@ -496,10 +501,10 @@ end
 addBox:SetScript("OnEnterPressed", function(self) self:ClearFocus(); DoAdd() end)
 addBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 addBtn:SetScript("OnClick", DoAdd)
-y = y - 28
 
-addStatus:SetPoint("TOPLEFT", LEFT, y)
-y = y - 20
+-- Feedback sits inline to the right of the Add button (no blank line).
+addStatus:SetPoint("LEFT", addBtn, "RIGHT", 14, 0)
+y = y - 30
 
 -- Brief grouping tip
 local groupHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")

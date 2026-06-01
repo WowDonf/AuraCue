@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.10.4
+
+- Fix the "Audio channel" label overlapping the description above it (long
+  descriptions now reserve enough height).
+- Remove the large empty gap under "…or by spell ID" (the add-status text
+  now sits inline next to the Add button instead of on its own blank line).
+
 ## v0.10.3
 
 - Fix the divider between tracked auras being overlapped by the row's sound
