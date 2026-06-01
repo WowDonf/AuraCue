@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.10.1
+
+- **Live aura search.** Typing in the search box now shows matching auras
+  instantly in a list right below it — the list narrows as you type, so you
+  no longer have to open the dropdown to check. Click a result to add it.
+- **Divider lines** between tracked auras so the two-line rows are easier to
+  tell apart.
+
 ## v0.10.0
 
 - **Storage split (groundwork for profiles & sharing).** The catalog of

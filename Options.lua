@@ -275,11 +275,118 @@ searchBox:SetPoint("LEFT", searchLabel, "RIGHT", 8, 0)
 searchBox:SetSize(140, 22)
 searchBox:SetAutoFocus(false)
 searchBox:SetFontObject("ChatFontNormal")
+
+-- Live results popup: shows matching auras as you type (the list shrinks as
+-- you narrow the search), so you can pick without opening the dropdown. It
+-- floats over the content below and hides when the search is cleared.
+local MAX_RESULTS = 10
+local RESULT_H = 20
+local resultBtns = {}
+local searchResults = CreateFrame("Frame", nil, content, "BackdropTemplate")
+searchResults:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", -6, -3)
+searchResults:SetWidth(320)
+searchResults:SetFrameLevel(content:GetFrameLevel() + 20)
+searchResults:SetBackdrop({
+    bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile     = true, tileSize = 16, edgeSize = 16,
+    insets   = { left = 4, right = 4, top = 4, bottom = 4 },
+})
+searchResults:SetBackdropColor(0, 0, 0, 0.92)
+searchResults:Hide()
+
+local moreText = searchResults:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+moreText:SetJustifyH("LEFT")
+
+local UpdateSearchResults   -- forward (result buttons reference it)
+
+local function MakeResultBtn(i)
+    local b = CreateFrame("Button", nil, searchResults)
+    b:SetHeight(RESULT_H)
+    b:SetPoint("TOPLEFT", searchResults, "TOPLEFT", 6, -6 - (i - 1) * RESULT_H)
+    b:SetPoint("TOPRIGHT", searchResults, "TOPRIGHT", -6, -6 - (i - 1) * RESULT_H)
+    local hl = b:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints()
+    hl:SetColorTexture(1, 1, 1, 0.15)
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetSize(16, 16)
+    b.icon:SetPoint("LEFT", b, "LEFT", 2, 0)
+    b.text = b:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    b.text:SetPoint("LEFT", b.icon, "RIGHT", 6, 0)
+    b.text:SetPoint("RIGHT", b, "RIGHT", -4, 0)
+    b.text:SetJustifyH("LEFT")
+    b:SetScript("OnClick", function(self)
+        if not self.spellID then return end
+        if ns.P().cues[tostring(self.spellID)] then
+            addStatus:SetText("|cffffd200Already watching " .. (self.auraName or self.spellID) .. ".|r")
+        else
+            ns.AddCue(self.spellID)
+            addStatus:SetText("|cff60ff60Added " .. (self.auraName or self.spellID) .. ".|r")
+            if watchInfo.Refresh then watchInfo.Refresh() end
+            RebuildList()
+        end
+        UpdateSearchResults()   -- refresh the (watching) markers
+    end)
+    b:SetScript("OnEnter", function(self)
+        if self.spellID and GameTooltip.SetSpellByID then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetSpellByID(self.spellID)
+            GameTooltip:Show()
+        end
+    end)
+    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    resultBtns[i] = b
+    return b
+end
+
+UpdateSearchResults = function()
+    if pickerSearch == "" or not ns.P() then searchResults:Hide(); return end
+    local auras = ns.GetSeenAuras()
+    local shown, more = 0, 0
+    for _, sp in ipairs(auras) do
+        local nm = sp.name or ("Spell " .. sp.spellID)
+        if nm:lower():find(pickerSearch, 1, true) or tostring(sp.spellID):find(pickerSearch, 1, true) then
+            if shown < MAX_RESULTS then
+                shown = shown + 1
+                local b = resultBtns[shown] or MakeResultBtn(shown)
+                b.spellID = sp.spellID
+                b.auraName = nm
+                b.icon:SetTexture(sp.icon or 134400)
+                local mark = ns.P().cues[tostring(sp.spellID)] and "  |cff808080(watching)|r" or ""
+                b.text:SetText(nm .. mark)
+                b:Show()
+            else
+                more = more + 1
+            end
+        end
+    end
+    for i = shown + 1, #resultBtns do resultBtns[i]:Hide() end
+    if shown == 0 then searchResults:Hide(); return end
+    local h = 12 + shown * RESULT_H
+    if more > 0 then
+        moreText:ClearAllPoints()
+        moreText:SetPoint("TOPLEFT", searchResults, "TOPLEFT", 8, -6 - shown * RESULT_H)
+        moreText:SetText("…and " .. more .. " more — keep typing")
+        moreText:Show()
+        h = h + 16
+    else
+        moreText:Hide()
+    end
+    searchResults:SetHeight(h)
+    searchResults:Show()
+    searchResults:Raise()
+end
+
 searchBox:SetScript("OnTextChanged", function(self)
     pickerSearch = (self:GetText() or ""):lower():trim()
-    addDD:GenerateMenu()
+    UpdateSearchResults()
+    addDD:GenerateMenu()   -- keep the dropdown filtered too, if opened
 end)
-searchBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
+searchBox:SetScript("OnEscapePressed", function(self)
+    self:SetText("")
+    self:ClearFocus()
+    searchResults:Hide()
+end)
 
 addDD:SetupMenu(function(_, root)
     -- SetupMenu populates once at load, before ADDON_LOADED creates the
@@ -524,6 +631,14 @@ MakeRow = function(i)
     local row = CreateFrame("Frame", nil, editor)
     row:SetHeight(ROW_H)
     row:SetWidth(540)   -- anchored by RebuildList (grouped layout)
+
+    -- Faint divider along the bottom so the two-line entries don't blur
+    -- together.
+    row.sep = row:CreateTexture(nil, "BACKGROUND")
+    row.sep:SetColorTexture(1, 1, 1, 0.08)
+    row.sep:SetHeight(1)
+    row.sep:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 2, 2)
+    row.sep:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -2, 2)
 
     -- Hover the row to see the aura's source (mob / dungeon) when known.
     row:EnableMouse(true)
