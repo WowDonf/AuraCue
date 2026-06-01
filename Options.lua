@@ -150,10 +150,6 @@ local function AddSideBySideButtons(...)
     y = y - 32
 end
 
-local function AddGap(px)
-    y = y - (px or 10)
-end
-
 -- ---------------------------------------------------------------------
 -- Title / subtitle
 -- ---------------------------------------------------------------------
@@ -270,33 +266,210 @@ widgets[#widgets + 1] = channelDropdown
 AddButton("Play test cue", 160, function() ns.PlayTestCue() end)
 
 -- ---------------------------------------------------------------------
--- Watched auras
+-- Watched auras (in-panel editor)
 -- ---------------------------------------------------------------------
+-- The list below is rebuilt on demand from CueSenseDB.cues. Rows are
+-- pooled (created once, reused) and the scroll content height is
+-- recomputed from the editor's bottom each rebuild. Forward-declare the
+-- pieces that reference each other (rows reference RebuildList to refresh
+-- after a remove; RebuildList builds rows via MakeRow).
+local ROW_H = 30
+local rows = {}
+local RebuildList
+local MakeRow
+
 AddHeader("Watched auras")
 
 local watchInfo = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 watchInfo:SetPoint("TOPLEFT", LEFT, y)
 watchInfo:SetWidth(520)
 watchInfo:SetJustifyH("LEFT")
-y = y - 20
+y = y - 22
 watchInfo.Refresh = function()
     local n = ns.CueCount()
-    watchInfo:SetText("Currently watching |cffffd200" .. n .. "|r aura" .. (n == 1 and "" or "s") .. ".")
+    watchInfo:SetText("Watching |cffffd200" .. n .. "|r aura" .. (n == 1 and "" or "s")
+        .. ".   |cff808080A = gained · F = faded · V = visual flash|r")
 end
 widgets[#widgets + 1] = watchInfo
 
-AddDescription("Add an aura by its spell ID: |cffffd200/cue add <spellID>|r  (e.g. /cue add 2825 for Bloodlust). " ..
-    "Remove with |cffffd200/cue remove <spellID>|r and review with |cffffd200/cue list|r. " ..
-    "A point-and-click editor for per-aura sound and applied/faded triggers is on the way.")
+-- Add-by-ID row
+local addLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+addLabel:SetPoint("TOPLEFT", LEFT, y)
+addLabel:SetText("Add by spell ID:")
 
-AddButton("Print watched list to chat", 220, function()
-    SlashCmdList["CUESENSE"]("list")
-end)
+local addBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+addBox:SetPoint("LEFT", addLabel, "RIGHT", 12, 0)
+addBox:SetSize(90, 22)
+addBox:SetAutoFocus(false)
+addBox:SetNumeric(true)
+addBox:SetFontObject("ChatFontNormal")
 
-AddGap(16)
+local addBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+addBtn:SetPoint("LEFT", addBox, "RIGHT", 8, 0)
+addBtn:SetSize(60, 22)
+addBtn:SetText("Add")
 
--- Lock content height so the scrollbar appears on overflow.
-content:SetHeight(-y + 20)
+local addStatus = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+addStatus:SetPoint("LEFT", addBtn, "RIGHT", 10, 0)
+addStatus:SetWidth(220)
+addStatus:SetJustifyH("LEFT")
+
+local function DoAdd()
+    local txt = (addBox:GetText() or ""):trim()
+    local id = tonumber(txt)
+    if not id then
+        addStatus:SetText("|cffff6060Enter a spell ID number.|r")
+        return
+    end
+    if CueSenseDB.cues[tostring(id)] then
+        addStatus:SetText("|cffffd200Already watching that.|r")
+        return
+    end
+    local nm = C_Spell.GetSpellName(id)
+    if not nm then
+        addStatus:SetText("|cffff6060Unknown spell ID " .. id .. ".|r")
+        return
+    end
+    ns.AddCue(id)
+    addBox:SetText("")
+    addStatus:SetText("|cff60ff60Added " .. nm .. ".|r")
+    if watchInfo.Refresh then watchInfo.Refresh() end
+    RebuildList()
+end
+addBox:SetScript("OnEnterPressed", function(self) self:ClearFocus(); DoAdd() end)
+addBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+addBtn:SetScript("OnClick", DoAdd)
+y = y - 28
+
+local addHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+addHint:SetPoint("TOPLEFT", LEFT, y)
+addHint:SetWidth(520)
+addHint:SetJustifyH("LEFT")
+addHint:SetText("Find spell IDs on Wowhead — the ID is in the page URL. Example: 2825 (Bloodlust).")
+y = y - 24
+
+-- Column headers above the list
+local function ColHeader(text, xoff)
+    local fs = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    fs:SetPoint("TOPLEFT", LEFT + xoff, y)
+    fs:SetText(text)
+end
+ColHeader("Aura", 4)
+ColHeader("A", 174)
+ColHeader("F", 209)
+ColHeader("V", 244)
+ColHeader("Sound", 282)
+y = y - 14
+
+-- Editor container; rows are anchored inside it.
+local editorTopY = y
+local editor = CreateFrame("Frame", nil, content)
+editor:SetPoint("TOPLEFT", LEFT, editorTopY)
+editor:SetPoint("TOPRIGHT", -18, editorTopY)
+editor:SetHeight(ROW_H)
+
+local emptyText = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+emptyText:SetPoint("TOPLEFT", LEFT + 4, editorTopY - 7)
+emptyText:SetText("No auras watched yet — add one above.")
+
+MakeRow = function(i)
+    local row = CreateFrame("Frame", nil, editor)
+    row:SetHeight(ROW_H)
+    row:SetPoint("TOPLEFT", editor, "TOPLEFT", 0, -(i - 1) * ROW_H)
+    row:SetWidth(500)
+
+    row.name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    row.name:SetPoint("LEFT", row, "LEFT", 4, 0)
+    row.name:SetWidth(158)
+    row.name:SetJustifyH("LEFT")
+    row.name:SetWordWrap(false)
+
+    local function MkCheck(xoff, field)
+        local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+        cb:SetSize(24, 24)
+        cb:SetPoint("LEFT", row, "LEFT", xoff, 0)
+        cb:SetScript("OnClick", function(self)
+            local cue = row.spellID and CueSenseDB.cues[row.spellID]
+            if cue then cue[field] = self:GetChecked() and true or false end
+        end)
+        return cb
+    end
+    row.applied = MkCheck(170, "applied")
+    row.faded   = MkCheck(205, "faded")
+    row.visual  = MkCheck(240, "visual")
+
+    row.sound = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
+    row.sound:SetPoint("LEFT", row, "LEFT", 276, 0)
+    row.sound:SetSize(150, 26)
+    row.sound:SetupMenu(function(_, rootMenu)
+        for _, item in ipairs(ns.SOUNDS) do
+            local key = item.key
+            rootMenu:CreateRadio(item.label,
+                function()
+                    local c = row.spellID and CueSenseDB.cues[row.spellID]
+                    return c and c.sound == key
+                end,
+                function()
+                    local c = row.spellID and CueSenseDB.cues[row.spellID]
+                    if not c then return end
+                    c.sound = key
+                    ns.PlaySoundEntry(key, c.channel or CueSenseDB.channel)
+                    C_Timer.After(0, function() row.sound:GenerateMenu() end)
+                end)
+        end
+    end)
+
+    row.preview = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    row.preview:SetSize(28, 22)
+    row.preview:SetPoint("LEFT", row, "LEFT", 432, 0)
+    row.preview:SetText(">")
+    row.preview:SetScript("OnClick", function()
+        local cue = row.spellID and CueSenseDB.cues[row.spellID]
+        if cue then ns.PlaySoundEntry(cue.sound, cue.channel or CueSenseDB.channel) end
+    end)
+
+    row.remove = CreateFrame("Button", nil, row, "UIPanelCloseButton")
+    row.remove:SetSize(24, 24)
+    row.remove:SetPoint("LEFT", row, "LEFT", 466, 0)
+    row.remove:SetScript("OnClick", function()
+        if not row.spellID then return end
+        ns.RemoveCue(row.spellID)
+        if watchInfo.Refresh then watchInfo.Refresh() end
+        RebuildList()
+    end)
+
+    rows[i] = row
+    return row
+end
+
+RebuildList = function()
+    if not CueSenseDB then return end
+    local keys = {}
+    for sid in pairs(CueSenseDB.cues) do keys[#keys + 1] = sid end
+    table.sort(keys, function(a, b) return (tonumber(a) or 0) < (tonumber(b) or 0) end)
+
+    for i, sid in ipairs(keys) do
+        local row = rows[i] or MakeRow(i)
+        row.spellID = sid
+        local cue = CueSenseDB.cues[sid]
+        local nm = cue.label or C_Spell.GetSpellName(tonumber(sid)) or "Unknown"
+        row.name:SetText(nm .. "  |cff808080(" .. sid .. ")|r")
+        row.applied:SetChecked(cue.applied and true or false)
+        row.faded:SetChecked(cue.faded and true or false)
+        row.visual:SetChecked(cue.visual and true or false)
+        row.sound:GenerateMenu()
+        row:Show()
+    end
+    for i = #keys + 1, #rows do rows[i]:Hide() end
+
+    local listH = math.max(#keys * ROW_H, ROW_H)
+    editor:SetHeight(listH)
+    if #keys == 0 then emptyText:Show() else emptyText:Hide() end
+
+    -- Recompute scroll content height from the editor's bottom.
+    content:SetHeight(-editorTopY + listH + 30)
+end
+ns.RebuildList = RebuildList
 
 -- ---------------------------------------------------------------------
 -- Refresh + registration
@@ -306,6 +479,7 @@ local function RefreshAll()
     for _, w in ipairs(widgets) do
         if w.Refresh then w.Refresh() end
     end
+    if RebuildList then RebuildList() end
 end
 ns.RefreshOptions = RefreshAll
 

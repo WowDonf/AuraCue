@@ -51,12 +51,12 @@ Tip: look up spell IDs on Wowhead — the ID is in the page URL.
 - **Visual cue:** show/hide the flash, color, size, on-screen time, and
   position.
 - **Audio cue:** the channel cue sounds route through.
-- **Watched auras:** managed with `/cue` for now; a point-and-click editor
-  for per-aura sounds and applied/faded triggers is on the way.
+- **Watched auras:** add by spell ID and edit each aura's sound, its
+  gained/faded triggers, and its visual flash right in the panel. The
+  `/cue` commands still work too.
 
 ## Roadmap
 
-- In-panel watched-aura editor (per-aura sound, applied/faded toggles)
 - Distinct bundled cue sounds
 - Player cast-bar / interrupt-window cues
 - Private-aura applied cues (boss debuffs surfaced as a visual flash)

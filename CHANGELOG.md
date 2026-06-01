@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.2.0
+
+- **In-panel cue editor.** The options panel now lists every watched aura
+  with per-aura controls: **gained** / **faded** / **visual** toggles, a
+  sound dropdown with a preview button, and a remove button. No more
+  managing the list from chat (the `/cue` commands still work).
+- **Add by spell ID, in the panel.** Type an ID and click Add; unknown or
+  non-numeric IDs are rejected with an inline message, and the resolved
+  spell name is confirmed.
+- The watched list and counts stay in sync whether you edit from the panel
+  or the slash commands.
+
 ## v0.1.0
 
 Initial release.
