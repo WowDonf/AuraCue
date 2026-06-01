@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.7.1
+
+- Sharper addon icon (antialiased PNG).
+
 ## v0.7.0
 
 - **Distinct bundled cue sounds.** Ships eight short, easy-to-tell-apart

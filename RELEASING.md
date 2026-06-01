@@ -75,16 +75,16 @@ generated and committed. Regenerate with the scripts in `tools/`:
 
 ```bash
 python3 tools/make_sounds.py   # writes Sounds/rise.mp3 ... thud.mp3
-python3 tools/make_icon.py     # writes Icon.tga
+python3 tools/make_icon.py     # writes Icon.png
 ```
 
 `make_sounds.py` is stdlib-only for synthesis but needs `ffmpeg` on PATH for
 the WAV → MP3 step (encoder `libmp3lame`). Edit the `TONES` table to change
-the palette. `make_icon.py` needs no dependencies — it writes the 32-bit TGA
-bytes directly, with the top-left-origin descriptor (`0x28`) WoW expects.
+the palette. `make_icon.py` needs `Pillow` (`pip install Pillow`); it draws
+the icon at 4x supersample and downscales with LANCZOS for clean edges.
 
 `tools/` and `assets/` are excluded from the packaged zip (see `.pkgmeta`);
-`Sounds/` and `Icon.tga` ship.
+`Sounds/` and `Icon.png` ship.
 
 ## Manual packaging (for testing)
 
