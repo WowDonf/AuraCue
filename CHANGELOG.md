@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.0
+
+- **Audio is fully optional.** New "Play sound cues" master switch, and each
+  aura can be set to "None (silent)" for a visual-only cue. Visual was
+  already optional per-aura; now sound matches.
+- **Separate buff / debuff tracking.** "Track buffs" and "Track debuffs"
+  toggles let you run one without the other. Each aura is tagged as a buff
+  or debuff automatically.
+- **Categories.** The watched list is grouped under headings — Buffs and
+  Debuffs by default — and every row has a Group field you can type into
+  (e.g. a dungeon name) to file that aura under your own heading. Makes a
+  long list much easier to scan and manage.
+
 ## v0.4.0
 
 - **The "add" list now only shows auras that actually track.** It's built

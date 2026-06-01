@@ -171,6 +171,12 @@ AddHeader("General")
 AddCheckbox("Enable CueSense",
     function() return CueSenseDB.enabled end,
     function(v) CueSenseDB.enabled = v end)
+AddCheckbox("Track buffs (helpful auras)",
+    function() return CueSenseDB.trackBuffs end,
+    function(v) CueSenseDB.trackBuffs = v end)
+AddCheckbox("Track debuffs (harmful auras)",
+    function() return CueSenseDB.trackDebuffs end,
+    function(v) CueSenseDB.trackDebuffs = v end)
 
 -- ---------------------------------------------------------------------
 -- Visual cue
@@ -242,9 +248,14 @@ AddSideBySideButtons(
 -- Audio cue
 -- ---------------------------------------------------------------------
 AddHeader("Audio cue")
-AddDescription("The sound played when a watched aura changes. Per-aura sounds are set " ..
-    "with /cue; this is the audio channel they route through (so blind / low-vision " ..
-    "players can balance cue volume against game audio).")
+
+AddCheckbox("Play sound cues",
+    function() return CueSenseDB.audioEnabled end,
+    function(v) CueSenseDB.audioEnabled = v end)
+
+AddDescription("Master switch for all cue sounds. Each aura's sound (or no sound) " ..
+    "is set per-row below; this is the audio channel they route through, so blind / " ..
+    "low-vision players can balance cue volume against game audio.")
 
 local channelDropdown = AddDropdown("Audio channel", 200)
 channelDropdown:SetDefaultText("Choose a channel")
@@ -274,9 +285,12 @@ AddButton("Play test cue", 160, function() ns.PlayTestCue() end)
 -- pieces that reference each other (rows reference RebuildList to refresh
 -- after a remove; RebuildList builds rows via MakeRow).
 local ROW_H = 30
+local HEADER_H = 22
 local rows = {}
+local headers = {}
 local RebuildList
 local MakeRow
+local MakeHeader
 
 AddHeader("Watched auras")
 
@@ -288,7 +302,7 @@ y = y - 22
 watchInfo.Refresh = function()
     local n = ns.CueCount()
     watchInfo:SetText("Watching |cffffd200" .. n .. "|r aura" .. (n == 1 and "" or "s")
-        .. ".   |cff808080A = gained · F = faded · V = visual flash|r")
+        .. ".   |cff808080A = gained · F = faded · V = visual · Group = a category you type|r")
 end
 widgets[#widgets + 1] = watchInfo
 
@@ -396,6 +410,15 @@ y = y - 28
 addStatus:SetPoint("TOPLEFT", LEFT, y)
 y = y - 20
 
+-- Brief grouping tip
+local groupHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+groupHint:SetPoint("TOPLEFT", LEFT, y)
+groupHint:SetWidth(520)
+groupHint:SetJustifyH("LEFT")
+groupHint:SetText("Auras are grouped by Buffs / Debuffs. Type a Group name (e.g. a dungeon) on any " ..
+    "row to file it under your own heading instead.")
+y = y - 26
+
 -- Column headers above the list
 local function ColHeader(text, xoff)
     local fs = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
@@ -403,10 +426,11 @@ local function ColHeader(text, xoff)
     fs:SetText(text)
 end
 ColHeader("Aura", 4)
-ColHeader("A", 174)
-ColHeader("F", 209)
-ColHeader("V", 244)
-ColHeader("Sound", 282)
+ColHeader("A", 138)
+ColHeader("F", 166)
+ColHeader("V", 194)
+ColHeader("Sound", 222)
+ColHeader("Group", 398)
 y = y - 14
 
 -- Editor container; rows are anchored inside it.
@@ -420,15 +444,23 @@ local emptyText = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall
 emptyText:SetPoint("TOPLEFT", LEFT + 4, editorTopY - 7)
 emptyText:SetText("No auras watched yet — add one above.")
 
+-- Section header (one per category group); pooled, anchored in RebuildList.
+MakeHeader = function(i)
+    local fs = editor:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    fs:SetTextColor(1, 0.82, 0)
+    fs:SetJustifyH("LEFT")
+    headers[i] = fs
+    return fs
+end
+
 MakeRow = function(i)
     local row = CreateFrame("Frame", nil, editor)
     row:SetHeight(ROW_H)
-    row:SetPoint("TOPLEFT", editor, "TOPLEFT", 0, -(i - 1) * ROW_H)
-    row:SetWidth(500)
+    row:SetWidth(540)   -- anchored by RebuildList (grouped layout)
 
     row.name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     row.name:SetPoint("LEFT", row, "LEFT", 4, 0)
-    row.name:SetWidth(158)
+    row.name:SetWidth(126)
     row.name:SetJustifyH("LEFT")
     row.name:SetWordWrap(false)
 
@@ -442,14 +474,26 @@ MakeRow = function(i)
         end)
         return cb
     end
-    row.applied = MkCheck(170, "applied")
-    row.faded   = MkCheck(205, "faded")
-    row.visual  = MkCheck(240, "visual")
+    row.applied = MkCheck(136, "applied")
+    row.faded   = MkCheck(164, "faded")
+    row.visual  = MkCheck(192, "visual")
 
     row.sound = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
-    row.sound:SetPoint("LEFT", row, "LEFT", 276, 0)
-    row.sound:SetSize(150, 26)
+    row.sound:SetPoint("LEFT", row, "LEFT", 220, 0)
+    row.sound:SetSize(118, 26)
     row.sound:SetupMenu(function(_, rootMenu)
+        -- "None" makes this cue silent (visual-only); audio is optional.
+        rootMenu:CreateRadio("None (silent)",
+            function()
+                local c = row.spellID and CueSenseDB.cues[row.spellID]
+                return c and not c.sound
+            end,
+            function()
+                local c = row.spellID and CueSenseDB.cues[row.spellID]
+                if not c then return end
+                c.sound = false
+                C_Timer.After(0, function() row.sound:GenerateMenu() end)
+            end)
         for _, item in ipairs(ns.SOUNDS) do
             local key = item.key
             rootMenu:CreateRadio(item.label,
@@ -468,22 +512,47 @@ MakeRow = function(i)
     end)
 
     row.preview = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    row.preview:SetSize(28, 22)
-    row.preview:SetPoint("LEFT", row, "LEFT", 432, 0)
+    row.preview:SetSize(24, 22)
+    row.preview:SetPoint("LEFT", row, "LEFT", 342, 0)
     row.preview:SetText(">")
     row.preview:SetScript("OnClick", function()
         local cue = row.spellID and CueSenseDB.cues[row.spellID]
-        if cue then ns.PlaySoundEntry(cue.sound, cue.channel or CueSenseDB.channel) end
+        if cue and cue.sound then ns.PlaySoundEntry(cue.sound, cue.channel or CueSenseDB.channel) end
     end)
 
     row.remove = CreateFrame("Button", nil, row, "UIPanelCloseButton")
     row.remove:SetSize(24, 24)
-    row.remove:SetPoint("LEFT", row, "LEFT", 466, 0)
+    row.remove:SetPoint("LEFT", row, "LEFT", 368, 0)
     row.remove:SetScript("OnClick", function()
         if not row.spellID then return end
         ns.RemoveCue(row.spellID)
         if watchInfo.Refresh then watchInfo.Refresh() end
         RebuildList()
+    end)
+
+    -- Free-text group/category; type a dungeon name etc. to re-file the aura.
+    row.cat = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
+    row.cat:SetPoint("LEFT", row, "LEFT", 398, 0)
+    row.cat:SetSize(128, 22)
+    row.cat:SetAutoFocus(false)
+    row.cat:SetFontObject("ChatFontNormal")
+    -- Commit on focus loss only; rebuild solely when the value actually
+    -- changed (avoids a rebuild — and re-entrant focus events — when the
+    -- box is left untouched).
+    row.cat:SetScript("OnEditFocusLost", function(self)
+        local cue = row.spellID and CueSenseDB.cues[row.spellID]
+        if not cue then return end
+        local t = (self:GetText() or ""):trim()
+        local newCat = (t ~= "" and t) or ((cue.kind == "debuff") and "Debuffs" or "Buffs")
+        if newCat == cue.category then return end
+        cue.category = newCat
+        RebuildList()
+    end)
+    row.cat:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    row.cat:SetScript("OnEscapePressed", function(self)
+        local cue = row.spellID and CueSenseDB.cues[row.spellID]
+        self:SetText(cue and cue.category or "")
+        self:ClearFocus()
     end)
 
     rows[i] = row
@@ -492,27 +561,63 @@ end
 
 RebuildList = function()
     if not CueSenseDB then return end
-    local keys = {}
-    for sid in pairs(CueSenseDB.cues) do keys[#keys + 1] = sid end
-    table.sort(keys, function(a, b) return (tonumber(a) or 0) < (tonumber(b) or 0) end)
 
-    for i, sid in ipairs(keys) do
-        local row = rows[i] or MakeRow(i)
-        row.spellID = sid
-        local cue = CueSenseDB.cues[sid]
-        local nm = cue.label or C_Spell.GetSpellName(tonumber(sid)) or "Unknown"
-        row.name:SetText(nm .. "  |cff808080(" .. sid .. ")|r")
-        row.applied:SetChecked(cue.applied and true or false)
-        row.faded:SetChecked(cue.faded and true or false)
-        row.visual:SetChecked(cue.visual and true or false)
-        row.sound:GenerateMenu()
-        row:Show()
+    -- Group cues by category. Buffs/Debuffs are the default groups; a
+    -- user-typed category re-files an aura under its own heading.
+    local groups, total = {}, 0
+    for sid, cue in pairs(CueSenseDB.cues) do
+        local cat = cue.category or ((cue.kind == "debuff") and "Debuffs" or "Buffs")
+        groups[cat] = groups[cat] or {}
+        local g = groups[cat]
+        g[#g + 1] = sid
+        total = total + 1
     end
-    for i = #keys + 1, #rows do rows[i]:Hide() end
+    local cats = {}
+    for cat in pairs(groups) do cats[#cats + 1] = cat end
+    local rank = { Buffs = 1, Debuffs = 2 }
+    table.sort(cats, function(a, b)
+        local ra, rb = rank[a] or 3, rank[b] or 3
+        if ra ~= rb then return ra < rb end
+        return a < b
+    end)
 
-    local listH = math.max(#keys * ROW_H, ROW_H)
+    -- Lay out header + rows top-to-bottom, reusing pooled widgets.
+    local yOff, rowIdx, hdrIdx = 0, 0, 0
+    for _, cat in ipairs(cats) do
+        hdrIdx = hdrIdx + 1
+        local hdr = headers[hdrIdx] or MakeHeader(hdrIdx)
+        hdr:ClearAllPoints()
+        hdr:SetPoint("TOPLEFT", editor, "TOPLEFT", 2, -yOff)
+        hdr:SetText(cat .. "  |cff808080(" .. #groups[cat] .. ")|r")
+        hdr:Show()
+        yOff = yOff + HEADER_H
+
+        local sids = groups[cat]
+        table.sort(sids, function(a, b) return (tonumber(a) or 0) < (tonumber(b) or 0) end)
+        for _, sid in ipairs(sids) do
+            rowIdx = rowIdx + 1
+            local row = rows[rowIdx] or MakeRow(rowIdx)
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", editor, "TOPLEFT", 0, -yOff)
+            row.spellID = sid
+            local cue = CueSenseDB.cues[sid]
+            local nm = cue.label or C_Spell.GetSpellName(tonumber(sid)) or "Unknown"
+            row.name:SetText(nm .. "  |cff808080(" .. sid .. ")|r")
+            row.applied:SetChecked(cue.applied and true or false)
+            row.faded:SetChecked(cue.faded and true or false)
+            row.visual:SetChecked(cue.visual and true or false)
+            row.cat:SetText(cue.category or "")
+            row.sound:GenerateMenu()
+            row:Show()
+            yOff = yOff + ROW_H
+        end
+    end
+    for i = rowIdx + 1, #rows do rows[i]:Hide() end
+    for i = hdrIdx + 1, #headers do headers[i]:Hide() end
+
+    local listH = math.max(yOff, ROW_H)
     editor:SetHeight(listH)
-    if #keys == 0 then emptyText:Show() else emptyText:Hide() end
+    if total == 0 then emptyText:Show() else emptyText:Hide() end
 
     -- Recompute scroll content height from the editor's bottom.
     content:SetHeight(-editorTopY + listH + 30)

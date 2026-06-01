@@ -55,6 +55,9 @@ ns.Reveal = Reveal
 local defaults = {
     enabled = true,
     channel = "Master",          -- default audio channel for cues
+    audioEnabled = true,         -- master switch for sound cues
+    trackBuffs = true,           -- fire cues for helpful auras
+    trackDebuffs = true,         -- fire cues for harmful auras
     visual = {
         enabled  = true,
         color    = { r = 0.20, g = 0.86, b = 0.75 },
@@ -283,9 +286,15 @@ end
 -- Cue dispatch
 -- ---------------------------------------------------------------------
 local function FireCue(cue, spellName, eventKind)
+    -- Respect the per-kind master switches (buffs vs debuffs).
+    if cue.kind == "debuff" then
+        if not CueSenseDB.trackDebuffs then return end
+    elseif not CueSenseDB.trackBuffs then
+        return
+    end
     local verb = (eventKind == "applied") and "gained" or "faded"
     local label = cue.label or spellName or "Aura"
-    if cue.sound then
+    if CueSenseDB.audioEnabled and cue.sound then
         PlaySoundEntry(cue.sound, cue.channel or CueSenseDB.channel)
     end
     if cue.visual and CueSenseDB.visual.enabled and not ns.testMode then
@@ -319,6 +328,7 @@ local function RecordSeen(sid, data)
     CueSenseDB.seen[key] = {
         name = Reveal(data.name) or C_Spell.GetSpellName(sid),
         icon = Reveal(data.icon),
+        kind = (Reveal(data.isHarmful) and "debuff") or "buff",
     }
 end
 
@@ -383,13 +393,17 @@ function ns.AddCue(spellID)
     spellID = tonumber(spellID)
     if not spellID then return false end
     local name = C_Spell.GetSpellName(spellID)
+    local seen = CueSenseDB.seen[tostring(spellID)]
+    local kind = (seen and seen.kind) or "buff"
     CueSenseDB.cues[tostring(spellID)] = {
-        applied = true,
-        faded   = true,
-        sound   = "Chime",
-        channel = nil,        -- nil = follow the global default channel
-        visual  = true,
-        label   = name,
+        applied  = true,
+        faded    = true,
+        sound    = "Chime",
+        channel  = nil,        -- nil = follow the global default channel
+        visual   = true,
+        label    = name,
+        kind     = kind,
+        category = (kind == "debuff") and "Debuffs" or "Buffs",
     }
     SeedPresent()
     return true, name
@@ -443,6 +457,7 @@ function ns.GetSeenAuras()
             name    = info.name or C_Spell.GetSpellName(sid) or ("Spell " .. key),
             icon    = info.icon or 134400,
             secret  = ns.IsSpellAuraSecret(sid),
+            kind    = info.kind or "buff",
         }
     end
     table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)
@@ -464,6 +479,13 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         CueSenseDB = CueSenseDB or {}
         MergeDefaults(CueSenseDB, defaults)
         ValidateRanges(CueSenseDB)
+        -- Backfill kind/category onto cues created before v0.5.0.
+        for _, cue in pairs(CueSenseDB.cues) do
+            if not cue.kind then cue.kind = "buff" end
+            if not cue.category then
+                cue.category = (cue.kind == "debuff") and "Debuffs" or "Buffs"
+            end
+        end
         RestorePosition()
         ns.InitOptions()
         chatPrint("loaded. Type |cffffd200/cue|r for commands.")
