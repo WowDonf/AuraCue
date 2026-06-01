@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.3.0
+
+- **Pick a spell to watch from a list.** "Add a spell" is now a dropdown of
+  your known spells, each shown with its icon and name — no need to look up
+  a spell ID. Already-watched spells are marked. Adding by raw spell ID is
+  still available below for auras that aren't in your spellbook (trinket
+  procs, set bonuses, debuffs applied by others).
+- **Lock the overlay from the screen.** Moving the overlay now shows a
+  "Done — lock here" button right under it, so you can finish positioning
+  without typing `/cue lock`.
+
 ## v0.2.0
 
 - **In-panel cue editor.** The options panel now lists every watched aura

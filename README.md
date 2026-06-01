@@ -51,9 +51,12 @@ Tip: look up spell IDs on Wowhead — the ID is in the page URL.
 - **Visual cue:** show/hide the flash, color, size, on-screen time, and
   position.
 - **Audio cue:** the channel cue sounds route through.
-- **Watched auras:** add by spell ID and edit each aura's sound, its
-  gained/faded triggers, and its visual flash right in the panel. The
-  `/cue` commands still work too.
+- **Watched auras:** pick a spell from a list of your known spells (shown
+  with icon and name), or add by spell ID for auras that aren't in your
+  spellbook. Edit each aura's sound, its gained/faded triggers, and its
+  visual flash right in the panel. The `/cue` commands still work too.
+- **Moving the overlay:** `/cue unlock` (or the panel's "Move overlay"
+  button) shows the overlay with a "Done — lock here" button to finish.
 
 ## Roadmap
 

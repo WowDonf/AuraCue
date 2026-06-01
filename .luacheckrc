@@ -32,7 +32,7 @@ read_globals = {
     -- Sound
     "PlaySound", "PlaySoundFile", "SOUNDKIT",
     -- Auras / spell data
-    "C_UnitAuras", "AuraUtil", "C_Spell",
+    "C_UnitAuras", "AuraUtil", "C_Spell", "C_SpellBook", "Enum",
     -- Secret-value regime (Midnight 12.0+); nil on older clients
     "issecretvalue", "C_Secrets",
     -- Timing

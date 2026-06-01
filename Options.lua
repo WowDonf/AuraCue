@@ -292,10 +292,54 @@ watchInfo.Refresh = function()
 end
 widgets[#widgets + 1] = watchInfo
 
--- Add-by-ID row
+-- Feedback line (declared first so the picker / by-ID closures below can
+-- reference it).
+local addStatus = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+addStatus:SetWidth(500)
+addStatus:SetJustifyH("LEFT")
+
+-- Primary "Add": pick a spell from your spellbook, shown with its icon
+-- and name. Selecting one starts watching its aura.
+local pickLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+pickLabel:SetPoint("TOPLEFT", LEFT, y)
+pickLabel:SetText("Add a spell:")
+
+local addDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+addDD:SetPoint("LEFT", pickLabel, "RIGHT", 12, 0)
+addDD:SetSize(280, 30)
+addDD:SetDefaultText("Choose a spell to watch")
+addDD:SetupMenu(function(_, root)
+    local spells = ns.GetKnownSpells()
+    if #spells == 0 then
+        root:CreateButton("|cff808080No spells found — use spell ID below|r", function() end)
+        return
+    end
+    for _, sp in ipairs(spells) do
+        local sid = sp.spellID
+        local icon = sp.icon or 134400
+        local label = string.format("|T%d:16:16:0:0|t %s", icon, sp.name or ("Spell " .. sid))
+        if CueSenseDB.cues[tostring(sid)] then
+            label = label .. "  |cff808080(watching)|r"
+        end
+        root:CreateButton(label, function()
+            if CueSenseDB.cues[tostring(sid)] then
+                addStatus:SetText("|cffffd200Already watching " .. (sp.name or sid) .. ".|r")
+                return
+            end
+            ns.AddCue(sid)
+            addStatus:SetText("|cff60ff60Added " .. (sp.name or sid) .. ".|r")
+            if watchInfo.Refresh then watchInfo.Refresh() end
+            RebuildList()
+        end)
+    end
+end)
+y = y - 38
+
+-- Secondary "Add": by raw spell ID, for auras that aren't in your
+-- spellbook (trinket procs, set bonuses, debuffs applied by others).
 local addLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 addLabel:SetPoint("TOPLEFT", LEFT, y)
-addLabel:SetText("Add by spell ID:")
+addLabel:SetText("…or by spell ID:")
 
 local addBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
 addBox:SetPoint("LEFT", addLabel, "RIGHT", 12, 0)
@@ -308,11 +352,6 @@ local addBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
 addBtn:SetPoint("LEFT", addBox, "RIGHT", 8, 0)
 addBtn:SetSize(60, 22)
 addBtn:SetText("Add")
-
-local addStatus = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-addStatus:SetPoint("LEFT", addBtn, "RIGHT", 10, 0)
-addStatus:SetWidth(220)
-addStatus:SetJustifyH("LEFT")
 
 local function DoAdd()
     local txt = (addBox:GetText() or ""):trim()
@@ -341,12 +380,8 @@ addBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 addBtn:SetScript("OnClick", DoAdd)
 y = y - 28
 
-local addHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-addHint:SetPoint("TOPLEFT", LEFT, y)
-addHint:SetWidth(520)
-addHint:SetJustifyH("LEFT")
-addHint:SetText("Find spell IDs on Wowhead — the ID is in the page URL. Example: 2825 (Bloodlust).")
-y = y - 24
+addStatus:SetPoint("TOPLEFT", LEFT, y)
+y = y - 20
 
 -- Column headers above the list
 local function ColHeader(text, xoff)

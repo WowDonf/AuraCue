@@ -186,6 +186,19 @@ overlay:SetScript("OnDragStop", function(self)
     CueSenseDB.visual.position = { point = point, relativePoint = relativePoint, x = x, y = y }
 end)
 
+-- "Done" button: only shown while repositioning, so the overlay can be
+-- locked from the screen instead of forcing a /cue lock. Sits just below
+-- the overlay and rides along with it (child frame).
+overlay.done = CreateFrame("Button", nil, overlay, "UIPanelButtonTemplate")
+overlay.done:SetSize(170, 26)
+overlay.done:SetPoint("TOP", overlay, "BOTTOM", 0, -10)
+overlay.done:SetText("Done — lock here")
+overlay.done:Hide()
+overlay.done:SetScript("OnClick", function()
+    ns.SetRepositionMode(false)
+    ns.OpenOptions()
+end)
+
 local function RestorePosition()
     overlay:ClearAllPoints()
     local p = CueSenseDB and CueSenseDB.visual and CueSenseDB.visual.position
@@ -239,10 +252,12 @@ function ns.SetRepositionMode(on)
         overlay:SetScale(CueSenseDB.visual.scale or 1.0)
         overlay:SetAlpha(1)
         RestorePosition()
+        overlay.done:Show()
         overlay:Show()
     else
         CueSenseDB.visual.locked = true
         overlay:EnableMouse(false)
+        overlay.done:Hide()
         fadeDuration = 0
         overlay:Hide()
     end
@@ -359,6 +374,44 @@ function ns.CueCount()
     local n = 0
     for _ in pairs(CueSenseDB.cues) do n = n + 1 end
     return n
+end
+
+-- Enumerate the player's known, active (non-passive) spells with their
+-- icon + name, so the options panel can offer a pick-from-a-list "Add"
+-- instead of forcing a raw spell ID. Sorted by name; deduped. Returns
+-- a list of { spellID, name, icon }. Empty if the spellbook API is
+-- unavailable (older clients) — the by-ID path still works.
+function ns.GetKnownSpells()
+    local out, seen = {}, {}
+    local SB = C_SpellBook
+    if not (SB and SB.GetNumSpellBookSkillLines and SB.GetSpellBookItemInfo) then
+        return out
+    end
+    local bank = (Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player) or 0
+    local spellType = Enum and Enum.SpellBookItemType and Enum.SpellBookItemType.Spell
+    local numLines = SB.GetNumSpellBookSkillLines() or 0
+    for line = 1, numLines do
+        local lineInfo = SB.GetSpellBookSkillLineInfo(line)
+        if lineInfo then
+            local offset = lineInfo.itemIndexOffset or 0
+            local count = lineInfo.numSpellBookItems or 0
+            for i = offset + 1, offset + count do
+                local info = SB.GetSpellBookItemInfo(i, bank)
+                if info and info.spellID and not info.isPassive
+                   and ((not spellType) or info.itemType == spellType)
+                   and not seen[info.spellID] then
+                    seen[info.spellID] = true
+                    out[#out + 1] = {
+                        spellID = info.spellID,
+                        name    = info.name or C_Spell.GetSpellName(info.spellID),
+                        icon    = info.iconID,
+                    }
+                end
+            end
+        end
+    end
+    table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)
+    return out
 end
 
 -- ---------------------------------------------------------------------
