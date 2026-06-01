@@ -321,10 +321,13 @@ local present = {}
 -- Record an aura we've seen on the player into the registry the picker
 -- draws from. Only the first sighting matters; later sightings are cheap
 -- no-ops. Name/icon are Reveal-guarded (non-secret for player auras).
--- Localized dungeon/raid name if we're in one, else nil. Not secret.
+-- Localized instance name if we're in one, else nil. Not secret.
+-- Accepts any PvE instance — dungeons, raids, scenarios, AND Delves (which
+-- ride the scenario tech and may report "scenario" or a delve-specific
+-- type depending on the patch). Excludes the open world and PvP.
 local function CurrentDungeon()
     local inInstance, instanceType = IsInInstance()
-    if inInstance and (instanceType == "party" or instanceType == "raid" or instanceType == "scenario") then
+    if inInstance and instanceType ~= "none" and instanceType ~= "pvp" and instanceType ~= "arena" then
         return (GetInstanceInfo())   -- first return is the instance name
     end
     return nil

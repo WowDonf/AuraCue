@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.1
+
+- Debuffs taken in Delves (and other scenario-based content) now file under
+  the instance's name like dungeon debuffs do, instead of landing under
+  "Other". Tracking already worked everywhere; this fixes the auto-grouping.
+
 ## v0.6.0
 
 - **Buffs and debuffs now have separate tabs.** The watched list shows one
