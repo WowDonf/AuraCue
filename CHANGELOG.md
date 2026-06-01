@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.6.0
+
+- **Buffs and debuffs now have separate tabs.** The watched list shows one
+  kind at a time — switch with the Buffs / Debuffs tabs (each shows its
+  count) instead of scrolling one combined list.
+- **Debuffs remember where they came from.** When an aura is first seen,
+  CueSense records the dungeon, and debuffs file themselves under that
+  dungeon's heading automatically. The source mob is captured too and shown
+  when you hover a row — though the game hides it inside many instances, so
+  it can read "unknown" there.
+- Each row still has a Group field to re-file an aura under your own heading.
+
 ## v0.5.0
 
 - **Audio is fully optional.** New "Play sound cues" master switch, and each

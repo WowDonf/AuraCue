@@ -33,6 +33,8 @@ read_globals = {
     "PlaySound", "PlaySoundFile", "SOUNDKIT",
     -- Auras / spell data
     "C_UnitAuras", "AuraUtil", "C_Spell",
+    -- Instance / unit identity (cue provenance: dungeon + source mob)
+    "IsInInstance", "GetInstanceInfo", "UnitExists", "UnitName",
     -- Secret-value regime (Midnight 12.0+); nil on older clients
     "issecretvalue", "C_Secrets",
     -- Timing

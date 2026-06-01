@@ -321,14 +321,49 @@ local present = {}
 -- Record an aura we've seen on the player into the registry the picker
 -- draws from. Only the first sighting matters; later sightings are cheap
 -- no-ops. Name/icon are Reveal-guarded (non-secret for player auras).
+-- Localized dungeon/raid name if we're in one, else nil. Not secret.
+local function CurrentDungeon()
+    local inInstance, instanceType = IsInInstance()
+    if inInstance and (instanceType == "party" or instanceType == "raid" or instanceType == "scenario") then
+        return (GetInstanceInfo())   -- first return is the instance name
+    end
+    return nil
+end
+
+-- Best-effort source mob name. The aura's sourceUnit is frequently a
+-- secret value in instanced content, so this is often nil exactly where
+-- dungeon debuffs occur; fall back to the current target for harmful
+-- auras (a heuristic — you're usually targeting what's debuffing you).
+local function ResolveSource(data, harmful)
+    local src = Reveal(data.sourceUnit)
+    if src and UnitExists(src) then
+        local n = Reveal(UnitName(src))
+        if n then return n end
+    end
+    if harmful and UnitExists("target") then
+        return Reveal(UnitName("target"))
+    end
+    return nil
+end
+
 local function RecordSeen(sid, data)
     if not CueSenseDB.seen then CueSenseDB.seen = {} end
     local key = tostring(sid)
-    if CueSenseDB.seen[key] then return end
+    local harmful = Reveal(data.isHarmful) and true or false
+    local existing = CueSenseDB.seen[key]
+    if existing then
+        -- Backfill provenance we couldn't capture on first sighting (e.g.
+        -- first seen in the open world, later re-seen inside a dungeon).
+        if not existing.dungeon then existing.dungeon = CurrentDungeon() end
+        if not existing.source then existing.source = ResolveSource(data, harmful) end
+        return
+    end
     CueSenseDB.seen[key] = {
-        name = Reveal(data.name) or C_Spell.GetSpellName(sid),
-        icon = Reveal(data.icon),
-        kind = (Reveal(data.isHarmful) and "debuff") or "buff",
+        name    = Reveal(data.name) or C_Spell.GetSpellName(sid),
+        icon    = Reveal(data.icon),
+        kind    = harmful and "debuff" or "buff",
+        dungeon = CurrentDungeon(),
+        source  = ResolveSource(data, harmful),
     }
 end
 
@@ -395,6 +430,16 @@ function ns.AddCue(spellID)
     local name = C_Spell.GetSpellName(spellID)
     local seen = CueSenseDB.seen[tostring(spellID)]
     local kind = (seen and seen.kind) or "buff"
+    local dungeon = seen and seen.dungeon
+    local source = seen and seen.source
+    -- Debuffs file under the dungeon they came from (the useful grouping);
+    -- buffs default to a single "Buffs" group. Either can be retyped.
+    local category
+    if kind == "debuff" then
+        category = dungeon or "Other"
+    else
+        category = "Buffs"
+    end
     CueSenseDB.cues[tostring(spellID)] = {
         applied  = true,
         faded    = true,
@@ -403,7 +448,9 @@ function ns.AddCue(spellID)
         visual   = true,
         label    = name,
         kind     = kind,
-        category = (kind == "debuff") and "Debuffs" or "Buffs",
+        category = category,
+        dungeon  = dungeon,
+        source   = source,
     }
     SeedPresent()
     return true, name

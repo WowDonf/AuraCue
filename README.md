@@ -52,9 +52,10 @@ Tip: look up spell IDs on Wowhead — the ID is in the page URL.
   position.
 - **Audio cue:** a master "Play sound cues" switch and the channel sounds
   route through. Any aura can be set to "None (silent)" for visual-only.
-- **Buffs vs debuffs:** track buffs and debuffs independently, and group the
-  watched list under headings (Buffs / Debuffs by default, or type your own
-  Group name per aura — e.g. a dungeon).
+- **Buffs vs debuffs:** track buffs and debuffs independently, and manage
+  them on separate tabs. Debuffs file themselves under the dungeon they were
+  first seen in; hover a row to see its source mob (when the game exposes
+  it). Type a Group name on any row to re-file it under your own heading.
 - **Watched auras:** pick from a list of auras you've actually had (shown
   with icon and name) — so only auras that genuinely track are offered — or
   add by spell ID for an aura you haven't had yet. Edit each aura's sound,

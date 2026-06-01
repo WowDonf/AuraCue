@@ -288,9 +288,11 @@ local ROW_H = 30
 local HEADER_H = 22
 local rows = {}
 local headers = {}
+local activeTab = "buff"   -- which kind the editor is currently showing
 local RebuildList
 local MakeRow
 local MakeHeader
+local UpdateTabs
 
 AddHeader("Watched auras")
 
@@ -302,7 +304,7 @@ y = y - 22
 watchInfo.Refresh = function()
     local n = ns.CueCount()
     watchInfo:SetText("Watching |cffffd200" .. n .. "|r aura" .. (n == 1 and "" or "s")
-        .. ".   |cff808080A = gained · F = faded · V = visual · Group = a category you type|r")
+        .. " total.   |cff808080A = gained · F = faded · V = visual · hover a row for its source|r")
 end
 widgets[#widgets + 1] = watchInfo
 
@@ -415,9 +417,38 @@ local groupHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall
 groupHint:SetPoint("TOPLEFT", LEFT, y)
 groupHint:SetWidth(520)
 groupHint:SetJustifyH("LEFT")
-groupHint:SetText("Auras are grouped by Buffs / Debuffs. Type a Group name (e.g. a dungeon) on any " ..
-    "row to file it under your own heading instead.")
-y = y - 26
+groupHint:SetText("Buffs and debuffs have separate tabs. Debuffs file under the dungeon they were " ..
+    "first seen in; type a Group on any row to re-file it. (Hover a row for its source mob — " ..
+    "often hidden by the game inside instances.)")
+y = y - 34
+
+-- Buffs / Debuffs tabs — filter the list below by kind.
+local buffsTab = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+buffsTab:SetPoint("TOPLEFT", LEFT, y)
+buffsTab:SetSize(130, 24)
+local debuffsTab = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+debuffsTab:SetPoint("LEFT", buffsTab, "RIGHT", 8, 0)
+debuffsTab:SetSize(130, 24)
+y = y - 30
+
+UpdateTabs = function()
+    local b, d = 0, 0
+    if CueSenseDB then
+        for _, cue in pairs(CueSenseDB.cues) do
+            if cue.kind == "debuff" then d = d + 1 else b = b + 1 end
+        end
+    end
+    buffsTab:SetText("Buffs (" .. b .. ")")
+    debuffsTab:SetText("Debuffs (" .. d .. ")")
+    if activeTab == "debuff" then
+        debuffsTab:LockHighlight(); buffsTab:UnlockHighlight()
+    else
+        buffsTab:LockHighlight(); debuffsTab:UnlockHighlight()
+    end
+end
+buffsTab:SetScript("OnClick", function() activeTab = "buff"; RebuildList() end)
+debuffsTab:SetScript("OnClick", function() activeTab = "debuff"; RebuildList() end)
+UpdateTabs()
 
 -- Column headers above the list
 local function ColHeader(text, xoff)
@@ -426,11 +457,11 @@ local function ColHeader(text, xoff)
     fs:SetText(text)
 end
 ColHeader("Aura", 4)
-ColHeader("A", 138)
-ColHeader("F", 166)
-ColHeader("V", 194)
-ColHeader("Sound", 222)
-ColHeader("Group", 398)
+ColHeader("A", 164)
+ColHeader("F", 192)
+ColHeader("V", 220)
+ColHeader("Sound", 248)
+ColHeader("Group", 416)
 y = y - 14
 
 -- Editor container; rows are anchored inside it.
@@ -458,9 +489,25 @@ MakeRow = function(i)
     row:SetHeight(ROW_H)
     row:SetWidth(540)   -- anchored by RebuildList (grouped layout)
 
+    -- Hover the row to see the aura's source (mob / dungeon) when known.
+    row:EnableMouse(true)
+    row:SetScript("OnEnter", function(self)
+        local cue = self.spellID and CueSenseDB.cues[self.spellID]
+        if not cue then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(cue.label or "Aura", 1, 1, 1)
+        if cue.source then GameTooltip:AddLine("Source: " .. cue.source, 0.8, 0.8, 0.8) end
+        if cue.dungeon then GameTooltip:AddLine("Dungeon: " .. cue.dungeon, 0.8, 0.8, 0.8) end
+        if not cue.source and not cue.dungeon then
+            GameTooltip:AddLine("Source unknown (hidden in instances)", 0.6, 0.6, 0.6)
+        end
+        GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
     row.name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     row.name:SetPoint("LEFT", row, "LEFT", 4, 0)
-    row.name:SetWidth(126)
+    row.name:SetWidth(152)
     row.name:SetJustifyH("LEFT")
     row.name:SetWordWrap(false)
 
@@ -474,13 +521,13 @@ MakeRow = function(i)
         end)
         return cb
     end
-    row.applied = MkCheck(136, "applied")
-    row.faded   = MkCheck(164, "faded")
-    row.visual  = MkCheck(192, "visual")
+    row.applied = MkCheck(164, "applied")
+    row.faded   = MkCheck(192, "faded")
+    row.visual  = MkCheck(220, "visual")
 
     row.sound = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
-    row.sound:SetPoint("LEFT", row, "LEFT", 220, 0)
-    row.sound:SetSize(118, 26)
+    row.sound:SetPoint("LEFT", row, "LEFT", 248, 0)
+    row.sound:SetSize(112, 26)
     row.sound:SetupMenu(function(_, rootMenu)
         -- "None" makes this cue silent (visual-only); audio is optional.
         rootMenu:CreateRadio("None (silent)",
@@ -513,7 +560,7 @@ MakeRow = function(i)
 
     row.preview = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
     row.preview:SetSize(24, 22)
-    row.preview:SetPoint("LEFT", row, "LEFT", 342, 0)
+    row.preview:SetPoint("LEFT", row, "LEFT", 366, 0)
     row.preview:SetText(">")
     row.preview:SetScript("OnClick", function()
         local cue = row.spellID and CueSenseDB.cues[row.spellID]
@@ -522,7 +569,7 @@ MakeRow = function(i)
 
     row.remove = CreateFrame("Button", nil, row, "UIPanelCloseButton")
     row.remove:SetSize(24, 24)
-    row.remove:SetPoint("LEFT", row, "LEFT", 368, 0)
+    row.remove:SetPoint("LEFT", row, "LEFT", 392, 0)
     row.remove:SetScript("OnClick", function()
         if not row.spellID then return end
         ns.RemoveCue(row.spellID)
@@ -532,8 +579,8 @@ MakeRow = function(i)
 
     -- Free-text group/category; type a dungeon name etc. to re-file the aura.
     row.cat = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
-    row.cat:SetPoint("LEFT", row, "LEFT", 398, 0)
-    row.cat:SetSize(128, 22)
+    row.cat:SetPoint("LEFT", row, "LEFT", 416, 0)
+    row.cat:SetSize(116, 22)
     row.cat:SetAutoFocus(false)
     row.cat:SetFontObject("ChatFontNormal")
     -- Commit on focus loss only; rebuild solely when the value actually
@@ -566,11 +613,14 @@ RebuildList = function()
     -- user-typed category re-files an aura under its own heading.
     local groups, total = {}, 0
     for sid, cue in pairs(CueSenseDB.cues) do
-        local cat = cue.category or ((cue.kind == "debuff") and "Debuffs" or "Buffs")
-        groups[cat] = groups[cat] or {}
-        local g = groups[cat]
-        g[#g + 1] = sid
-        total = total + 1
+        local k = (cue.kind == "debuff") and "debuff" or "buff"
+        if k == activeTab then
+            local cat = cue.category or ((k == "debuff") and "Debuffs" or "Buffs")
+            groups[cat] = groups[cat] or {}
+            local g = groups[cat]
+            g[#g + 1] = sid
+            total = total + 1
+        end
     end
     local cats = {}
     for cat in pairs(groups) do cats[#cats + 1] = cat end
@@ -617,7 +667,13 @@ RebuildList = function()
 
     local listH = math.max(yOff, ROW_H)
     editor:SetHeight(listH)
-    if total == 0 then emptyText:Show() else emptyText:Hide() end
+    if total == 0 then
+        emptyText:SetText(activeTab == "debuff" and "No debuffs watched yet." or "No buffs watched yet.")
+        emptyText:Show()
+    else
+        emptyText:Hide()
+    end
+    if UpdateTabs then UpdateTabs() end
 
     -- Recompute scroll content height from the editor's bottom.
     content:SetHeight(-editorTopY + listH + 30)
