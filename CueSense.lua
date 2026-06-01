@@ -522,10 +522,17 @@ end
 -- every watched aura look "faded" the moment combat started. Querying a known
 -- ID is the sanctioned path and works in and out of combat.
 local GetPlayerAura = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
-local function PlayerHasAura(sid)
-    if not sid then return false end
+
+-- Read one watched aura's state by its known id: "present", "absent", or
+-- "unknown" (the read came back masked / secret). Querying a known id is the
+-- sanctioned path, but the game can still hide the result in combat.
+local function ReadAura(sid)
+    if not sid then return "absent" end
     if GetPlayerAura then
-        return GetPlayerAura(sid) ~= nil
+        local a = GetPlayerAura(sid)
+        if a == nil then return "absent" end
+        if IsSecret(a) then return "unknown" end
+        return "present"
     end
     -- Fallback for clients without the API (reads spellIds; out-of-combat only).
     local found = false
@@ -535,8 +542,9 @@ local function PlayerHasAura(sid)
     end
     AuraUtil.ForEachAura("player", "HELPFUL", nil, h, true)
     if not found then AuraUtil.ForEachAura("player", "HARMFUL", nil, h, true) end
-    return found
+    return found and "present" or "absent"
 end
+ns.ReadAura = ReadAura
 
 -- Catalogue auras currently readable on the player (for the picker). This
 -- still reads spellIds, so it's best-effort and mostly fills out of combat;
@@ -555,26 +563,32 @@ end
 local function ScanPlayerAuras()
     if not activeProfile or not activeProfile.enabled then return end
     local cues = activeProfile.cues
+    local inCombat = InCombatLockdown()
+    local newPresent = {}
 
-    -- Diff watched auras by querying each known ID (combat-safe).
-    local now = {}
-    for key in pairs(cues) do
-        if PlayerHasAura(tonumber(key)) then now[tonumber(key)] = true end
-    end
-
-    for sid in pairs(now) do
-        if not present[sid] then
-            local cue = cues[tostring(sid)]
-            if cue and cue.applied then FireCue(cue, C_Spell.GetSpellName(sid), "applied") end
+    for key, cue in pairs(cues) do
+        local sid = tonumber(key)
+        local state = ReadAura(sid)
+        if state == "present" then
+            newPresent[sid] = true
+            if not present[sid] and cue.applied then
+                FireCue(cue, C_Spell.GetSpellName(sid), "applied")
+            end
+        elseif state == "unknown" then
+            -- Masked read: hold whatever we last knew, don't fire.
+            newPresent[sid] = present[sid]
+        else
+            -- "absent". In combat that may just be a hidden read, so don't
+            -- declare a known aura faded — hold it and re-check when combat
+            -- ends (PLAYER_REGEN_ENABLED re-scans). Out of combat it's real.
+            if inCombat and present[sid] then
+                newPresent[sid] = present[sid]
+            elseif present[sid] and cue.faded then
+                FireCue(cue, C_Spell.GetSpellName(sid), "faded")
+            end
         end
     end
-    for sid in pairs(present) do
-        if not now[sid] then
-            local cue = cues[tostring(sid)]
-            if cue and cue.faded then FireCue(cue, C_Spell.GetSpellName(sid), "faded") end
-        end
-    end
-    present = now
+    present = newPresent
 
     CatalogVisibleAuras()
 end
@@ -587,7 +601,7 @@ local function SeedPresent()
     local cues = activeProfile and activeProfile.cues
     if not cues then return end
     for key in pairs(cues) do
-        if PlayerHasAura(tonumber(key)) then present[tonumber(key)] = true end
+        if ReadAura(tonumber(key)) == "present" then present[tonumber(key)] = true end
     end
 end
 
@@ -692,6 +706,7 @@ eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")   -- combat ended: re-sync
 eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
 
 local SETTING_KEYS = { "enabled", "channel", "audioEnabled",
@@ -800,6 +815,9 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         SeedPresent()
+
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        ScanPlayerAuras()   -- combat ended: reads are reliable again
 
     elseif event == "UNIT_AURA" then
         ScanPlayerAuras()
@@ -1065,6 +1083,21 @@ SlashCmdList["CUESENSE"] = function(msg)
             chatPrint("gathered " .. added .. " new aura(s) from nearby units ("
                 .. ns.SeenCount() .. " in the catalog).")
             ns.RefreshOptions()
+
+        elseif cmd == "debug" then
+            -- Reports what the game returns for each watched aura, so we can
+            -- see whether reads are masked in combat. Run it in and out of
+            -- combat and report the difference.
+            local GP = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
+            chatPrint("aura reads (combat=" .. tostring(InCombatLockdown())
+                .. ", GetPlayerAuraBySpellID=" .. tostring(GP ~= nil) .. "):")
+            for key in pairs(activeProfile.cues) do
+                local sid = tonumber(key)
+                local a = GP and GP(sid)
+                local d = (a == nil) and "|cffff6060nil|r"
+                    or (IsSecret(a) and "|cffffd200secret|r" or "|cff60ff60readable|r")
+                print("  " .. key .. " " .. (C_Spell.GetSpellName(sid) or "?") .. ": " .. d)
+            end
 
         elseif cmd == "status" then
             local seenN = 0

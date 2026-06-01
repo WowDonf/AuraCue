@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.14.2
+
+- **Stop watched auras flipping to "faded" when combat starts.** If a read
+  comes back empty *during combat* (the game can hide aura state there), the
+  aura is now held at its last-known state and re-checked when combat ends,
+  instead of firing a faded cue. Added `/cue debug` to inspect how the game
+  reports your watched auras in and out of combat.
+
 ## v0.14.1
 
 - **Fix: cues now work in combat.** Watched auras were all reported as
