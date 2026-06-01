@@ -642,8 +642,44 @@ local function OnSelfCast(spellID)
 end
 
 -- ---------------------------------------------------------------------
--- Watch-list mutation (driven by slash commands; the in-panel editor is
--- a later phase)
+-- Private-aura debuff sounds.
+-- ---------------------------------------------------------------------
+-- Most boss/mob debuffs in instances are "private auras", which normal aura
+-- reads can't see — but C_UnitAuras.AddPrivateAuraAppliedSound CAN play a
+-- sound when one is applied to you, even in instanced combat. So for every
+-- watched DEBUFF with a gained sound we register that sound. This is
+-- sound-only on apply (no visual, no faded — the API gives no Lua callback).
+local privAuraSoundIDs = {}
+local function RefreshPrivateAuras()
+    local A = C_UnitAuras
+    if not (A and A.AddPrivateAuraAppliedSound and A.RemovePrivateAuraAppliedSound) then return end
+    for _, id in ipairs(privAuraSoundIDs) do
+        pcall(A.RemovePrivateAuraAppliedSound, id)
+    end
+    wipe(privAuraSoundIDs)
+    if not activeProfile or not CueSenseDB or not CueSenseDB.audioEnabled then return end
+    if not activeProfile.trackDebuffs then return end
+    for key, cue in pairs(activeProfile.cues) do
+        if cue.kind == "debuff" and cue.applied and cue.soundApplied then
+            local sid = tonumber(key)
+            local playable, isFile = ResolveSound(cue.soundApplied)
+            if sid and playable then
+                local opts = {
+                    unitToken = "player",
+                    spellID = sid,
+                    outputChannel = string.lower(cue.channel or activeProfile.channel or "master"),
+                }
+                if isFile then opts.soundFileName = playable else opts.soundKitID = playable end
+                local ok, id = pcall(A.AddPrivateAuraAppliedSound, opts)
+                if ok and id then privAuraSoundIDs[#privAuraSoundIDs + 1] = id end
+            end
+        end
+    end
+end
+ns.RefreshPrivateAuras = RefreshPrivateAuras
+
+-- ---------------------------------------------------------------------
+-- Watch-list mutation (driven by slash commands and the in-panel editor)
 -- ---------------------------------------------------------------------
 function ns.AddCue(spellID)
     spellID = tonumber(spellID)
@@ -675,6 +711,7 @@ function ns.AddCue(spellID)
         source   = source,
     }
     SeedPresent()
+    RefreshPrivateAuras()
     return true, name
 end
 
@@ -683,6 +720,7 @@ function ns.RemoveCue(spellID)
     if not spellID then return false end
     local existed = activeProfile.cues[tostring(spellID)] ~= nil
     activeProfile.cues[tostring(spellID)] = nil
+    RefreshPrivateAuras()
     return existed
 end
 
@@ -799,6 +837,7 @@ local function SetActiveProfile()
     MergeDefaults(activeProfile, PROFILE_DEFAULTS)
     ValidateRanges(activeProfile)
     BackfillCues(activeProfile.cues)
+    RefreshPrivateAuras()
 end
 ns.SetActiveProfile = SetActiveProfile
 
@@ -984,6 +1023,7 @@ function ns.ImportShare(str)
         RestorePosition("debuff")
         present = {}
         SeedPresent()
+        RefreshPrivateAuras()
         if ns.RefreshOptions then ns.RefreshOptions() end
         local n = 0
         for _ in pairs(data.cues) do n = n + 1 end

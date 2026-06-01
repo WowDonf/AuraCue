@@ -167,6 +167,7 @@ local function NewPanel(name)
             if w.Refresh then w.Refresh() end
         end
         if ctx.rebuild then ctx.rebuild() end
+        if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end
     end
 
     refreshers[#refreshers + 1] = ctx.Refresh
@@ -609,8 +610,8 @@ local function BuildKindPanel(kind)
     hint:SetJustifyH("LEFT")
     if kind == "debuff" then
         hint:SetText("Debuffs file under the dungeon they were first seen in; type a Group on any " ..
-            "row to re-file it. Hover a row for the spell tooltip and source mob (often hidden by " ..
-            "the game inside instances).")
+            "row to re-file it. Inside instances the game only exposes debuffs to addons as a sound " ..
+            "on apply, so there a debuff cue plays its Gained sound only (no visual / no faded).")
     else
         hint:SetText("Type a Group on any row to file an aura under your own heading. Hover a row " ..
             "for the spell tooltip.")
@@ -687,7 +688,10 @@ local function BuildKindPanel(kind)
             cb:SetPoint("TOPLEFT", row, "TOPLEFT", xoff, -3)
             cb:SetScript("OnClick", function(self)
                 local cue = row.spellID and ns.P().cues[row.spellID]
-                if cue then cue[field] = self:GetChecked() and true or false end
+                if cue then
+                    cue[field] = self:GetChecked() and true or false
+                    if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end
+                end
             end)
             return cb
         end
@@ -709,6 +713,7 @@ local function BuildKindPanel(kind)
                         local c = row.spellID and ns.P().cues[row.spellID]
                         if not c then return end
                         c[field] = false
+                        if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end
                         C_Timer.After(0, function() dd:GenerateMenu() end)
                     end)
                 for _, item in ipairs(ns.SOUNDS) do
@@ -723,6 +728,7 @@ local function BuildKindPanel(kind)
                             if not c then return end
                             c[field] = key
                             ns.PlaySoundEntry(key, c.channel or ns.P().channel)
+                            if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end
                             C_Timer.After(0, function() dd:GenerateMenu() end)
                         end)
                 end

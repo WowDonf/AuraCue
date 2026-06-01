@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.16.0
+
+- **Debuff cues in instances (private auras).** Most boss / mob debuffs in
+  delves and dungeons are "private auras", which addons can't read — but the
+  game can play a sound when one is applied to you. CueSense now registers
+  your watched debuffs' Gained sound that way, so you get an audio cue for
+  them in instanced content. (It's sound-only on apply there — no visual, no
+  faded — since that's all the game exposes.)
+
 ## v0.15.0
 
 - **Self-buff cues now work in instances (delves / dungeons).** The game
