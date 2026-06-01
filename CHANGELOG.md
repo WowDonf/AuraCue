@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.0
+
+- **Separate sounds for gained vs faded.** Each watched aura now has two
+  sound pickers — one played when it's gained, one when it fades — each with
+  its own preview button and a "None (silent)" option. New auras default to
+  Rise on gained and Fall on faded. Existing auras keep their current sound
+  for both.
+- Watched-aura rows are now two lines to fit both sound pickers.
+
 ## v0.8.0
 
 - **Separate windows for buffs and debuffs.** Each kind now has its own

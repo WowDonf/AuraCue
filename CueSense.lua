@@ -360,8 +360,9 @@ local function FireCue(cue, spellName, eventKind)
     end
     local verb = (eventKind == "applied") and "gained" or "faded"
     local label = cue.label or spellName or "Aura"
-    if CueSenseDB.audioEnabled and cue.sound then
-        PlaySoundEntry(cue.sound, cue.channel or CueSenseDB.channel)
+    local snd = (eventKind == "applied") and cue.soundApplied or cue.soundFaded
+    if CueSenseDB.audioEnabled and snd then
+        PlaySoundEntry(snd, cue.channel or CueSenseDB.channel)
     end
     local kind = (cue.kind == "debuff") and "debuff" or "buff"
     if cue.visual and VisCfg(kind).enabled and not ns.testMode then
@@ -369,17 +370,19 @@ local function FireCue(cue, spellName, eventKind)
     end
 end
 
--- Preview one cue exactly as it would fire: its sound (if any) and, when
--- the cue's visual is on, a flash on that kind's window. Used by the
--- per-row test button. Ignores the per-kind window "enabled" toggle so a
--- test always shows something.
-function ns.PreviewCue(spellKey)
+-- Preview one cue's gained-or-faded event exactly as it would fire: that
+-- event's sound (if any) and, when the cue's visual is on, a flash on its
+-- kind's window. Used by the per-row test buttons. Ignores the per-kind
+-- window "enabled" toggle so a test always shows something.
+function ns.PreviewCue(spellKey, eventKind)
     local cue = CueSenseDB.cues[spellKey]
     if not cue then return end
-    if cue.sound then PlaySoundEntry(cue.sound, cue.channel or CueSenseDB.channel) end
+    eventKind = (eventKind == "faded") and "faded" or "applied"
+    local snd = (eventKind == "applied") and cue.soundApplied or cue.soundFaded
+    if snd then PlaySoundEntry(snd, cue.channel or CueSenseDB.channel) end
     if cue.visual then
         local kind = (cue.kind == "debuff") and "debuff" or "buff"
-        ShowVisual(kind, (cue.label or "Aura") .. " gained")
+        ShowVisual(kind, (cue.label or "Aura") .. " " .. (eventKind == "faded" and "faded" or "gained"))
     end
 end
 
@@ -534,11 +537,12 @@ function ns.AddCue(spellID)
         category = "Buffs"
     end
     CueSenseDB.cues[tostring(spellID)] = {
-        applied  = true,
-        faded    = true,
-        sound    = "rise",
-        channel  = nil,        -- nil = follow the global default channel
-        visual   = true,
+        applied      = true,
+        faded        = true,
+        soundApplied = "rise",   -- played when the aura is gained
+        soundFaded   = "fall",   -- played when it fades (false = silent)
+        channel      = nil,      -- nil = follow the global default channel
+        visual       = true,
         label    = name,
         kind     = kind,
         category = category,
@@ -628,12 +632,26 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             if not cue.category then
                 cue.category = (cue.kind == "debuff") and "Debuffs" or "Buffs"
             end
-            if cue.sound then
-                local known = false
-                for _, e in ipairs(ns.SOUNDS) do
-                    if e.key == cue.sound then known = true; break end
+            -- v0.9: split the single `sound` into separate gained/faded
+            -- sounds, carrying the old value into both.
+            if cue.sound ~= nil and cue.soundApplied == nil and cue.soundFaded == nil then
+                cue.soundApplied = cue.sound
+                cue.soundFaded = cue.sound
+                cue.sound = nil
+            end
+            if cue.soundApplied == nil then cue.soundApplied = "rise" end
+            if cue.soundFaded == nil then cue.soundFaded = "fall" end
+            -- Remap any unknown sound key onto a bundled tone (false = silent
+            -- is preserved).
+            for _, field in ipairs({ "soundApplied", "soundFaded" }) do
+                local v = cue[field]
+                if v then
+                    local known = false
+                    for _, e in ipairs(ns.SOUNDS) do
+                        if e.key == v then known = true; break end
+                    end
+                    if not known then cue[field] = (field == "soundFaded") and "fall" or "rise" end
                 end
-                if not known then cue.sound = "rise" end
             end
         end
         RestorePosition("buff")
@@ -689,7 +707,7 @@ SlashCmdList["CUESENSE"] = function(msg)
             chatPrint("watching " .. n .. " aura" .. (n == 1 and "" or "s") .. ":")
             for sid, cue in pairs(CueSenseDB.cues) do
                 local modes = {}
-                if cue.sound  then modes[#modes + 1] = "sound" end
+                if cue.soundApplied or cue.soundFaded then modes[#modes + 1] = "sound" end
                 if cue.visual then modes[#modes + 1] = "visual" end
                 print(string.format("  |cffffd200%s|r  %s  [%s]", sid,
                     cue.label or (C_Spell.GetSpellName(tonumber(sid)) or "?"),

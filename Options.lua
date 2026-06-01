@@ -221,7 +221,7 @@ AddButton("Play test cue", 160, function() ns.PlayTestCue() end)
 -- recomputed from the editor's bottom each rebuild. Forward-declare the
 -- pieces that reference each other (rows reference RebuildList to refresh
 -- after a remove; RebuildList builds rows via MakeRow).
-local ROW_H = 30
+local ROW_H = 54   -- two lines: name/toggles/group on top, sounds below
 local HEADER_H = 22
 local rows = {}
 local headers = {}
@@ -463,11 +463,10 @@ local function ColHeader(text, xoff)
     fs:SetText(text)
 end
 ColHeader("Aura", 4)
-ColHeader("A", 164)
-ColHeader("F", 192)
-ColHeader("V", 220)
-ColHeader("Sound", 248)
-ColHeader("Group", 416)
+ColHeader("A", 248)
+ColHeader("F", 278)
+ColHeader("V", 308)
+ColHeader("Group", 338)
 y = y - 14
 
 -- Editor container; rows are anchored inside it.
@@ -511,72 +510,91 @@ MakeRow = function(i)
     end)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    -- Line 1: name, A/F/V toggles, Group, remove.
     row.name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    row.name:SetPoint("LEFT", row, "LEFT", 4, 0)
-    row.name:SetWidth(152)
+    row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -6)
+    row.name:SetWidth(232)
     row.name:SetJustifyH("LEFT")
     row.name:SetWordWrap(false)
 
     local function MkCheck(xoff, field)
         local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
         cb:SetSize(24, 24)
-        cb:SetPoint("LEFT", row, "LEFT", xoff, 0)
+        cb:SetPoint("TOPLEFT", row, "TOPLEFT", xoff, -3)
         cb:SetScript("OnClick", function(self)
             local cue = row.spellID and CueSenseDB.cues[row.spellID]
             if cue then cue[field] = self:GetChecked() and true or false end
         end)
         return cb
     end
-    row.applied = MkCheck(164, "applied")
-    row.faded   = MkCheck(192, "faded")
-    row.visual  = MkCheck(220, "visual")
+    row.applied = MkCheck(244, "applied")
+    row.faded   = MkCheck(274, "faded")
+    row.visual  = MkCheck(304, "visual")
 
-    row.sound = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
-    row.sound:SetPoint("LEFT", row, "LEFT", 248, 0)
-    row.sound:SetSize(112, 26)
-    row.sound:SetupMenu(function(_, rootMenu)
-        -- "None" makes this cue silent (visual-only); audio is optional.
-        rootMenu:CreateRadio("None (silent)",
-            function()
-                local c = row.spellID and CueSenseDB.cues[row.spellID]
-                return c and not c.sound
-            end,
-            function()
-                local c = row.spellID and CueSenseDB.cues[row.spellID]
-                if not c then return end
-                c.sound = false
-                C_Timer.After(0, function() row.sound:GenerateMenu() end)
-            end)
-        for _, item in ipairs(ns.SOUNDS) do
-            local key = item.key
-            rootMenu:CreateRadio(item.label,
+    -- A sound dropdown bound to a given cue field (soundApplied / soundFaded);
+    -- "None" makes that event silent (false). Audio stays optional per event.
+    local function MkSoundDD(xoff, yoff, field)
+        local dd = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
+        dd:SetPoint("TOPLEFT", row, "TOPLEFT", xoff, yoff)
+        dd:SetSize(150, 26)
+        dd:SetupMenu(function(_, rootMenu)
+            rootMenu:CreateRadio("None (silent)",
                 function()
                     local c = row.spellID and CueSenseDB.cues[row.spellID]
-                    return c and c.sound == key
+                    return c and not c[field]
                 end,
                 function()
                     local c = row.spellID and CueSenseDB.cues[row.spellID]
                     if not c then return end
-                    c.sound = key
-                    ns.PlaySoundEntry(key, c.channel or CueSenseDB.channel)
-                    C_Timer.After(0, function() row.sound:GenerateMenu() end)
+                    c[field] = false
+                    C_Timer.After(0, function() dd:GenerateMenu() end)
                 end)
-        end
-    end)
+            for _, item in ipairs(ns.SOUNDS) do
+                local key = item.key
+                rootMenu:CreateRadio(item.label,
+                    function()
+                        local c = row.spellID and CueSenseDB.cues[row.spellID]
+                        return c and c[field] == key
+                    end,
+                    function()
+                        local c = row.spellID and CueSenseDB.cues[row.spellID]
+                        if not c then return end
+                        c[field] = key
+                        ns.PlaySoundEntry(key, c.channel or CueSenseDB.channel)
+                        C_Timer.After(0, function() dd:GenerateMenu() end)
+                    end)
+            end
+        end)
+        return dd
+    end
 
-    row.preview = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    row.preview:SetSize(24, 22)
-    row.preview:SetPoint("LEFT", row, "LEFT", 366, 0)
-    row.preview:SetText(">")
-    -- Preview fires the cue exactly as it would in play: its sound AND, if
-    -- the cue's visual is enabled, a flash on that kind's window.
-    row.preview:SetScript("OnClick", function()
-        if row.spellID then ns.PreviewCue(row.spellID) end
-    end)
+    local function MkPreview(xoff, yoff, eventKind)
+        local b = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        b:SetSize(24, 22)
+        b:SetPoint("TOPLEFT", row, "TOPLEFT", xoff, yoff)
+        b:SetText(">")
+        b:SetScript("OnClick", function()
+            if row.spellID then ns.PreviewCue(row.spellID, eventKind) end
+        end)
+        return b
+    end
+
+    -- Line 2: "Gained" sound + preview, "Faded" sound + preview.
+    local gainLbl = row:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    gainLbl:SetPoint("TOPLEFT", row, "TOPLEFT", 8, -34)
+    gainLbl:SetText("Gained")
+    row.soundApplied = MkSoundDD(58, -30, "soundApplied")
+    row.previewA = MkPreview(212, -30, "applied")
+
+    local fadeLbl = row:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    fadeLbl:SetPoint("TOPLEFT", row, "TOPLEFT", 250, -34)
+    fadeLbl:SetText("Faded")
+    row.soundFaded = MkSoundDD(296, -30, "soundFaded")
+    row.previewF = MkPreview(450, -30, "faded")
 
     row.remove = CreateFrame("Button", nil, row, "UIPanelCloseButton")
     row.remove:SetSize(24, 24)
-    row.remove:SetPoint("LEFT", row, "LEFT", 392, 0)
+    row.remove:SetPoint("TOPLEFT", row, "TOPLEFT", 496, -3)
     row.remove:SetScript("OnClick", function()
         if not row.spellID then return end
         ns.RemoveCue(row.spellID)
@@ -586,8 +604,8 @@ MakeRow = function(i)
 
     -- Free-text group/category; type a dungeon name etc. to re-file the aura.
     row.cat = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
-    row.cat:SetPoint("LEFT", row, "LEFT", 416, 0)
-    row.cat:SetSize(116, 22)
+    row.cat:SetPoint("TOPLEFT", row, "TOPLEFT", 338, -5)
+    row.cat:SetSize(150, 22)
     row.cat:SetAutoFocus(false)
     row.cat:SetFontObject("ChatFontNormal")
     -- Commit on focus loss only; rebuild solely when the value actually
@@ -664,7 +682,8 @@ RebuildList = function()
             row.faded:SetChecked(cue.faded and true or false)
             row.visual:SetChecked(cue.visual and true or false)
             row.cat:SetText(cue.category or "")
-            row.sound:GenerateMenu()
+            row.soundApplied:GenerateMenu()
+            row.soundFaded:GenerateMenu()
             row:Show()
             yOff = yOff + ROW_H
         end
