@@ -97,6 +97,8 @@ local DB_DEFAULTS = {
     -- it accumulates across every character and can be shared.
     seen = {},
     profiles = {},
+    -- LibDBIcon's button state (position + hide); account-wide.
+    minimap = { hide = false },
 }
 
 -- The active profile (resolved on login). All tracked-setting reads go

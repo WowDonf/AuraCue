@@ -241,6 +241,9 @@ do
     main.Check("Track debuffs (harmful auras)",
         function() return ns.P().trackDebuffs end,
         function(v) ns.P().trackDebuffs = v end)
+    main.Check("Show minimap button",
+        function() return not ns.IsMinimapShown or ns.IsMinimapShown() end,
+        function(v) if ns.SetMinimapShown then ns.SetMinimapShown(v) end end)
 
     main.Header("Audio cue")
     main.Check("Play sound cues",

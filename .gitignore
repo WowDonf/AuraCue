@@ -4,6 +4,9 @@
 release/
 *.zip
 
+# Libraries are fetched by the packager (.pkgmeta externals), never committed
+Libs/
+
 # Python tooling (asset/build scripts under tools/)
 __pycache__/
 *.pyc

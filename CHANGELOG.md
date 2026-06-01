@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.12.0
+
+- **Minimap button.** Left-click opens options, right-click toggles CueSense
+  on/off, and you can drag it around the minimap. Hide or show it with the
+  "Show minimap button" option in General.
+
 ## v0.11.0
 
 - **Buffs and Debuffs are now separate pages in the settings list**, instead

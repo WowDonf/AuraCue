@@ -22,8 +22,9 @@ aren't combat-restricted at all.
 
 ## Usage
 
-Open options with `/cue`, or from the Addon Compartment button (left-click
-for options, right-click to toggle on/off).
+Open options with `/cue`, or from the minimap button / Addon Compartment
+button (left-click for options, right-click to toggle on/off). Hide the
+minimap button from the General settings if you prefer the compartment.
 
 Watch an aura by its spell ID:
 

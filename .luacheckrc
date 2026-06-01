@@ -45,4 +45,6 @@ read_globals = {
     "InCombatLockdown",
     -- Tables / misc
     "wipe", "ReloadUI",
+    -- Minimap button libraries (fetched by the packager; nil in dev)
+    "LibStub",
 }
