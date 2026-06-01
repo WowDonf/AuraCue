@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.12.1
+
+- Left-clicking the minimap button now opens *and* closes the options (it
+  toggles). Removed the "Drag" line from its tooltip.
+
 ## v0.12.0
 
 - **Minimap button.** Left-click opens options, right-click toggles CueSense

@@ -47,8 +47,10 @@ local launcher = LDB:NewDataObject(ICON_NAME, {
                 end
                 if ns.RefreshOptions then ns.RefreshOptions() end
             end
-        else
-            if ns.OpenOptions then ns.OpenOptions() end
+        elseif ns.ToggleOptions then
+            ns.ToggleOptions()
+        elseif ns.OpenOptions then
+            ns.OpenOptions()
         end
     end,
 
@@ -62,9 +64,8 @@ local launcher = LDB:NewDataObject(ICON_NAME, {
             tt:AddLine("Watching " .. ns.CueCount() .. " aura(s)", 0.8, 0.8, 0.8)
         end
         tt:AddLine(" ")
-        tt:AddLine("|cffffd200Left-click|r: open options", 0.7, 0.7, 0.7)
+        tt:AddLine("|cffffd200Left-click|r: open / close options", 0.7, 0.7, 0.7)
         tt:AddLine("|cffffd200Right-click|r: toggle on / off", 0.7, 0.7, 0.7)
-        tt:AddLine("|cffffd200Drag|r: move around the minimap", 0.7, 0.7, 0.7)
     end,
 })
 

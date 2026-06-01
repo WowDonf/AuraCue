@@ -818,3 +818,12 @@ function ns.OpenOptions()
         Settings.OpenToCategory(mainCategory:GetID())
     end)
 end
+
+-- Open if closed, close if already open (used by the minimap left-click).
+function ns.ToggleOptions()
+    if SettingsPanel and SettingsPanel:IsShown() then
+        HideUIPanel(SettingsPanel)
+    else
+        ns.OpenOptions()
+    end
+end
