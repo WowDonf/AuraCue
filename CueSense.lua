@@ -58,13 +58,25 @@ local defaults = {
     audioEnabled = true,         -- master switch for sound cues
     trackBuffs = true,           -- fire cues for helpful auras
     trackDebuffs = true,         -- fire cues for harmful auras
+    -- Separate on-screen window per kind, so buffs and debuffs can have
+    -- their own size / position / color / duration.
     visual = {
-        enabled  = true,
-        color    = { r = 0.20, g = 0.86, b = 0.75 },
-        scale    = 1.0,
-        duration = 1.5,          -- seconds the flash text stays up
-        locked   = true,
-        position = nil,          -- { point, relativePoint, x, y }
+        buff = {
+            enabled  = true,
+            color    = { r = 0.20, g = 0.86, b = 0.75 },   -- teal
+            scale    = 1.0,
+            duration = 1.5,
+            locked   = true,
+            position = nil,      -- { point, relativePoint, x, y }
+        },
+        debuff = {
+            enabled  = true,
+            color    = { r = 1.00, g = 0.45, b = 0.30 },   -- warm red-orange
+            scale    = 1.2,
+            duration = 2.0,
+            locked   = true,
+            position = nil,
+        },
     },
     -- Watched auras, keyed by spellID-as-string -> cue config:
     --   { applied=bool, faded=bool, sound=key|nil, channel=key|nil,
@@ -95,23 +107,56 @@ local function MergeDefaults(target, source)
     return target
 end
 
-local function ValidateRanges(db)
+-- Migrate the pre-v0.8 single `visual` table into per-kind buff/debuff
+-- windows, carrying the old settings into both. No-op once migrated.
+local function MigrateVisual(db)
     local v = db.visual
-    if type(v) ~= "table" then v = {}; db.visual = v end
+    if type(v) == "table" and v.enabled ~= nil and v.buff == nil then
+        local function clone()
+            local c = v.color
+            return {
+                enabled  = v.enabled,
+                scale    = v.scale,
+                duration = v.duration,
+                locked   = (v.locked ~= false),
+                color    = (type(c) == "table") and { r = c.r, g = c.g, b = c.b } or nil,
+                position = (type(v.position) == "table") and {
+                    point = v.position.point, relativePoint = v.position.relativePoint,
+                    x = v.position.x, y = v.position.y,
+                } or nil,
+            }
+        end
+        db.visual = { buff = clone(), debuff = clone() }
+    end
+end
+ns.MigrateVisual = MigrateVisual
 
-    if type(v.scale) ~= "number" then v.scale = 1.0 end
-    v.scale = math.max(0.5, math.min(3.0, v.scale))
+local DEFAULT_COLORS = {
+    buff   = { r = 0.20, g = 0.86, b = 0.75 },
+    debuff = { r = 1.00, g = 0.45, b = 0.30 },
+}
 
-    if type(v.duration) ~= "number" then v.duration = 1.5 end
-    v.duration = math.max(0.5, math.min(8.0, v.duration))
+local function ValidateRanges(db)
+    if type(db.visual) ~= "table" then db.visual = {} end
+    for _, key in ipairs({ "buff", "debuff" }) do
+        local v = db.visual[key]
+        if type(v) ~= "table" then v = {}; db.visual[key] = v end
 
-    local c = v.color
-    if type(c) ~= "table" then
-        v.color = { r = 0.20, g = 0.86, b = 0.75 }
-    else
-        c.r = (type(c.r) == "number") and math.max(0, math.min(1, c.r)) or 0.20
-        c.g = (type(c.g) == "number") and math.max(0, math.min(1, c.g)) or 0.86
-        c.b = (type(c.b) == "number") and math.max(0, math.min(1, c.b)) or 0.75
+        if type(v.scale) ~= "number" then v.scale = 1.0 end
+        v.scale = math.max(0.5, math.min(3.0, v.scale))
+
+        if type(v.duration) ~= "number" then v.duration = (key == "debuff") and 2.0 or 1.5 end
+        v.duration = math.max(0.5, math.min(8.0, v.duration))
+
+        local dc = DEFAULT_COLORS[key]
+        local c = v.color
+        if type(c) ~= "table" then
+            v.color = { r = dc.r, g = dc.g, b = dc.b }
+        else
+            c.r = (type(c.r) == "number") and math.max(0, math.min(1, c.r)) or dc.r
+            c.g = (type(c.g) == "number") and math.max(0, math.min(1, c.g)) or dc.g
+            c.b = (type(c.b) == "number") and math.max(0, math.min(1, c.b)) or dc.b
+        end
     end
 
     local validChannel = false
@@ -169,49 +214,10 @@ end
 ns.PlaySoundEntry = PlaySoundEntry
 
 -- ---------------------------------------------------------------------
--- Visual overlay frame (non-secure: combat lockdown doesn't touch it).
--- A single center-screen flash line, reused by every cue, the test
--- button, and reposition mode.
+-- Visual overlay frames (non-secure: combat lockdown doesn't touch them).
+-- One per kind — buffs and debuffs each get their own movable, sizable,
+-- colorable window. A frame's fade state lives on the frame itself.
 -- ---------------------------------------------------------------------
-local overlay = CreateFrame("Frame", "CueSenseOverlay", UIParent, "BackdropTemplate")
-ns.overlay = overlay
-overlay:SetSize(560, 90)
-overlay:SetFrameStrata("FULLSCREEN_DIALOG")
-overlay:SetFrameLevel(200)
-overlay:SetClampedToScreen(true)
-overlay:EnableMouse(false)   -- click-through until reposition mode turns it on
-overlay:SetMovable(true)
-overlay:Hide()
-
-overlay.text = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
-overlay.text:SetAllPoints()
-overlay.text:SetJustifyH("CENTER")
-overlay.text:SetJustifyV("MIDDLE")
-
-overlay:RegisterForDrag("LeftButton")
-overlay:SetScript("OnDragStart", function(self)
-    if CueSenseDB and not CueSenseDB.visual.locked then self:StartMoving() end
-end)
-overlay:SetScript("OnDragStop", function(self)
-    self:StopMovingOrSizing()
-    local point, _, relativePoint, x, y = self:GetPoint()
-    CueSenseDB.visual.position = { point = point, relativePoint = relativePoint, x = x, y = y }
-end)
-
--- Close button shown only while repositioning, so the overlay can be
--- locked from the screen (mirrors the OutOfRange movable frame). Sits in
--- the top-right corner and rides along with the overlay (child frame).
-overlay.closeBtn = CreateFrame("Button", nil, overlay, "UIPanelCloseButton")
-overlay.closeBtn:SetSize(28, 28)
-overlay.closeBtn:SetPoint("TOPRIGHT", overlay, "TOPRIGHT", 4, 4)
-overlay.closeBtn:Hide()
-overlay.closeBtn:SetScript("OnClick", function()
-    ns.SetRepositionMode(false)
-    ns.OpenOptions()
-end)
-
--- Backdrop applied only in reposition mode, so the box is visible to grab;
--- live cues draw as plain text with no border.
 local REPOSITION_BACKDROP = {
     bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -219,73 +225,128 @@ local REPOSITION_BACKDROP = {
     insets   = { left = 4, right = 4, top = 4, bottom = 4 },
 }
 
-local function RestorePosition()
-    overlay:ClearAllPoints()
-    local p = CueSenseDB and CueSenseDB.visual and CueSenseDB.visual.position
+local overlays = {}
+
+-- The per-kind visual config table (buff/debuff). Normalizes anything that
+-- isn't "debuff" to "buff".
+local function VisCfg(kind)
+    return CueSenseDB.visual[kind == "debuff" and "debuff" or "buff"]
+end
+ns.VisCfg = VisCfg
+
+local function MakeOverlay(kind)
+    local suffix = (kind == "debuff") and "Debuff" or "Buff"
+    local f = CreateFrame("Frame", "CueSenseOverlay" .. suffix, UIParent, "BackdropTemplate")
+    f.kind = kind
+    f:SetSize(560, 90)
+    f:SetFrameStrata("FULLSCREEN_DIALOG")
+    f:SetFrameLevel(200)
+    f:SetClampedToScreen(true)
+    f:EnableMouse(false)        -- click-through until reposition turns it on
+    f:SetMovable(true)
+    f:Hide()
+    f.fadeElapsed, f.fadeDuration = 0, 0
+
+    f.text = f:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+    f.text:SetAllPoints()
+    f.text:SetJustifyH("CENTER")
+    f.text:SetJustifyV("MIDDLE")
+
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", function(self)
+        if CueSenseDB and not VisCfg(self.kind).locked then self:StartMoving() end
+    end)
+    f:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        local point, _, relativePoint, x, y = self:GetPoint()
+        VisCfg(self.kind).position = { point = point, relativePoint = relativePoint, x = x, y = y }
+    end)
+
+    f.closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    f.closeBtn:SetSize(28, 28)
+    f.closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", 4, 4)
+    f.closeBtn:Hide()
+    f.closeBtn:SetScript("OnClick", function()
+        ns.SetRepositionMode(f.kind, false)
+        ns.OpenOptions()
+    end)
+
+    -- Hold full alpha for the first 60% of the duration, then fade out.
+    f:SetScript("OnUpdate", function(self, dt)
+        if self.fadeDuration <= 0 then return end
+        self.fadeElapsed = self.fadeElapsed + dt
+        local fadeStart = self.fadeDuration * 0.6
+        if self.fadeElapsed >= self.fadeDuration then
+            self.fadeDuration = 0
+            self:SetAlpha(0)
+            self:Hide()
+        elseif self.fadeElapsed <= fadeStart then
+            self:SetAlpha(1)
+        else
+            self:SetAlpha((self.fadeDuration - self.fadeElapsed) / (self.fadeDuration - fadeStart))
+        end
+    end)
+
+    overlays[kind] = f
+    return f
+end
+
+local function RestorePosition(kind)
+    local f = overlays[kind]
+    f:ClearAllPoints()
+    local p = CueSenseDB and VisCfg(kind).position
     if p and p.point then
-        overlay:SetPoint(p.point, UIParent, p.relativePoint or p.point, p.x or 0, p.y or 0)
+        f:SetPoint(p.point, UIParent, p.relativePoint or p.point, p.x or 0, p.y or 0)
     else
-        overlay:SetPoint("CENTER", UIParent, "CENTER", 0, 160)
+        f:SetPoint("CENTER", UIParent, "CENTER", 0, (kind == "debuff") and 40 or 160)
     end
 end
 ns.RestorePosition = RestorePosition
 
--- Hold-then-fade animation driven by OnUpdate (full alpha for the first
--- 60% of the duration, linear fade for the rest).
-local fadeElapsed, fadeDuration = 0, 0
-overlay:SetScript("OnUpdate", function(self, dt)
-    if fadeDuration <= 0 then return end          -- idle / reposition mode
-    fadeElapsed = fadeElapsed + dt
-    local fadeStart = fadeDuration * 0.6
-    if fadeElapsed >= fadeDuration then
-        fadeDuration = 0
-        self:SetAlpha(0)
-        self:Hide()
-    elseif fadeElapsed <= fadeStart then
-        self:SetAlpha(1)
-    else
-        self:SetAlpha((fadeDuration - fadeElapsed) / (fadeDuration - fadeStart))
-    end
-end)
-
-local function ShowVisual(message)
-    local v = CueSenseDB.visual
-    overlay.text:SetText(message)
-    overlay.text:SetTextColor(v.color.r, v.color.g, v.color.b)
-    overlay:SetScale(v.scale or 1.0)
-    overlay:SetAlpha(1)
-    fadeElapsed, fadeDuration = 0, (v.duration or 1.5)
-    overlay:Show()
+local function ShowVisual(kind, message)
+    local f = overlays[kind]
+    local v = VisCfg(kind)
+    f.text:SetText(message)
+    f.text:SetTextColor(v.color.r, v.color.g, v.color.b)
+    f:SetScale(v.scale or 1.0)
+    f:SetAlpha(1)
+    f.fadeElapsed, f.fadeDuration = 0, (v.duration or 1.5)
+    f:Show()
 end
 ns.ShowVisual = ShowVisual
 
--- Reposition / preview mode: pins the overlay open and mouse-interactive
--- so the user can drag it, then re-locks on exit.
-function ns.SetRepositionMode(on)
-    ns.testMode = on and true or false
+-- Reposition / preview mode for one kind's window: pins it open and
+-- mouse-interactive so it can be dragged, then re-locks on exit.
+function ns.SetRepositionMode(kind, on)
+    local f = overlays[kind]
+    local v = VisCfg(kind)
+    ns.testMode = on and kind or nil
     if on then
-        CueSenseDB.visual.locked = false
-        fadeDuration = 0
-        overlay:SetBackdrop(REPOSITION_BACKDROP)
-        overlay:SetBackdropColor(0, 0, 0, 0.6)
-        overlay:SetBackdropBorderColor(0.20, 0.86, 0.75, 1)
-        overlay:EnableMouse(true)
-        overlay.text:SetText("CueSense — drag to move, X to close")
-        overlay.text:SetTextColor(CueSenseDB.visual.color.r, CueSenseDB.visual.color.g, CueSenseDB.visual.color.b)
-        overlay:SetScale(CueSenseDB.visual.scale or 1.0)
-        overlay:SetAlpha(1)
-        RestorePosition()
-        overlay.closeBtn:Show()
-        overlay:Show()
+        v.locked = false
+        f.fadeDuration = 0
+        f:SetBackdrop(REPOSITION_BACKDROP)
+        f:SetBackdropColor(0, 0, 0, 0.6)
+        f:SetBackdropBorderColor(v.color.r, v.color.g, v.color.b, 1)
+        f:EnableMouse(true)
+        f.text:SetText("CueSense " .. (kind == "debuff" and "debuffs" or "buffs") .. " — drag to move, X to close")
+        f.text:SetTextColor(v.color.r, v.color.g, v.color.b)
+        f:SetScale(v.scale or 1.0)
+        f:SetAlpha(1)
+        RestorePosition(kind)
+        f.closeBtn:Show()
+        f:Show()
     else
-        CueSenseDB.visual.locked = true
-        overlay.closeBtn:Hide()
-        overlay:SetBackdrop(nil)
-        overlay:EnableMouse(false)
-        fadeDuration = 0
-        overlay:Hide()
+        v.locked = true
+        f.closeBtn:Hide()
+        f:SetBackdrop(nil)
+        f:EnableMouse(false)
+        f.fadeDuration = 0
+        f:Hide()
     end
 end
+
+MakeOverlay("buff")
+MakeOverlay("debuff")
 
 -- ---------------------------------------------------------------------
 -- Cue dispatch
@@ -302,15 +363,39 @@ local function FireCue(cue, spellName, eventKind)
     if CueSenseDB.audioEnabled and cue.sound then
         PlaySoundEntry(cue.sound, cue.channel or CueSenseDB.channel)
     end
-    if cue.visual and CueSenseDB.visual.enabled and not ns.testMode then
-        ShowVisual(label .. " " .. verb)
+    local kind = (cue.kind == "debuff") and "debuff" or "buff"
+    if cue.visual and VisCfg(kind).enabled and not ns.testMode then
+        ShowVisual(kind, label .. " " .. verb)
     end
 end
 
--- Play a one-off sample using the global defaults (test button / slash).
+-- Preview one cue exactly as it would fire: its sound (if any) and, when
+-- the cue's visual is on, a flash on that kind's window. Used by the
+-- per-row test button. Ignores the per-kind window "enabled" toggle so a
+-- test always shows something.
+function ns.PreviewCue(spellKey)
+    local cue = CueSenseDB.cues[spellKey]
+    if not cue then return end
+    if cue.sound then PlaySoundEntry(cue.sound, cue.channel or CueSenseDB.channel) end
+    if cue.visual then
+        local kind = (cue.kind == "debuff") and "debuff" or "buff"
+        ShowVisual(kind, (cue.label or "Aura") .. " gained")
+    end
+end
+
+-- Preview a whole kind's window (test button under each tab).
+function ns.TestWindow(kind)
+    kind = (kind == "debuff") and "debuff" or "buff"
+    PlaySoundEntry("rise", CueSenseDB.channel)
+    ShowVisual(kind, (kind == "debuff" and "Debuff" or "Buff") .. " test")
+end
+
+-- General test (/cue test, Audio panel button): a sound plus a flash on
+-- both windows so you can see where each one sits.
 function ns.PlayTestCue()
     PlaySoundEntry("rise", CueSenseDB.channel)
-    if CueSenseDB.visual.enabled then ShowVisual("CueSense test") end
+    ShowVisual("buff", "Buff test")
+    ShowVisual("debuff", "Debuff test")
 end
 
 -- ---------------------------------------------------------------------
@@ -532,6 +617,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         local name = ...
         if name ~= addonName then return end
         CueSenseDB = CueSenseDB or {}
+        MigrateVisual(CueSenseDB)
         MergeDefaults(CueSenseDB, defaults)
         ValidateRanges(CueSenseDB)
         -- Backfill kind/category onto cues created before v0.5.0, and remap
@@ -550,7 +636,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                 if not known then cue.sound = "rise" end
             end
         end
-        RestorePosition()
+        RestorePosition("buff")
+        RestorePosition("debuff")
         ns.InitOptions()
         chatPrint("loaded. Type |cffffd200/cue|r for commands.")
 
@@ -615,17 +702,23 @@ SlashCmdList["CUESENSE"] = function(msg)
             ns.RefreshOptions()
 
         elseif cmd == "lock" then
-            ns.SetRepositionMode(false)
-            chatPrint("overlay |cffff0000locked|r.")
+            ns.SetRepositionMode("buff", false)
+            ns.SetRepositionMode("debuff", false)
+            chatPrint("overlays |cffff0000locked|r.")
 
         elseif cmd == "unlock" or cmd == "move" then
-            ns.SetRepositionMode(true)
-            chatPrint("overlay |cff00ff00unlocked|r — drag to move, then |cffffd200/cue lock|r.")
+            local kind = (rest == "debuff") and "debuff" or "buff"
+            ns.SetRepositionMode(kind, true)
+            chatPrint((kind == "debuff" and "debuff" or "buff")
+                .. " overlay |cff00ff00unlocked|r — drag to move, then |cffffd200/cue lock|r."
+                .. "  (use |cffffd200/cue move debuff|r for the other one.)")
 
         elseif cmd == "reset" then
-            CueSenseDB.visual.position = nil
-            RestorePosition()
-            chatPrint("overlay position reset.")
+            CueSenseDB.visual.buff.position = nil
+            CueSenseDB.visual.debuff.position = nil
+            RestorePosition("buff")
+            RestorePosition("debuff")
+            chatPrint("overlay positions reset.")
 
         elseif cmd == "forget" then
             CueSenseDB.seen = {}
@@ -639,9 +732,11 @@ SlashCmdList["CUESENSE"] = function(msg)
             print("  enabled:        " .. tostring(CueSenseDB.enabled))
             print("  watched auras:  " .. ns.CueCount())
             print("  auras seen:     " .. seenN)
-            print("  visual:         " .. tostring(CueSenseDB.visual.enabled)
-                  .. " (scale " .. CueSenseDB.visual.scale
-                  .. ", " .. CueSenseDB.visual.duration .. "s)")
+            local vb, vd = CueSenseDB.visual.buff, CueSenseDB.visual.debuff
+            print("  buff window:    " .. tostring(vb.enabled)
+                  .. " (scale " .. vb.scale .. ", " .. vb.duration .. "s)")
+            print("  debuff window:  " .. tostring(vd.enabled)
+                  .. " (scale " .. vd.scale .. ", " .. vd.duration .. "s)")
             print("  audio channel:  " .. CueSenseDB.channel)
             print("  secret regime:  " .. tostring(issecret ~= nil))
 
@@ -653,8 +748,8 @@ SlashCmdList["CUESENSE"] = function(msg)
             print("  |cffffd200/cue remove <spellID>|r stop watching")
             print("  |cffffd200/cue list|r            list watched auras")
             print("  |cffffd200/cue toggle|r          enable/disable")
-            print("  |cffffd200/cue unlock|r / |cffffd200lock|r   move the overlay")
-            print("  |cffffd200/cue reset|r           reset overlay position")
+            print("  |cffffd200/cue move|r [|cffffd200debuff|r] / |cffffd200lock|r   move a window")
+            print("  |cffffd200/cue reset|r           reset window positions")
             print("  |cffffd200/cue forget|r          clear the remembered-aura list")
             print("  |cffffd200/cue status|r          print current settings")
         end

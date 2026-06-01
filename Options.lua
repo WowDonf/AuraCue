@@ -178,71 +178,8 @@ AddCheckbox("Track debuffs (harmful auras)",
     function() return CueSenseDB.trackDebuffs end,
     function(v) CueSenseDB.trackDebuffs = v end)
 
--- ---------------------------------------------------------------------
--- Visual cue
--- ---------------------------------------------------------------------
-AddHeader("Visual cue")
-AddDescription("The on-screen flash shown when a watched aura is gained or fades. " ..
-    "This is the channel deaf / hard-of-hearing players rely on.")
-
-AddCheckbox("Show on-screen flash",
-    function() return CueSenseDB.visual.enabled end,
-    function(v) CueSenseDB.visual.enabled = v end)
-
--- Flash color
-local colorBtn = AddButton("Flash color...", 140, function() end)
-local swatch = colorBtn:CreateTexture(nil, "OVERLAY")
-swatch:SetSize(14, 14)
-swatch:SetPoint("LEFT", colorBtn, "LEFT", 8, 0)
-local colorBtnText = colorBtn:GetFontString()
-if colorBtnText then
-    colorBtnText:ClearAllPoints()
-    colorBtnText:SetPoint("LEFT", swatch, "RIGHT", 4, 0)
-    colorBtnText:SetPoint("RIGHT", colorBtn, "RIGHT", -8, 0)
-end
-colorBtn:SetScript("OnClick", function()
-    local c = CueSenseDB.visual.color
-    local function apply(prev)
-        local nr, ng, nb
-        if prev then
-            nr, ng, nb = prev.r or prev[1], prev.g or prev[2], prev.b or prev[3]
-        else
-            nr, ng, nb = ColorPickerFrame:GetColorRGB()
-        end
-        if not (nr and ng and nb) then return end
-        c.r, c.g, c.b = nr, ng, nb
-        swatch:SetColorTexture(nr, ng, nb)
-    end
-    ColorPickerFrame:SetupColorPickerAndShow({
-        r = c.r, g = c.g, b = c.b,
-        swatchFunc = function() apply() end,
-        cancelFunc = function(prev) apply(prev) end,
-        hasOpacity = false,
-    })
-end)
-colorBtn.Refresh = function()
-    local c = CueSenseDB.visual.color
-    swatch:SetColorTexture(c.r, c.g, c.b)
-end
-widgets[#widgets + 1] = colorBtn
-
-AddSlider("Flash size", 0.5, 3.0, 0.05, "%.2fx",
-    function() return CueSenseDB.visual.scale end,
-    function(v) CueSenseDB.visual.scale = v end)
-
-AddSlider("On-screen time", 0.5, 8.0, 0.1, "%.1fs",
-    function() return CueSenseDB.visual.duration end,
-    function(v) CueSenseDB.visual.duration = v end)
-
-AddSideBySideButtons(
-    "Move overlay", function()
-        ns.SetRepositionMode(true)
-        if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
-    end,
-    "Reset position", function()
-        CueSenseDB.visual.position = nil
-        ns.RestorePosition()
-    end)
+-- (Visual-window appearance is configured per-kind, under the Buffs /
+-- Debuffs tabs further down.)
 
 -- ---------------------------------------------------------------------
 -- Audio cue
@@ -293,6 +230,9 @@ local RebuildList
 local MakeRow
 local MakeHeader
 local UpdateTabs
+
+-- The visual-window config for the tab currently being edited.
+local function ActiveVis() return CueSenseDB.visual[activeTab] end
 
 AddHeader("Watched auras")
 
@@ -446,9 +386,75 @@ UpdateTabs = function()
         buffsTab:LockHighlight(); debuffsTab:UnlockHighlight()
     end
 end
-buffsTab:SetScript("OnClick", function() activeTab = "buff"; RebuildList() end)
-debuffsTab:SetScript("OnClick", function() activeTab = "debuff"; RebuildList() end)
+-- Switching tabs re-points the per-kind window settings below at the other
+-- kind and refilters the list, so a full refresh is what we want here.
+buffsTab:SetScript("OnClick", function() activeTab = "buff"; ns.RefreshOptions() end)
+debuffsTab:SetScript("OnClick", function() activeTab = "debuff"; ns.RefreshOptions() end)
 UpdateTabs()
+
+-- ---------------------------------------------------------------------
+-- Window appearance for the active tab's kind (buffs or debuffs). One set
+-- of widgets bound to the active kind's config; they re-read on tab switch.
+-- ---------------------------------------------------------------------
+AddCheckbox("Show on-screen flash for these",
+    function() return ActiveVis().enabled end,
+    function(v) ActiveVis().enabled = v end)
+
+local colorBtn = AddButton("Flash color...", 140, function() end)
+local swatch = colorBtn:CreateTexture(nil, "OVERLAY")
+swatch:SetSize(14, 14)
+swatch:SetPoint("LEFT", colorBtn, "LEFT", 8, 0)
+local colorBtnText = colorBtn:GetFontString()
+if colorBtnText then
+    colorBtnText:ClearAllPoints()
+    colorBtnText:SetPoint("LEFT", swatch, "RIGHT", 4, 0)
+    colorBtnText:SetPoint("RIGHT", colorBtn, "RIGHT", -8, 0)
+end
+colorBtn:SetScript("OnClick", function()
+    local c = ActiveVis().color
+    local function apply(prev)
+        local nr, ng, nb
+        if prev then
+            nr, ng, nb = prev.r or prev[1], prev.g or prev[2], prev.b or prev[3]
+        else
+            nr, ng, nb = ColorPickerFrame:GetColorRGB()
+        end
+        if not (nr and ng and nb) then return end
+        c.r, c.g, c.b = nr, ng, nb
+        swatch:SetColorTexture(nr, ng, nb)
+    end
+    ColorPickerFrame:SetupColorPickerAndShow({
+        r = c.r, g = c.g, b = c.b,
+        swatchFunc = function() apply() end,
+        cancelFunc = function(prev) apply(prev) end,
+        hasOpacity = false,
+    })
+end)
+colorBtn.Refresh = function()
+    local c = ActiveVis().color
+    swatch:SetColorTexture(c.r, c.g, c.b)
+end
+widgets[#widgets + 1] = colorBtn
+
+AddSlider("Flash size", 0.5, 3.0, 0.05, "%.2fx",
+    function() return ActiveVis().scale end,
+    function(v) ActiveVis().scale = v end)
+
+AddSlider("On-screen time", 0.5, 8.0, 0.1, "%.1fs",
+    function() return ActiveVis().duration end,
+    function(v) ActiveVis().duration = v end)
+
+AddSideBySideButtons(
+    "Move window", function()
+        ns.SetRepositionMode(activeTab, true)
+        if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+    end,
+    "Reset position", function()
+        ActiveVis().position = nil
+        ns.RestorePosition(activeTab)
+    end)
+
+AddButton("Test this window", 160, function() ns.TestWindow(activeTab) end)
 
 -- Column headers above the list
 local function ColHeader(text, xoff)
@@ -562,9 +568,10 @@ MakeRow = function(i)
     row.preview:SetSize(24, 22)
     row.preview:SetPoint("LEFT", row, "LEFT", 366, 0)
     row.preview:SetText(">")
+    -- Preview fires the cue exactly as it would in play: its sound AND, if
+    -- the cue's visual is enabled, a flash on that kind's window.
     row.preview:SetScript("OnClick", function()
-        local cue = row.spellID and CueSenseDB.cues[row.spellID]
-        if cue and cue.sound then ns.PlaySoundEntry(cue.sound, cue.channel or CueSenseDB.channel) end
+        if row.spellID then ns.PreviewCue(row.spellID) end
     end)
 
     row.remove = CreateFrame("Button", nil, row, "UIPanelCloseButton")

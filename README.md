@@ -48,8 +48,9 @@ Tip: look up spell IDs on Wowhead — the ID is in the page URL.
 
 ## Settings
 
-- **Visual cue:** show/hide the flash, color, size, on-screen time, and
-  position.
+- **Visual cue:** buffs and debuffs each have their own window — set show/
+  hide, color, size, on-screen time, and position separately under each
+  tab. Use "Test this window" to preview it.
 - **Audio cue:** a master "Play sound cues" switch and the channel sounds
   route through. Any aura can be set to "None (silent)" for visual-only.
 - **Buffs vs debuffs:** track buffs and debuffs independently, and manage

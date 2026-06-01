@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.8.0
+
+- **Separate windows for buffs and debuffs.** Each kind now has its own
+  on-screen flash window with independent size, position, color, and
+  on-screen time — so (for example) debuffs can be a big red warning in the
+  center while buffs are a smaller teal note off to the side. The window
+  settings live right under the Buffs / Debuffs tabs and follow whichever
+  tab you're on.
+- **The per-aura test button (▸) now previews the visual too**, not just the
+  sound — it fires the cue exactly as it would in play.
+- Existing window settings are carried over to both new windows on first
+  load.
+
 ## v0.7.1
 
 - Sharper addon icon (antialiased PNG).
