@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.3.1
+
+- Fix a Lua error on login ("attempt to index global 'CueSenseDB'") caused
+  by the new spell-picker building its menu before saved variables loaded.
+
 ## v0.3.0
 
 - **Pick a spell to watch from a list.** "Add a spell" is now a dropdown of

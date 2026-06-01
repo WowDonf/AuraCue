@@ -309,6 +309,10 @@ addDD:SetPoint("LEFT", pickLabel, "RIGHT", 12, 0)
 addDD:SetSize(280, 30)
 addDD:SetDefaultText("Choose a spell to watch")
 addDD:SetupMenu(function(_, root)
+    -- SetupMenu populates once at load, before ADDON_LOADED creates the
+    -- saved variables. Bail until the DB exists; the menu regenerates on
+    -- every open, so it fills in normally once the player is logged in.
+    if not CueSenseDB then return end
     local spells = ns.GetKnownSpells()
     if #spells == 0 then
         root:CreateButton("|cff808080No spells found — use spell ID below|r", function() end)
