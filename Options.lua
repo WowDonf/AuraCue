@@ -325,6 +325,9 @@ addDD:SetupMenu(function(_, root)
         if CueSenseDB.cues[tostring(sid)] then
             label = label .. "  |cff808080(watching)|r"
         end
+        if sp.secret then
+            label = label .. "  |cffff6060(may be hidden in instances)|r"
+        end
         root:CreateButton(label, function()
             if CueSenseDB.cues[tostring(sid)] then
                 addStatus:SetText("|cffffd200Already watching " .. (sp.name or sid) .. ".|r")
@@ -375,7 +378,8 @@ local function DoAdd()
     end
     ns.AddCue(id)
     addBox:SetText("")
-    addStatus:SetText("|cff60ff60Added " .. nm .. ".|r")
+    local note = ns.IsSpellAuraSecret(id) and "  |cffff6060(may be hidden in instances)|r" or ""
+    addStatus:SetText("|cff60ff60Added " .. nm .. ".|r" .. note)
     if watchInfo.Refresh then watchInfo.Refresh() end
     RebuildList()
 end

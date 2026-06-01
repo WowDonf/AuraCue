@@ -376,6 +376,25 @@ function ns.CueCount()
     return n
 end
 
+-- Pre-check whether a spell's aura would be a secret value (masked from
+-- addons) in restricted content — usable before any aura exists, so the
+-- picker can flag spells whose cues may not fire reliably in instances.
+-- Degrades to false when the regime/API is absent (older clients), and
+-- pcall-guards the predicate in case its signature differs on live.
+-- NOTE: player-own auras are non-secret regardless, so this mainly flags
+-- arbitrary by-ID additions (enemy/boss debuffs, others' buffs).
+function ns.IsSpellAuraSecret(spellID)
+    local S = C_Secrets
+    if not (S and S.HasSecretRestrictions and S.HasSecretRestrictions()) then
+        return false
+    end
+    if S.ShouldSpellAuraBeSecret then
+        local ok, res = pcall(S.ShouldSpellAuraBeSecret, spellID)
+        if ok then return res and true or false end
+    end
+    return false
+end
+
 -- Enumerate the player's known, active (non-passive) spells with their
 -- icon + name, so the options panel can offer a pick-from-a-list "Add"
 -- instead of forcing a raw spell ID. Sorted by name; deduped. Returns
@@ -405,6 +424,7 @@ function ns.GetKnownSpells()
                         spellID = info.spellID,
                         name    = info.name or C_Spell.GetSpellName(info.spellID),
                         icon    = info.iconID,
+                        secret  = ns.IsSpellAuraSecret(info.spellID),
                     }
                 end
             end

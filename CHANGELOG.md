@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.2
+
+- Flag auras that the client reports as hidden in instanced content
+  ("may be hidden in instances") in the spell picker and when adding by
+  ID, so it's clear up front which cues may not fire during raids, Mythic+,
+  or PvP. Your own auras stay readable, so this mostly affects auras added
+  by ID (enemy/boss debuffs, other players' buffs).
+
 ## v0.3.1
 
 - Fix a Lua error on login ("attempt to index global 'CueSenseDB'") caused
