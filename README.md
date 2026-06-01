@@ -43,6 +43,7 @@ Other commands:
 | `/cue toggle` | Enable / disable |
 | `/cue unlock` / `/cue lock` | Move the on-screen overlay |
 | `/cue reset` | Reset overlay position |
+| `/cue gather` | Catalog auras on nearby units |
 | `/cue status` | Print current settings |
 
 Tip: look up spell IDs on Wowhead — the ID is in the page URL.
@@ -68,6 +69,13 @@ Tip: look up spell IDs on Wowhead — the ID is in the page URL.
 - **Moving the overlay:** `/cue unlock` (or the panel's "Move overlay"
   button) shows it as a bordered window with an "X" in the corner to lock
   it back down.
+
+## Profiles & sharing
+
+Settings are saved per character and specialization. The main page's
+**Sharing** section exports the current spec's profile, or the whole aura
+catalog, to a string you can save or share — and imports one back. The aura
+catalog itself is account-wide (shared across all your characters).
 
 ## Roadmap
 

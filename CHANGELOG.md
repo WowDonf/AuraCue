@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.14.0
+
+- **Import / export.** A new Sharing section on the main page lets you export
+  the current spec's profile, or the whole aura catalog, to a copy-paste
+  string — to back up or share with others — and paste one in to import. No
+  libraries required.
+- **`/cue gather`.** Catalogs every aura currently on nearby units (your
+  target, focus, nameplates, party / raid) in one go — handy on a target
+  dummy or out in the world to fill the picker quickly. (Enemy spell IDs are
+  hidden by the game inside instances, so gather there with that in mind.)
+
 ## v0.13.0
 
 - **Per-spec profiles.** Your tracked auras and window settings are now saved

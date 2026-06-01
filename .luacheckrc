@@ -45,6 +45,8 @@ read_globals = {
     "InCombatLockdown",
     -- Tables / misc
     "wipe", "ReloadUI",
+    -- Import/export serialization (Lua 5.1 globals on WoW)
+    "loadstring", "setfenv",
     -- Minimap button libraries (fetched by the packager; nil in dev)
     "LibStub",
 }

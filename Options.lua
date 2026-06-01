@@ -282,6 +282,53 @@ do
     main.widgets[#main.widgets + 1] = channelDropdown
     main.Button("Play test cue", 160, function() ns.PlayTestCue() end)
 
+    -- Sharing: export the current spec's profile or the whole catalog to a
+    -- string, or paste one in to import.
+    main.Header("Sharing")
+    main.Desc("Export this spec's profile or the whole aura catalog to a string to save or share, " ..
+        "or paste one below and Import. Click the box, then Ctrl+A and Ctrl+C to copy.")
+
+    local boxBG = CreateFrame("Frame", nil, content, "BackdropTemplate")
+    boxBG:SetPoint("TOPLEFT", LEFT, main.y)
+    boxBG:SetSize(520, 58)
+    boxBG:SetBackdrop({
+        bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile     = true, tileSize = 16, edgeSize = 16,
+        insets   = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    boxBG:SetBackdropColor(0, 0, 0, 0.6)
+    local shareBox = CreateFrame("EditBox", nil, boxBG)
+    shareBox:SetMultiLine(true)
+    shareBox:SetPoint("TOPLEFT", 8, -6)
+    shareBox:SetPoint("BOTTOMRIGHT", -8, 6)
+    shareBox:SetAutoFocus(false)
+    shareBox:SetFontObject("ChatFontNormal")
+    shareBox:SetMaxLetters(0)
+    shareBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    main.y = main.y - 66
+
+    local shareStatus = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+
+    main.SideBySide(
+        "Export profile", function()
+            shareBox:SetText(ns.ExportProfile()); shareBox:SetFocus(); shareBox:HighlightText()
+            shareStatus:SetText("|cff808080Profile string ready — Ctrl+A, Ctrl+C to copy.|r")
+        end,
+        "Export catalog", function()
+            shareBox:SetText(ns.ExportCatalog()); shareBox:SetFocus(); shareBox:HighlightText()
+            shareStatus:SetText("|cff808080Catalog string ready — Ctrl+A, Ctrl+C to copy.|r")
+        end)
+    main.Button("Import from box", 160, function()
+        local oki, msg = ns.ImportShare(shareBox:GetText() or "")
+        shareStatus:SetText((oki and "|cff60ff60" or "|cffff6060") .. (msg or "") .. "|r")
+    end)
+
+    shareStatus:SetPoint("TOPLEFT", LEFT, main.y)
+    shareStatus:SetWidth(520)
+    shareStatus:SetJustifyH("LEFT")
+    main.y = main.y - 18
+
     content:SetHeight(-main.y + 20)
 end
 

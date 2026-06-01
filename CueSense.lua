@@ -785,6 +785,184 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
 end)
 
 -- ---------------------------------------------------------------------
+-- Import / export + catalog gathering
+-- ---------------------------------------------------------------------
+-- Self-contained (no libraries): a data-only serializer + base64, so a
+-- profile or the catalog can be shared as a single copy-pasteable string.
+local B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local B64R
+
+local function base64enc(data)
+    local out, i, len = {}, 1, #data
+    while i <= len do
+        local c1, c2, c3 = data:byte(i), data:byte(i + 1), data:byte(i + 2)
+        local n = c1 * 65536 + (c2 or 0) * 256 + (c3 or 0)
+        out[#out + 1] = B64:sub(math.floor(n / 262144) % 64 + 1, math.floor(n / 262144) % 64 + 1)
+        out[#out + 1] = B64:sub(math.floor(n / 4096) % 64 + 1, math.floor(n / 4096) % 64 + 1)
+        out[#out + 1] = c2 and B64:sub(math.floor(n / 64) % 64 + 1, math.floor(n / 64) % 64 + 1) or "="
+        out[#out + 1] = c3 and B64:sub(n % 64 + 1, n % 64 + 1) or "="
+        i = i + 3
+    end
+    return table.concat(out)
+end
+
+local function base64dec(data)
+    if not B64R then
+        B64R = {}
+        for i = 1, #B64 do B64R[B64:sub(i, i)] = i - 1 end
+    end
+    data = data:gsub("[^A-Za-z0-9+/=]", "")
+    local out, i, len = {}, 1, #data
+    while i <= len do
+        local s1, s2 = data:sub(i, i), data:sub(i + 1, i + 1)
+        local s3, s4 = data:sub(i + 2, i + 2), data:sub(i + 3, i + 3)
+        local n1, n2, n3, n4 = B64R[s1], B64R[s2], B64R[s3], B64R[s4]
+        if not n1 or not n2 then return nil end
+        local n = n1 * 262144 + n2 * 4096 + (n3 or 0) * 64 + (n4 or 0)
+        out[#out + 1] = string.char(math.floor(n / 65536) % 256)
+        if s3 ~= "=" and n3 then out[#out + 1] = string.char(math.floor(n / 256) % 256) end
+        if s4 ~= "=" and n4 then out[#out + 1] = string.char(n % 256) end
+        i = i + 4
+    end
+    return table.concat(out)
+end
+
+-- Serialize data only (numbers / booleans / strings / nested tables with
+-- string or number keys). Functions and other types are skipped.
+local function serialize(v)
+    local t = type(v)
+    if t == "number" then
+        if v == math.floor(v) and math.abs(v) < 1e15 then return string.format("%d", v) end
+        return string.format("%.6g", v)
+    elseif t == "boolean" then
+        return v and "true" or "false"
+    elseif t == "string" then
+        return string.format("%q", v)
+    elseif t == "table" then
+        local parts = {}
+        for k, val in pairs(v) do
+            local kt, vs = type(k), serialize(val)
+            if vs then
+                if kt == "string" then
+                    parts[#parts + 1] = "[" .. string.format("%q", k) .. "]=" .. vs
+                elseif kt == "number" then
+                    parts[#parts + 1] = "[" .. string.format("%d", k) .. "]=" .. vs
+                end
+            end
+        end
+        return "{" .. table.concat(parts, ",") .. "}"
+    end
+    return nil
+end
+
+-- Parse a serialized literal back to a table, in an EMPTY environment so the
+-- chunk can only build data (no globals, no function calls).
+local function deserialize(str)
+    local f = loadstring and loadstring("return " .. str)
+    if not f then return nil end
+    setfenv(f, {})
+    local ok, res = pcall(f)
+    if not ok or type(res) ~= "table" then return nil end
+    return res
+end
+
+local PROFILE_MAGIC = "CSP1!"
+local CATALOG_MAGIC = "CSC1!"
+
+function ns.ExportProfile()
+    if not activeProfile then return "" end
+    return PROFILE_MAGIC .. base64enc(serialize(activeProfile))
+end
+
+function ns.ExportCatalog()
+    return CATALOG_MAGIC .. base64enc(serialize(CueSenseDB.seen or {}))
+end
+
+-- Import either a profile or a catalog string. Returns (ok, message).
+function ns.ImportShare(str)
+    str = (str or ""):gsub("%s", "")
+    if str == "" then return false, "Nothing to import." end
+    local magic = str:sub(1, 5)
+    if magic ~= PROFILE_MAGIC and magic ~= CATALOG_MAGIC then
+        return false, "That isn't a CueSense string."
+    end
+    local payload = base64dec(str:sub(6))
+    if not payload then return false, "Could not decode the string." end
+    local data = deserialize(payload)
+    if not data then return false, "The string is corrupt or invalid." end
+
+    if magic == PROFILE_MAGIC then
+        MigrateVisual(data)
+        MergeDefaults(data, PROFILE_DEFAULTS)
+        ValidateRanges(data)
+        if type(data.cues) ~= "table" then data.cues = {} end
+        BackfillCues(data.cues)
+        CueSenseDB.profiles[ProfileKey()] = data
+        activeProfile = data
+        RestorePosition("buff")
+        RestorePosition("debuff")
+        present = {}
+        SeedPresent()
+        if ns.RefreshOptions then ns.RefreshOptions() end
+        local n = 0
+        for _ in pairs(data.cues) do n = n + 1 end
+        return true, "Imported a profile (" .. n .. " auras) into this spec."
+    else
+        CueSenseDB.seen = CueSenseDB.seen or {}
+        local added = 0
+        for k, v in pairs(data) do
+            if type(v) == "table" and CueSenseDB.seen[k] == nil then
+                CueSenseDB.seen[k] = v
+                added = added + 1
+            end
+        end
+        if ns.RefreshOptions then ns.RefreshOptions() end
+        return true, "Merged " .. added .. " new aura(s) into the catalog."
+    end
+end
+
+function ns.SeenCount()
+    local n = 0
+    if CueSenseDB and CueSenseDB.seen then
+        for _ in pairs(CueSenseDB.seen) do n = n + 1 end
+    end
+    return n
+end
+
+-- Harvest auras from nearby units into the catalog. Enemy aura spellIDs are
+-- secret in instanced content (Reveal returns nil), so this gathers mostly in
+-- the open world / on target dummies. Returns the number of NEW auras added.
+function ns.GatherAuras()
+    if not CueSenseDB then return 0 end
+    CueSenseDB.seen = CueSenseDB.seen or {}
+    local before = ns.SeenCount()
+    local function rec(data, harmful)
+        if not data then return false end
+        local sid = Reveal(data.spellId)
+        if sid and not CueSenseDB.seen[tostring(sid)] then
+            CueSenseDB.seen[tostring(sid)] = {
+                name = Reveal(data.name) or C_Spell.GetSpellName(sid),
+                icon = Reveal(data.icon),
+                kind = harmful and "debuff" or "buff",
+                mine = Reveal(data.isFromPlayerOrPlayerPet) and true or false,
+            }
+        end
+        return false
+    end
+    local units = { "player", "pet", "target", "targettarget", "focus", "mouseover" }
+    for i = 1, 40 do units[#units + 1] = "nameplate" .. i end
+    for i = 1, 4 do units[#units + 1] = "party" .. i end
+    for i = 1, 40 do units[#units + 1] = "raid" .. i end
+    for _, u in ipairs(units) do
+        if UnitExists(u) then
+            AuraUtil.ForEachAura(u, "HELPFUL", nil, function(d) return rec(d, false) end, true)
+            AuraUtil.ForEachAura(u, "HARMFUL", nil, function(d) return rec(d, true) end, true)
+        end
+    end
+    return ns.SeenCount() - before
+end
+
+-- ---------------------------------------------------------------------
 -- Slash commands
 -- ---------------------------------------------------------------------
 SLASH_CUESENSE1 = "/cue"
@@ -860,6 +1038,12 @@ SlashCmdList["CUESENSE"] = function(msg)
             chatPrint("cleared the remembered-aura list (it refills as auras appear on you).")
             ns.RefreshOptions()
 
+        elseif cmd == "gather" then
+            local added = ns.GatherAuras()
+            chatPrint("gathered " .. added .. " new aura(s) from nearby units ("
+                .. ns.SeenCount() .. " in the catalog).")
+            ns.RefreshOptions()
+
         elseif cmd == "status" then
             local seenN = 0
             for _ in pairs(CueSenseDB.seen) do seenN = seenN + 1 end
@@ -886,6 +1070,7 @@ SlashCmdList["CUESENSE"] = function(msg)
             print("  |cffffd200/cue move|r [|cffffd200debuff|r] / |cffffd200lock|r   move a window")
             print("  |cffffd200/cue reset|r           reset window positions")
             print("  |cffffd200/cue forget|r          clear the remembered-aura list")
+            print("  |cffffd200/cue gather|r          catalog auras on nearby units")
             print("  |cffffd200/cue status|r          print current settings")
         end
     end)
