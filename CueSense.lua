@@ -438,7 +438,19 @@ end
 -- ---------------------------------------------------------------------
 -- Cue dispatch
 -- ---------------------------------------------------------------------
+-- Per-cue "when" condition: always / only in combat / only in instances /
+-- only in the open world.
+local function ConditionMet(when)
+    if when == "combat" then return InCombatLockdown() and true or false
+    elseif when == "instance" then return (IsInInstance()) and true or false
+    elseif when == "world" then return not IsInInstance()
+    end
+    return true
+end
+ns.ConditionMet = ConditionMet
+
 local function FireCue(cue, spellName, eventKind)
+    if not ConditionMet(cue.when) then return end
     -- Respect the per-kind master switches (buffs vs debuffs).
     if cue.kind == "debuff" then
         if not activeProfile.trackDebuffs then return end
@@ -714,8 +726,10 @@ local function RefreshPrivateAuras()
     if not activeProfile or not CueSenseDB or not CueSenseDB.audioEnabled then return end
     if not activeProfile.trackDebuffs then return end
     for key, cue in pairs(activeProfile.cues) do
-        -- "speak" can't be registered as a private-aura sound (no TTS hook).
-        if cue.kind == "debuff" and cue.applied and cue.soundApplied and cue.soundApplied ~= "speak" then
+        -- "speak" can't be registered as a private-aura sound (no TTS hook),
+        -- and a "world"-only cue shouldn't fire in instances.
+        if cue.kind == "debuff" and cue.applied and cue.soundApplied
+           and cue.soundApplied ~= "speak" and cue.when ~= "world" then
             local sid = tonumber(key)
             local playable, isFile = ResolveSound(cue.soundApplied)
             if sid and playable then

@@ -16,6 +16,10 @@ local RESULT_H = 20
 
 -- Every panel registers a refresh function here; ns.RefreshOptions runs
 -- them all (used by slash commands and cross-panel updates).
+-- Per-cue "when" condition cycle (compact button on each row).
+local COND_ORDER = { "always", "combat", "instance", "world" }
+local COND_LABEL = { always = "Any", combat = "Cbt", instance = "Inst", world = "Wld" }
+
 local refreshers = {}
 local function RefreshAllPanels()
     if not ns.P() then return end
@@ -800,6 +804,30 @@ local function BuildKindPanel(kind)
         row.soundFaded = MkSoundDD(296, -30, "soundFaded")
         row.previewF = MkPreview(450, -30, "faded")
 
+        -- "When" cycle: Any -> Combat -> Instance -> World.
+        row.cond = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        row.cond:SetSize(56, 22)
+        row.cond:SetPoint("TOPLEFT", row, "TOPLEFT", 480, -30)
+        row.cond:SetScript("OnClick", function()
+            local cue = row.spellID and ns.P().cues[row.spellID]
+            if not cue then return end
+            local cur, idx = cue.when or "always", 1
+            for ci, v in ipairs(COND_ORDER) do if v == cur then idx = ci break end end
+            cue.when = COND_ORDER[(idx % #COND_ORDER) + 1]
+            row.cond:SetText(COND_LABEL[cue.when])
+        end)
+        row.cond:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Fire this cue:", 1, 1, 1)
+            GameTooltip:AddLine("Any — everywhere", 0.8, 0.8, 0.8)
+            GameTooltip:AddLine("Cbt — only while in combat", 0.8, 0.8, 0.8)
+            GameTooltip:AddLine("Inst — only in instances", 0.8, 0.8, 0.8)
+            GameTooltip:AddLine("Wld — only in the open world", 0.8, 0.8, 0.8)
+            GameTooltip:AddLine("Click to cycle.", 0.6, 0.6, 0.6)
+            GameTooltip:Show()
+        end)
+        row.cond:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
         row.remove = CreateFrame("Button", nil, row, "UIPanelCloseButton")
         row.remove:SetSize(24, 24)
         row.remove:SetPoint("TOPLEFT", row, "TOPLEFT", 496, -3)
@@ -880,6 +908,7 @@ local function BuildKindPanel(kind)
                 row.faded:SetChecked(cue.faded and true or false)
                 row.visual:SetChecked(cue.visual and true or false)
                 row.cat:SetText(cue.category or "")
+                row.cond:SetText(COND_LABEL[cue.when or "always"])
                 row.soundApplied:GenerateMenu()
                 row.soundFaded:GenerateMenu()
                 row:Show()

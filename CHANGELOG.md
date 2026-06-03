@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.19.0
+
+- **Per-cue conditions.** Each watched aura has a "When" button (cycles
+  Any / Cbt / Inst / Wld) to restrict its cue to everywhere, only in combat,
+  only in instances, or only in the open world. Handy for muting world-noise
+  buffs in dungeons, or vice versa.
+
 ## v0.18.0
 
 - **Spoken cues (text-to-speech).** Pick "Speak the name (TTS)" as a buff's
