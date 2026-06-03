@@ -180,10 +180,12 @@ local function NewPanel(name)
 end
 
 -- ---------------------------------------------------------------------
--- A colour-swatch button bound to a color table getter.
+-- Colour-swatch buttons bound to a color table getter.
 -- ---------------------------------------------------------------------
-local function AddColorButton(ctx, getColor, label)
-    local colorBtn = ctx.Button(label or "Flash color...", 160, function() end)
+local function MakeColorButton(parent, getColor, label, width)
+    local colorBtn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    colorBtn:SetSize(width or 160, 24)
+    colorBtn:SetText(label or "Flash color...")
     local swatch = colorBtn:CreateTexture(nil, "OVERLAY")
     swatch:SetSize(14, 14)
     swatch:SetPoint("LEFT", colorBtn, "LEFT", 8, 0)
@@ -217,7 +219,75 @@ local function AddColorButton(ctx, getColor, label)
         local c = getColor()
         swatch:SetColorTexture(c.r, c.g, c.b)
     end
-    ctx.widgets[#ctx.widgets + 1] = colorBtn
+    return colorBtn
+end
+
+-- Two colour-swatch buttons on a single row.
+local function AddColorPair(ctx, getA, labelA, getB, labelB)
+    local W = 210
+    local a = MakeColorButton(ctx.content, getA, labelA, W)
+    a:SetPoint("TOPLEFT", ctx.LEFT + 6, ctx.y)
+    local b = MakeColorButton(ctx.content, getB, labelB, W)
+    b:SetPoint("TOPLEFT", ctx.LEFT + 6 + W + 12, ctx.y)
+    ctx.widgets[#ctx.widgets + 1] = a
+    ctx.widgets[#ctx.widgets + 1] = b
+    ctx.y = ctx.y - 32
+end
+
+-- ---------------------------------------------------------------------
+-- A bordered, scrollable multi-line edit box (used by the Sharing panel).
+-- The export/import strings are long and wrap over many lines, so the box
+-- scrolls internally and the wheel scrolls the text rather than the panel.
+-- ---------------------------------------------------------------------
+local function AddShareBox(ctx, height)
+    local content, LEFT = ctx.content, ctx.LEFT
+    local boxBG = CreateFrame("Frame", nil, content, "BackdropTemplate")
+    boxBG:SetPoint("TOPLEFT", LEFT, ctx.y)
+    boxBG:SetSize(520, height)
+    boxBG:SetBackdrop({
+        bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile     = true, tileSize = 16, edgeSize = 16,
+        insets   = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    boxBG:SetBackdropColor(0, 0, 0, 0.6)
+
+    local scroll = CreateFrame("ScrollFrame", nil, boxBG, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 8, -8)
+    scroll:SetPoint("BOTTOMRIGHT", -28, 8)
+    local box = CreateFrame("EditBox", nil, scroll)
+    box:SetMultiLine(true)
+    box:SetWidth(480)
+    box:SetAutoFocus(false)
+    box:SetFontObject("ChatFontNormal")
+    box:SetMaxLetters(0)
+    box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    box:SetScript("OnCursorChanged", function(_, _, y, _, h)
+        local top, bottom = -y, -y + h
+        local view = scroll:GetHeight()
+        local s = scroll:GetVerticalScroll()
+        if top < s then scroll:SetVerticalScroll(top)
+        elseif bottom > s + view then scroll:SetVerticalScroll(bottom - view) end
+    end)
+    scroll:SetScrollChild(box)
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel", function(self, delta)
+        local maxScroll = self:GetVerticalScrollRange()
+        local new = math.max(0, math.min(maxScroll, self:GetVerticalScroll() - delta * 24))
+        self:SetVerticalScroll(new)
+    end)
+    ctx.y = ctx.y - (height + 8)
+    return box, scroll
+end
+
+-- A left-aligned status line for inline feedback; returns the FontString.
+local function AddStatusLine(ctx)
+    local fs = ctx.content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    fs:SetPoint("TOPLEFT", ctx.LEFT, ctx.y)
+    fs:SetWidth(520)
+    fs:SetJustifyH("LEFT")
+    ctx.y = ctx.y - 20
+    return fs
 end
 
 -- ---------------------------------------------------------------------
@@ -248,7 +318,7 @@ do
     main.widgets[#main.widgets + 1] = profFS
     main.y = main.y - 18
 
-    main.Header("General")
+    main.Header("Global Settings")
     main.Check("Enable CueSense",
         function() return ns.P().enabled end,
         function(v) ns.P().enabled = v end)
@@ -319,77 +389,6 @@ do
         function(v) ns.P().ttsVolume = v end)
     main.Button("Test speech", 160, function() ns.Speak("CueSense speech test") end)
 
-    -- Sharing: export the current spec's profile or the whole catalog to a
-    -- string, or paste one in to import.
-    main.Header("Sharing")
-    main.Desc("Export this spec's profile or the whole aura catalog to a string to save or share, " ..
-        "or paste one below and Import. Click the box, then Ctrl+A and Ctrl+C to copy.")
-
-    local boxBG = CreateFrame("Frame", nil, content, "BackdropTemplate")
-    boxBG:SetPoint("TOPLEFT", LEFT, main.y)
-    boxBG:SetSize(520, 120)
-    boxBG:SetBackdrop({
-        bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile     = true, tileSize = 16, edgeSize = 16,
-        insets   = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
-    boxBG:SetBackdropColor(0, 0, 0, 0.6)
-
-    -- The exported string is long and wraps over many lines, so the editbox
-    -- lives in a scroll frame and the wheel scrolls within the box (rather
-    -- than spilling past its edges or scrolling the settings panel behind it).
-    local shareScroll = CreateFrame("ScrollFrame", nil, boxBG, "UIPanelScrollFrameTemplate")
-    shareScroll:SetPoint("TOPLEFT", 8, -8)
-    shareScroll:SetPoint("BOTTOMRIGHT", -28, 8)
-    local shareBox = CreateFrame("EditBox", nil, shareScroll)
-    shareBox:SetMultiLine(true)
-    shareBox:SetWidth(480)
-    shareBox:SetAutoFocus(false)
-    shareBox:SetFontObject("ChatFontNormal")
-    shareBox:SetMaxLetters(0)
-    shareBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    -- Keep the caret/selection visible as it moves through a long string.
-    shareBox:SetScript("OnCursorChanged", function(_, _, y, _, h)
-        local top = -y
-        local bottom = top + h
-        local view = shareScroll:GetHeight()
-        local s = shareScroll:GetVerticalScroll()
-        if top < s then shareScroll:SetVerticalScroll(top)
-        elseif bottom > s + view then shareScroll:SetVerticalScroll(bottom - view) end
-    end)
-    shareScroll:SetScrollChild(shareBox)
-    shareScroll:EnableMouseWheel(true)
-    shareScroll:SetScript("OnMouseWheel", function(self, delta)
-        local maxScroll = self:GetVerticalScrollRange()
-        local new = math.max(0, math.min(maxScroll, self:GetVerticalScroll() - delta * 24))
-        self:SetVerticalScroll(new)
-    end)
-    main.y = main.y - 128
-
-    local shareStatus = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-
-    main.SideBySide(
-        "Export profile", function()
-            shareBox:SetText(ns.ExportProfile()); shareScroll:SetVerticalScroll(0)
-            shareBox:SetFocus(); shareBox:HighlightText()
-            shareStatus:SetText("|cff808080Profile string ready — Ctrl+A, Ctrl+C to copy.|r")
-        end,
-        "Export catalog", function()
-            shareBox:SetText(ns.ExportCatalog()); shareScroll:SetVerticalScroll(0)
-            shareBox:SetFocus(); shareBox:HighlightText()
-            shareStatus:SetText("|cff808080Catalog string ready — Ctrl+A, Ctrl+C to copy.|r")
-        end)
-    main.Button("Import from box", 160, function()
-        local oki, msg = ns.ImportShare(shareBox:GetText() or "")
-        shareStatus:SetText((oki and "|cff60ff60" or "|cffff6060") .. (msg or "") .. "|r")
-    end)
-
-    shareStatus:SetPoint("TOPLEFT", LEFT, main.y)
-    shareStatus:SetWidth(520)
-    shareStatus:SetJustifyH("LEFT")
-    main.y = main.y - 18
-
     content:SetHeight(-main.y + 20)
 end
 
@@ -410,7 +409,7 @@ local function BuildKindPanel(kind)
     ctx.y = ctx.y - 24
 
     -- Window appearance for this kind.
-    ctx.Header(label .. " window")
+    ctx.Header("General Settings")
     ctx.Check("Show on-screen flash",
         function() return Vis().enabled end,
         function(v) Vis().enabled = v end)
@@ -423,8 +422,9 @@ local function BuildKindPanel(kind)
     ctx.Slider("Edge intensity", 0.1, 1.0, 0.05, "%.2f",
         function() return Vis().edgeIntensity end,
         function(v) Vis().edgeIntensity = v end)
-    AddColorButton(ctx, function() return Vis().color end, "Gained flash color...")
-    AddColorButton(ctx, function() return Vis().colorFaded end, "Faded flash color...")
+    AddColorPair(ctx,
+        function() return Vis().color end, "Gained flash color...",
+        function() return Vis().colorFaded end, "Faded flash color...")
     ctx.Slider("Flash size", 0.5, 3.0, 0.05, "%.2fx",
         function() return Vis().scale end,
         function(v) Vis().scale = v end)
@@ -966,6 +966,52 @@ local buffPanel = BuildKindPanel("buff")
 local debuffPanel = BuildKindPanel("debuff")
 
 -- ---------------------------------------------------------------------
+-- Sharing subcategory: export (profile / catalog) and import, each with
+-- its own scrollable box.
+-- ---------------------------------------------------------------------
+local sharePanel = NewPanel("Sharing")
+do
+    local content, LEFT = sharePanel.content, sharePanel.LEFT
+
+    local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
+    titleFS:SetPoint("TOPLEFT", LEFT, sharePanel.y)
+    titleFS:SetText("Sharing")
+    sharePanel.y = sharePanel.y - 24
+
+    -- Export.
+    sharePanel.Header("Export")
+    sharePanel.Desc("Export this spec's profile, or the whole aura catalog, to a string you can save " ..
+        "or share. The string appears below — click the box, then Ctrl+A and Ctrl+C to copy it.")
+    local exportBox, exportScroll = AddShareBox(sharePanel, 130)
+    local exportStatus = AddStatusLine(sharePanel)
+    sharePanel.SideBySide(
+        "Export profile", function()
+            exportBox:SetText(ns.ExportProfile()); exportScroll:SetVerticalScroll(0)
+            exportBox:SetFocus(); exportBox:HighlightText()
+            exportStatus:SetText("|cff808080Profile string ready — Ctrl+A, Ctrl+C to copy.|r")
+        end,
+        "Export catalog", function()
+            exportBox:SetText(ns.ExportCatalog()); exportScroll:SetVerticalScroll(0)
+            exportBox:SetFocus(); exportBox:HighlightText()
+            exportStatus:SetText("|cff808080Catalog string ready — Ctrl+A, Ctrl+C to copy.|r")
+        end)
+
+    -- Import.
+    sharePanel.Header("Import")
+    sharePanel.Desc("Paste a profile or catalog string into the box below, then click Import. " ..
+        "A profile replaces this spec's tracked auras and settings; a catalog merges into your aura list.")
+    local importBox = AddShareBox(sharePanel, 130)
+    local importStatus = AddStatusLine(sharePanel)
+    sharePanel.Button("Import", 160, function()
+        local oki, msg = ns.ImportShare(importBox:GetText() or "")
+        importStatus:SetText((oki and "|cff60ff60" or "|cffff6060") .. (msg or "") .. "|r")
+        if oki then importBox:SetText("") end
+    end)
+
+    content:SetHeight(-sharePanel.y + 20)
+end
+
+-- ---------------------------------------------------------------------
 -- Registration: main category + Buffs / Debuffs subcategories.
 -- ---------------------------------------------------------------------
 local mainCategory
@@ -975,6 +1021,7 @@ if Settings and Settings.RegisterCanvasLayoutCategory then
     if Settings.RegisterCanvasLayoutSubcategory then
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, debuffPanel.panel, "Debuffs")
+        Settings.RegisterCanvasLayoutSubcategory(mainCategory, sharePanel.panel, "Sharing")
     end
 end
 

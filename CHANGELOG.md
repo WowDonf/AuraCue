@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.24.0
+
+- Sharing moved to its own page in the left-hand list, with separate
+  Export and Import boxes (so a string you paste to import no longer
+  collides with the one you exported).
+- Renamed the main "General" section to "Global Settings", and each
+  window's "<kind> window" section to "General Settings".
+- The Gained and Faded flash-color buttons now sit side by side.
+
 ## v0.23.0
 
 - Gained and faded flashes can now use different colors. Each window
