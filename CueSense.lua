@@ -571,8 +571,9 @@ end
 -- incremental updateInfo) is simpler and plenty fast for a small watch
 -- list, and is robust to refreshes and stack changes.
 local present = {}
-local castFade = {}    -- spellID -> token, for cast-driven faded timers
-local lastGained = {}  -- spellID -> GetTime() of last fired "gained" (debounce)
+local castFade = {}      -- spellID -> token, for cast-driven faded timers
+local lastGained = {}    -- spellID -> GetTime() of last fired "gained" (debounce)
+local castConfirmed = {} -- spellID -> true once a read has seen the cast aura up
 
 -- Record an aura we've seen on the player into the registry the picker
 -- draws from. Only the first sighting matters; later sightings are cheap
@@ -689,11 +690,27 @@ local function ScanPlayerAuras()
     for key, cue in pairs(cues) do
         local sid = tonumber(key)
         if cue.castSeen then
-            -- Cast-tracked: "gained" fires from the cast event and "faded"
-            -- from the duration timer. Reads don't touch it — a cast buff's
-            -- aura id often differs from the cast id, so a read by the cue's
-            -- id would wrongly report "absent" and fade it instantly.
-            newPresent[sid] = present[sid]
+            -- Cast-tracked: "gained" fires from the cast event. For "faded" we
+            -- read, but only trust an "absent" once a read has CONFIRMED the
+            -- aura was up since the cast — so a cast buff whose aura id differs
+            -- from the cast id (read never finds it) never falsely fades, while
+            -- a normal same-id buff fades correctly when it drops.
+            local state, data = ReadAura(sid)
+            if state == "present" then
+                castConfirmed[sid] = true
+                newPresent[sid] = true
+                if data then
+                    local d = Reveal(data.duration)
+                    if d and d > 0 then cue.castDuration = d end
+                end
+            elseif state == "unknown" then
+                newPresent[sid] = present[sid]
+            elseif castConfirmed[sid] and present[sid] and cue.faded then
+                FireCue(cue, C_Spell.GetSpellName(sid), "faded")
+                castConfirmed[sid] = nil
+            else
+                newPresent[sid] = present[sid]   -- not confirmed yet: hold
+            end
         else
             local state, data = ReadAura(sid)
             if state == "present" then
@@ -740,6 +757,7 @@ local function OnSelfCast(spellID)
     if not cue then return end
     -- Once we've seen its cast, this cue is cast-tracked from now on.
     cue.castSeen = true
+    castConfirmed[spellID] = nil   -- require a fresh read to confirm before fading
     -- Fire "gained" on each cast (debounced ~1s), so repeated casts re-cue
     -- even when we can't detect the buff dropping in between.
     local now = GetTime()

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.21.3
+
+- **Faded cues work again for cast buffs.** A read now detects when a
+  cast-tracked buff drops — but only after a read has confirmed it was up, so
+  there's still no instant-fade for buffs whose aura ID differs from the cast.
+
 ## v0.21.2
 
 - **Fix watched buffs flashing then instantly fading.** Cast-tracked auras no
