@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.25.1
+
+- The settings carry-over from the old CueSense name now prints a
+  confirmation when it runs. Note: because the game stores each addon's
+  saved data under its folder name, carrying your old data over requires
+  renaming the SavedVariables file `CueSense.lua` to `AuraCue.lua` once
+  (with the game closed); after that, your first login imports it.
+
 ## v0.25.0
 
 - **Renamed to AuraCue.** The addon is now a general-purpose personal

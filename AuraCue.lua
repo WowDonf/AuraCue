@@ -1066,12 +1066,14 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         local name = ...
         if name ~= addonName then return end
         -- One-time carry-over from the addon's former name. CueSenseDB is
-        -- still listed in the TOC SavedVariables so the old data loads; this
-        -- adopts it, then clears it. The extra SavedVariables entry can be
-        -- dropped in a later version once users have migrated.
+        -- still listed in the TOC SavedVariables so the old data loads (this
+        -- only works if the old SavedVariables file was renamed to match the
+        -- new addon folder); this adopts it, then clears it. The extra
+        -- SavedVariables entry can be dropped in a later version.
         if not AuraCueDB and CueSenseDB then
             AuraCueDB = CueSenseDB
             CueSenseDB = nil
+            ns.migratedFromCueSense = true
         end
         AuraCueDB = AuraCueDB or {}
         MergeDefaults(AuraCueDB, DB_DEFAULTS)
@@ -1079,6 +1081,9 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "PLAYER_LOGIN" then
         InitProfile()
         chatPrint("loaded. Type |cffffd200/cue|r for commands.")
+        if ns.migratedFromCueSense then
+            chatPrint("Imported your previous settings and aura catalog from CueSense.")
+        end
 
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
         -- Fires for group members too; only react to our own change, and
