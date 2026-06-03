@@ -80,6 +80,8 @@ local PROFILE_DEFAULTS = {
             locked    = true,
             position  = nil,      -- { point, relativePoint, x, y }
             edgeFlash = false,    -- also flash the screen edges
+            edgeThickness = 160,  -- how far the glow reaches inward (px)
+            edgeIntensity = 0.7,  -- peak opacity of the glow (0..1)
         },
         debuff = {
             enabled   = true,
@@ -89,6 +91,8 @@ local PROFILE_DEFAULTS = {
             locked    = true,
             position  = nil,
             edgeFlash = false,
+            edgeThickness = 200,
+            edgeIntensity = 0.8,
         },
     },
     -- Watched auras, keyed by spellID-as-string -> cue config.
@@ -203,6 +207,12 @@ local function ValidateRanges(db)
 
         if type(v.duration) ~= "number" then v.duration = (key == "debuff") and 2.0 or 1.5 end
         v.duration = math.max(0.5, math.min(8.0, v.duration))
+
+        if type(v.edgeThickness) ~= "number" then v.edgeThickness = 160 end
+        v.edgeThickness = math.max(40, math.min(500, v.edgeThickness))
+
+        if type(v.edgeIntensity) ~= "number" then v.edgeIntensity = 0.7 end
+        v.edgeIntensity = math.max(0.1, math.min(1.0, v.edgeIntensity))
 
         local dc = DEFAULT_COLORS[key]
         local c = v.color
@@ -390,8 +400,11 @@ edge:SetScript("OnUpdate", function(self, dt)
     end
 end)
 
-local function ShowEdge(color, duration)
-    local r, g, b, A = color.r, color.g, color.b, 0.7
+local function ShowEdge(color, duration, intensity, thickness)
+    local r, g, b = color.r, color.g, color.b
+    local A = intensity or 0.7
+    local th = thickness or 160
+    eL:SetWidth(th); eR:SetWidth(th); eT:SetHeight(th); eB:SetHeight(th)
     local solid, clear = CreateColor(r, g, b, A), CreateColor(r, g, b, 0)
     eL:SetGradient("HORIZONTAL", solid, clear)   -- bright at left edge, fading right
     eR:SetGradient("HORIZONTAL", clear, solid)   -- bright at right edge
@@ -411,7 +424,7 @@ local function ShowVisual(kind, message)
     f:SetAlpha(1)
     f.fadeElapsed, f.fadeDuration = 0, (v.duration or 1.5)
     f:Show()
-    if v.edgeFlash then ShowEdge(v.color, v.duration) end
+    if v.edgeFlash then ShowEdge(v.color, v.duration, v.edgeIntensity, v.edgeThickness) end
 end
 ns.ShowVisual = ShowVisual
 

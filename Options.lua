@@ -393,6 +393,12 @@ local function BuildKindPanel(kind)
     ctx.Check("Also flash the screen edges",
         function() return Vis().edgeFlash end,
         function(v) Vis().edgeFlash = v end)
+    ctx.Slider("Edge thickness", 40, 400, 10, "%d",
+        function() return Vis().edgeThickness end,
+        function(v) Vis().edgeThickness = v end)
+    ctx.Slider("Edge intensity", 0.1, 1.0, 0.05, "%.2f",
+        function() return Vis().edgeIntensity end,
+        function(v) Vis().edgeIntensity = v end)
     AddColorButton(ctx, function() return Vis().color end)
     ctx.Slider("Flash size", 0.5, 3.0, 0.05, "%.2fx",
         function() return Vis().scale end,

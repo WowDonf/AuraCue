@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.21.0
+
+- **Shape the screen-edge flash.** New per-window sliders for edge **thickness**
+  (how far the glow reaches inward) and **intensity** (how strong it is), so
+  you can dial the vignette from a subtle rim to a heavy full-edge alert. Use
+  "Test this window" to preview while adjusting.
+
 ## v0.20.2
 
 - Fix the "trackable in instances" filter missing buffs you cast. It now
