@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.21.2
+
+- **Fix watched buffs flashing then instantly fading.** Cast-tracked auras no
+  longer rely on aura reads — a cast buff's aura ID often differs from the
+  cast, so reading by it wrongly reported "gone." Gained now fires on each
+  cast; faded uses the duration timer.
+- Spoken cues use the queued local audio channel now; added `/cue tts` to
+  test speech and report what the client supports.
+
 ## v0.21.1
 
 - **Fix cues only firing once.** A cast-tracked aura could get stuck "on" if

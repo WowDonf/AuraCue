@@ -486,7 +486,7 @@ function ns.Speak(text)
     local p = activeProfile or {}
     local voice = p.ttsVoice or DefaultTtsVoice()
     if not voice then return end
-    local dest = (Enum and Enum.VoiceTtsDestination and Enum.VoiceTtsDestination.LocalPlayback) or 1
+    local dest = (Enum and Enum.VoiceTtsDestination and Enum.VoiceTtsDestination.QueuedLocalPlayback) or 1
     pcall(C.SpeakText, voice, text, dest, p.ttsRate or 0, p.ttsVolume or 100)
 end
 
@@ -571,8 +571,8 @@ end
 -- incremental updateInfo) is simpler and plenty fast for a small watch
 -- list, and is robust to refreshes and stack changes.
 local present = {}
-local castFade = {}   -- spellID -> token, for cast-driven faded timers
-local castAt = {}     -- spellID -> GetTime() of last cast (grace window)
+local castFade = {}    -- spellID -> token, for cast-driven faded timers
+local lastGained = {}  -- spellID -> GetTime() of last fired "gained" (debounce)
 
 -- Record an aura we've seen on the player into the registry the picker
 -- draws from. Only the first sighting matters; later sightings are cheap
@@ -685,29 +685,28 @@ local function ScanPlayerAuras()
     if IsInInstance() and InCombatLockdown() then return end
 
     local cues = activeProfile.cues
-    local now = GetTime()
     local newPresent = {}
     for key, cue in pairs(cues) do
         local sid = tonumber(key)
-        local state, data = ReadAura(sid)
-        if state == "present" then
-            newPresent[sid] = true
-            if data then
-                local d = Reveal(data.duration)   -- learn duration for cast timing
-                if d and d > 0 then cue.castDuration = d end
-            end
-            -- Cast-tracked auras fire "applied" from the cast event, not here.
-            if not present[sid] and cue.applied and not cue.castSeen then
-                FireCue(cue, C_Spell.GetSpellName(sid), "applied")
-            end
-        elseif state == "unknown" then
-            newPresent[sid] = present[sid]   -- secret-masked: hold
+        if cue.castSeen then
+            -- Cast-tracked: "gained" fires from the cast event and "faded"
+            -- from the duration timer. Reads don't touch it — a cast buff's
+            -- aura id often differs from the cast id, so a read by the cue's
+            -- id would wrongly report "absent" and fade it instantly.
+            newPresent[sid] = present[sid]
         else
-            -- Absent. For a just-cast aura, give it a brief grace window to
-            -- register before declaring it faded (avoids a spurious faded
-            -- right after the cast, which would also block re-triggering).
-            if cue.castSeen and (now - (castAt[sid] or 0)) < 0.5 then
-                newPresent[sid] = present[sid]
+            local state, data = ReadAura(sid)
+            if state == "present" then
+                newPresent[sid] = true
+                if data then
+                    local d = Reveal(data.duration)   -- learn duration for cast timing
+                    if d and d > 0 then cue.castDuration = d end
+                end
+                if not present[sid] and cue.applied then
+                    FireCue(cue, C_Spell.GetSpellName(sid), "applied")
+                end
+            elseif state == "unknown" then
+                newPresent[sid] = present[sid]   -- secret-masked: hold
             elseif present[sid] and cue.faded then
                 FireCue(cue, C_Spell.GetSpellName(sid), "faded")
             end
@@ -741,8 +740,11 @@ local function OnSelfCast(spellID)
     if not cue then return end
     -- Once we've seen its cast, this cue is cast-tracked from now on.
     cue.castSeen = true
-    castAt[spellID] = GetTime()
-    if not present[spellID] and cue.applied then
+    -- Fire "gained" on each cast (debounced ~1s), so repeated casts re-cue
+    -- even when we can't detect the buff dropping in between.
+    local now = GetTime()
+    if cue.applied and (now - (lastGained[spellID] or 0)) > 0.8 then
+        lastGained[spellID] = now
         FireCue(cue, C_Spell.GetSpellName(spellID), "applied")
     end
     present[spellID] = true
@@ -1319,6 +1321,18 @@ SlashCmdList["CUESENSE"] = function(msg)
             chatPrint("gathered " .. added .. " new aura(s) from nearby units ("
                 .. ns.SeenCount() .. " in the catalog).")
             ns.RefreshOptions()
+
+        elseif cmd == "tts" then
+            local C = C_VoiceChat
+            local voices = ns.GetTtsVoices()
+            local v = (activeProfile and activeProfile.ttsVoice) or (voices[1] and voices[1].voiceID)
+            chatPrint("TTS: SpeakText=" .. tostring(C and C.SpeakText ~= nil)
+                .. ", voices=" .. #voices .. ", using voiceID=" .. tostring(v))
+            if C and C.SpeakText and v then
+                local dest = (Enum and Enum.VoiceTtsDestination and Enum.VoiceTtsDestination.QueuedLocalPlayback) or 1
+                local ok, err = pcall(C.SpeakText, v, "CueSense speech test", dest, 0, 100)
+                chatPrint("  SpeakText ok=" .. tostring(ok) .. (err and (" err=" .. tostring(err)) or ""))
+            end
 
         elseif cmd == "debug" then
             -- Reports what the game returns for each watched aura, so we can
