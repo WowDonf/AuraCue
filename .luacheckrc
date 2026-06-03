@@ -32,7 +32,7 @@ read_globals = {
     -- Sound
     "PlaySound", "PlaySoundFile", "SOUNDKIT",
     -- Auras / spell data
-    "C_UnitAuras", "AuraUtil", "C_Spell",
+    "C_UnitAuras", "AuraUtil", "C_Spell", "IsPlayerSpell",
     -- Instance / unit identity (cue provenance: dungeon + source mob)
     "IsInInstance", "GetInstanceInfo", "UnitExists", "UnitName",
     -- Character / spec identity (per-character, per-spec profile keys)

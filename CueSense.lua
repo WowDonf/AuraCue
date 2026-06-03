@@ -773,13 +773,20 @@ function ns.GetSeenAuras()
     local seen = CueSenseDB and CueSenseDB.seen or {}
     for key, info in pairs(seen) do
         local sid = tonumber(key)
+        local kind = info.kind or "buff"
+        -- "Instance-trackable": debuffs (private-aura sound works in instances)
+        -- and buffs you can cast (cast-tracked). Other buffs are open-world
+        -- only, since the game hides their reads in instanced combat.
+        local instanceable = (kind == "debuff")
+            or (IsPlayerSpell and IsPlayerSpell(sid) and true) or false
         out[#out + 1] = {
             spellID = sid,
             name    = info.name or C_Spell.GetSpellName(sid) or ("Spell " .. key),
             icon    = info.icon or 134400,
             secret  = ns.IsSpellAuraSecret(sid),
-            kind    = info.kind or "buff",
+            kind    = kind,
             mine    = info.mine and true or false,
+            instanceable = instanceable,
         }
     end
     table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)

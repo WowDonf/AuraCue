@@ -401,7 +401,7 @@ local function BuildKindPanel(kind)
     -- Forward-declare the editor pieces that reference each other.
     local rows, headers = {}, {}
     local RebuildList, MakeRow, MakeHeader, UpdateSearchResults
-    local pickerSearch, pickerMineOnly = "", false
+    local pickerSearch, pickerMineOnly, pickerInstanceOnly = "", false, false
 
     -- Primary "Add": pick from catalogued auras of this kind.
     local pickLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -426,6 +426,7 @@ local function BuildKindPanel(kind)
     local function passes(sp)
         if ((sp.kind == "debuff") and "debuff" or "buff") ~= kind then return false end
         if pickerMineOnly and not sp.mine then return false end
+        if pickerInstanceOnly and not sp.instanceable then return false end
         return true
     end
 
@@ -571,6 +572,9 @@ local function BuildKindPanel(kind)
     ctx.Check("Only show auras I cast",
         function() return pickerMineOnly end,
         function(v) pickerMineOnly = v; addDD:GenerateMenu(); UpdateSearchResults() end)
+    ctx.Check("Only show ones trackable in instances",
+        function() return pickerInstanceOnly end,
+        function(v) pickerInstanceOnly = v; addDD:GenerateMenu(); UpdateSearchResults() end)
 
     -- Secondary "Add": by raw spell ID.
     local addLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")

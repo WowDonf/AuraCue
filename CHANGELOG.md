@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.17.1
+
+- **"Only show ones trackable in instances" filter** on the aura picker —
+  narrows the list to auras that work inside instances (debuffs, and buffs
+  you can cast), hiding open-world-only auras.
+
 ## v0.17.0
 
 - **Consistent, predictable cues.** Each watched aura now uses one fixed
