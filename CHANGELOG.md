@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.18.0
+
+- **Spoken cues (text-to-speech).** Pick "Speak the name (TTS)" as a buff's
+  or debuff's gained/faded sound and CueSense says the aura's name aloud — a
+  big help for blind / low-vision players, and it works in instances for
+  self-cast buffs. New Speech voice / rate / volume controls in the Audio
+  section.
+
 ## v0.17.1
 
 - **"Only show ones trackable in instances" filter** on the aura picker —

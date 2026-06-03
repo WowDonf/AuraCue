@@ -283,6 +283,38 @@ do
     main.widgets[#main.widgets + 1] = channelDropdown
     main.Button("Play test cue", 160, function() ns.PlayTestCue() end)
 
+    main.Desc("Spoken cues: pick \"Speak the name (TTS)\" as a buff's or debuff's sound to have " ..
+        "CueSense say its name aloud. These settings control the voice.")
+    local voiceDD = main.Dropdown("Speech voice", 240)
+    voiceDD:SetDefaultText("Default voice")
+    voiceDD:SetupMenu(function(_, root)
+        if not ns.P() then return end
+        local voices = ns.GetTtsVoices()
+        if #voices == 0 then
+            root:CreateButton("|cff808080No speech voices available|r", function() end)
+            return
+        end
+        for _, v in ipairs(voices) do
+            local vid, vname = v.voiceID, v.name
+            root:CreateRadio(vname,
+                function() return ns.P().ttsVoice == vid end,
+                function()
+                    ns.P().ttsVoice = vid
+                    ns.Speak(vname)
+                    C_Timer.After(0, function() voiceDD:GenerateMenu() end)
+                end)
+        end
+    end)
+    voiceDD.Refresh = function() voiceDD:GenerateMenu() end
+    main.widgets[#main.widgets + 1] = voiceDD
+    main.Slider("Speech rate", -10, 10, 1, "%d",
+        function() return ns.P().ttsRate end,
+        function(v) ns.P().ttsRate = v end)
+    main.Slider("Speech volume", 0, 100, 5, "%d",
+        function() return ns.P().ttsVolume end,
+        function(v) ns.P().ttsVolume = v end)
+    main.Button("Test speech", 160, function() ns.Speak("CueSense speech test") end)
+
     -- Sharing: export the current spec's profile or the whole catalog to a
     -- string, or paste one in to import.
     main.Header("Sharing")
@@ -736,7 +768,7 @@ local function BuildKindPanel(kind)
                             local c = row.spellID and ns.P().cues[row.spellID]
                             if not c then return end
                             c[field] = key
-                            ns.PlaySoundEntry(key, c.channel or ns.P().channel)
+                            if key == "speak" then ns.Speak("CueSense") else ns.PlaySoundEntry(key, c.channel or ns.P().channel) end
                             if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end
                             C_Timer.After(0, function() dd:GenerateMenu() end)
                         end)

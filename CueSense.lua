@@ -66,6 +66,9 @@ local PROFILE_DEFAULTS = {
     audioEnabled = true,         -- master switch for sound cues
     trackBuffs = true,           -- fire cues for helpful auras
     trackDebuffs = true,         -- fire cues for harmful auras
+    ttsRate = 0,                 -- text-to-speech rate (-10..10)
+    ttsVolume = 100,             -- text-to-speech volume (0..100)
+    ttsVoice = nil,              -- chosen TTS voice id (nil = first available)
     -- Separate on-screen window per kind, so buffs and debuffs can have
     -- their own size / position / color / duration.
     visual = {
@@ -225,6 +228,7 @@ ns.ValidateRanges = ValidateRanges
 -- to tell apart by ear. `key` is the stable DB value; `file` is the shipped
 -- .mp3 under Sounds/.
 ns.SOUNDS = {
+    { key = "speak",  label = "Speak the name (TTS)" },   -- special: text-to-speech
     { key = "rise",   label = "Rise (two-tone up)",   file = "Interface\\AddOns\\CueSense\\Sounds\\rise.mp3" },
     { key = "fall",   label = "Fall (two-tone down)", file = "Interface\\AddOns\\CueSense\\Sounds\\fall.mp3" },
     { key = "ping",   label = "Ping (high)",          file = "Interface\\AddOns\\CueSense\\Sounds\\ping.mp3" },
@@ -397,6 +401,41 @@ MakeOverlay("buff")
 MakeOverlay("debuff")
 
 -- ---------------------------------------------------------------------
+-- Text-to-speech
+-- ---------------------------------------------------------------------
+local ttsVoiceCached
+local function DefaultTtsVoice()
+    if ttsVoiceCached ~= nil then return ttsVoiceCached end
+    ttsVoiceCached = false
+    local C = C_VoiceChat
+    if C and C.GetTtsVoices then
+        local voices = C.GetTtsVoices()
+        if voices and voices[1] then ttsVoiceCached = voices[1].voiceID end
+    end
+    return ttsVoiceCached
+end
+ns.GetTtsVoices = function()
+    local C = C_VoiceChat
+    return (C and C.GetTtsVoices and C.GetTtsVoices()) or {}
+end
+
+function ns.Speak(text)
+    local C = C_VoiceChat
+    if not (C and C.SpeakText) or not text then return end
+    local p = activeProfile or {}
+    local voice = p.ttsVoice or DefaultTtsVoice()
+    if not voice then return end
+    local dest = (Enum and Enum.VoiceTtsDestination and Enum.VoiceTtsDestination.LocalPlayback) or 1
+    pcall(C.SpeakText, voice, text, dest, p.ttsRate or 0, p.ttsVolume or 100)
+end
+
+-- Play a cue's sound key, or speak `text` if the key is the special "speak".
+local function PlayOrSpeak(snd, channel, text)
+    if not snd then return end
+    if snd == "speak" then ns.Speak(text) else PlaySoundEntry(snd, channel) end
+end
+
+-- ---------------------------------------------------------------------
 -- Cue dispatch
 -- ---------------------------------------------------------------------
 local function FireCue(cue, spellName, eventKind)
@@ -410,7 +449,7 @@ local function FireCue(cue, spellName, eventKind)
     local label = cue.label or spellName or "Aura"
     local snd = (eventKind == "applied") and cue.soundApplied or cue.soundFaded
     if activeProfile.audioEnabled and snd then
-        PlaySoundEntry(snd, cue.channel or activeProfile.channel)
+        PlayOrSpeak(snd, cue.channel or activeProfile.channel, label .. " " .. verb)
     end
     local kind = (cue.kind == "debuff") and "debuff" or "buff"
     if cue.visual and VisCfg(kind).enabled and not ns.testMode then
@@ -427,7 +466,8 @@ function ns.PreviewCue(spellKey, eventKind)
     if not cue then return end
     eventKind = (eventKind == "faded") and "faded" or "applied"
     local snd = (eventKind == "applied") and cue.soundApplied or cue.soundFaded
-    if snd then PlaySoundEntry(snd, cue.channel or activeProfile.channel) end
+    local verb = (eventKind == "faded") and "faded" or "gained"
+    PlayOrSpeak(snd, cue.channel or activeProfile.channel, (cue.label or "Aura") .. " " .. verb)
     if cue.visual then
         local kind = (cue.kind == "debuff") and "debuff" or "buff"
         ShowVisual(kind, (cue.label or "Aura") .. " " .. (eventKind == "faded" and "faded" or "gained"))
@@ -674,7 +714,8 @@ local function RefreshPrivateAuras()
     if not activeProfile or not CueSenseDB or not CueSenseDB.audioEnabled then return end
     if not activeProfile.trackDebuffs then return end
     for key, cue in pairs(activeProfile.cues) do
-        if cue.kind == "debuff" and cue.applied and cue.soundApplied then
+        -- "speak" can't be registered as a private-aura sound (no TTS hook).
+        if cue.kind == "debuff" and cue.applied and cue.soundApplied and cue.soundApplied ~= "speak" then
             local sid = tonumber(key)
             local playable, isFile = ResolveSound(cue.soundApplied)
             if sid and playable then
