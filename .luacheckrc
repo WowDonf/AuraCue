@@ -33,12 +33,15 @@ read_globals = {
     "PlaySound", "PlaySoundFile", "SOUNDKIT",
     -- Text-to-speech
     "C_VoiceChat", "C_TTSSettings", "Enum",
-    -- Auras / spell data
-    "C_UnitAuras", "AuraUtil", "C_Spell", "IsPlayerSpell", "IsSpellKnown",
+    -- Auras / spell data (C_SpellBook.IsSpellKnown replaced the old globals;
+    -- the deprecated globals stay listed for the pre-11.2 fallback path)
+    "C_UnitAuras", "AuraUtil", "C_Spell", "C_SpellBook",
+    "IsPlayerSpell", "IsSpellKnown",
     -- Instance / unit identity (cue provenance: dungeon + source mob)
     "IsInInstance", "GetInstanceInfo", "UnitExists", "UnitName",
     -- Character / spec identity (per-character, per-spec profile keys)
-    "GetRealmName", "GetSpecialization", "GetSpecializationInfo",
+    "GetRealmName", "C_SpecializationInfo",
+    "GetSpecialization", "GetSpecializationInfo",
     -- Secret-value regime (Midnight 12.0+); nil on older clients
     "issecretvalue", "C_Secrets",
     -- Timing

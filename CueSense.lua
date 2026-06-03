@@ -119,6 +119,13 @@ local activeProfile
 local function P() return activeProfile end
 ns.P = P
 
+-- The spec/spellbook query globals were deprecated in 11.2.0 and moved into
+-- C_SpecializationInfo / C_SpellBook. Prefer the namespaced form; fall back to
+-- the old global so the addon also runs on pre-11.2 clients.
+local GetSpec     = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization) or GetSpecialization
+local GetSpecInfo = (C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfo) or GetSpecializationInfo
+local SpellKnown  = (C_SpellBook and C_SpellBook.IsSpellKnown) or IsSpellKnown or IsPlayerSpell
+
 -- Profile keys. CharKey identifies the character; ProfileKey adds the
 -- current specialization, so each spec keeps its own tracked auras and
 -- window setup.
@@ -127,9 +134,9 @@ local function CharKey()
 end
 
 local function CurrentSpecID()
-    local idx = GetSpecialization and GetSpecialization()
+    local idx = GetSpec and GetSpec()
     if idx then
-        local id = GetSpecializationInfo and GetSpecializationInfo(idx)
+        local id = GetSpecInfo and GetSpecInfo(idx)
         if id then return id end
     end
     return 0   -- no spec yet (low level) or API missing
@@ -140,9 +147,9 @@ local function ProfileKey()
 end
 
 function ns.CurrentSpecName()
-    local idx = GetSpecialization and GetSpecialization()
-    if idx then
-        local _, name = GetSpecializationInfo(idx)
+    local idx = GetSpec and GetSpec()
+    if idx and GetSpecInfo then
+        local _, name = GetSpecInfo(idx)
         if name then return name end
     end
     return "No spec"
@@ -817,13 +824,16 @@ local function RefreshPrivateAuras()
            and cue.soundApplied ~= "speak" and cue.when ~= "world" then
             local sid = tonumber(key)
             local playable, isFile = ResolveSound(cue.soundApplied)
-            if sid and playable then
+            -- The private-aura API only accepts a sound file (soundFileName /
+            -- soundFileID FileDataID), not a SOUNDKIT id, so kit-based sounds
+            -- can't be registered here. All shipped cues are file-based.
+            if sid and playable and isFile then
                 local opts = {
                     unitToken = "player",
                     spellID = sid,
                     outputChannel = string.lower(cue.channel or activeProfile.channel or "master"),
+                    soundFileName = playable,
                 }
-                if isFile then opts.soundFileName = playable else opts.soundKitID = playable end
                 local ok, id = pcall(A.AddPrivateAuraAppliedSound, opts)
                 if ok and id then privAuraSoundIDs[#privAuraSoundIDs + 1] = id end
             end
@@ -917,13 +927,12 @@ function ns.GetSeenAuras()
         local kind = info.kind or "buff"
         -- "Instance-trackable": debuffs (private-aura sound works in instances)
         -- and buffs that cast-track. We know a buff cast-tracks if we've seen
-        -- you cast that exact spell; IsPlayerSpell / IsSpellKnown are
-        -- best-effort fallbacks (unreliable when the aura id differs from the
-        -- cast id, which is why the cast record is the primary signal).
+        -- you cast that exact spell; C_SpellBook.IsSpellKnown is a best-effort
+        -- fallback (unreliable when the aura id differs from the cast id, which
+        -- is why the cast record is the primary signal).
         local instanceable = (kind == "debuff")
             or (castable[key] and true)
-            or (IsPlayerSpell and IsPlayerSpell(sid) and true)
-            or (IsSpellKnown and IsSpellKnown(sid) and true)
+            or (SpellKnown and SpellKnown(sid) and true)
             or false
         out[#out + 1] = {
             spellID = sid,

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.22.1
+
+- Full audit of the addon's API usage against the current 12.x client.
+  Moved the specialization queries to `C_SpecializationInfo` and the
+  spell-known check to `C_SpellBook` (the old globals were deprecated),
+  each with a fallback for older clients.
+- Private-aura sounds now register only for file-based cues, which is the
+  only form that API accepts (a sound-kit id was never valid there and was
+  being silently dropped). All shipped cue sounds are file-based, so
+  audible behavior is unchanged.
+
 ## v0.22.0
 
 - Fixed spoken cues being silent. The text-to-speech call was using an
