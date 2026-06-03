@@ -357,17 +357,23 @@ local function RestorePosition(kind)
 end
 ns.RestorePosition = RestorePosition
 
--- Optional full-screen edge glow, shared by both kinds (it's modal-ish, so
--- one is enough). Click-through; tints the standard low-health vignette.
+-- Optional full-screen edge glow, shared by both kinds. Built from four
+-- gradient strips we color ourselves (edge -> transparent inward), so the
+-- glow is EXACTLY the cue/text colour — not tinted by a baked-in texture.
+-- Click-through; the whole frame's alpha is faded out.
 local edge = CreateFrame("Frame", "CueSenseEdge", UIParent)
 edge:SetAllPoints(UIParent)
 edge:SetFrameStrata("FULLSCREEN_DIALOG")
 edge:EnableMouse(false)
 edge:Hide()
-edge.tex = edge:CreateTexture(nil, "OVERLAY")
-edge.tex:SetAllPoints()
-edge.tex:SetTexture("Interface\\FullScreenTextures\\LowHealth")
-edge.tex:SetBlendMode("ADD")
+
+local function MkStrip() local t = edge:CreateTexture(nil, "OVERLAY"); t:SetColorTexture(1, 1, 1, 1); return t end
+local eL, eR, eT, eB = MkStrip(), MkStrip(), MkStrip(), MkStrip()
+eL:SetPoint("TOPLEFT");     eL:SetPoint("BOTTOMLEFT");     eL:SetWidth(160)
+eR:SetPoint("TOPRIGHT");    eR:SetPoint("BOTTOMRIGHT");    eR:SetWidth(160)
+eT:SetPoint("TOPLEFT");     eT:SetPoint("TOPRIGHT");       eT:SetHeight(120)
+eB:SetPoint("BOTTOMLEFT");  eB:SetPoint("BOTTOMRIGHT");    eB:SetHeight(120)
+
 edge.fadeElapsed, edge.fadeDuration = 0, 0
 edge:SetScript("OnUpdate", function(self, dt)
     if self.fadeDuration <= 0 then return end
@@ -377,13 +383,18 @@ edge:SetScript("OnUpdate", function(self, dt)
         self.fadeDuration = 0
         self:Hide()
     else
-        self.tex:SetAlpha(remain / self.fadeDuration)
+        self:SetAlpha(remain / self.fadeDuration)
     end
 end)
 
 local function ShowEdge(color, duration)
-    edge.tex:SetVertexColor(color.r, color.g, color.b)
-    edge.tex:SetAlpha(1)
+    local r, g, b, A = color.r, color.g, color.b, 0.7
+    local solid, clear = CreateColor(r, g, b, A), CreateColor(r, g, b, 0)
+    eL:SetGradient("HORIZONTAL", solid, clear)   -- bright at left edge, fading right
+    eR:SetGradient("HORIZONTAL", clear, solid)   -- bright at right edge
+    eT:SetGradient("VERTICAL",   clear, solid)   -- bright at top
+    eB:SetGradient("VERTICAL",   solid, clear)   -- bright at bottom
+    edge:SetAlpha(1)
     edge.fadeElapsed, edge.fadeDuration = 0, (duration or 1.0)
     edge:Show()
 end

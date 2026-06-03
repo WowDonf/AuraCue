@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.20.1
+
+- The screen-edge flash now uses the exact cue color (same as the text). It
+  was previously tinting a red game texture, so the color came out wrong.
+
 ## v0.20.0
 
 - **Screen-edge flash.** Optionally flash the screen edges in the cue's color
