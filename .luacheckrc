@@ -1,4 +1,4 @@
--- Luacheck configuration for CueSense.
+-- Luacheck configuration for AuraCue.
 -- Run from repo root: luacheck *.lua
 
 std = "lua51"
@@ -8,16 +8,18 @@ max_line_length = 200
 
 -- Globals the addon defines, owns, or writes to.
 globals = {
-    -- Saved variables (managed by WoW from the TOC's SavedVariables field)
+    -- Saved variables (managed by WoW from the TOC's SavedVariables field).
+    -- CueSenseDB is the former name, kept only for the one-time data migration.
+    "AuraCueDB",
     "CueSenseDB",
     -- Slash command registration
-    "SLASH_CUESENSE1",
-    "SLASH_CUESENSE2",
+    "SLASH_AURACUE1",
+    "SLASH_AURACUE2",
     -- Addon compartment hooks (must be globals; referenced from the TOC's
     -- AddonCompartmentFunc* fields)
-    "CueSense_OnCompartmentClick",
-    "CueSense_OnCompartmentEnter",
-    "CueSense_OnCompartmentLeave",
+    "AuraCue_OnCompartmentClick",
+    "AuraCue_OnCompartmentEnter",
+    "AuraCue_OnCompartmentLeave",
     -- Blizzard tables we mutate
     "SlashCmdList",   -- /cue handler registration
 }

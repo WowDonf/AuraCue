@@ -1,23 +1,25 @@
 <!-- Project Summary (~150 chars, paste into the separate "Summary" field, NOT the description):
-Accessibility addon: turns your own buffs and debuffs into a sound, an on-screen flash, or both — an audio/visual bridge for deaf and blind players.
+Turn your own buffs and debuffs into sound, speech, or on-screen flashes — proc alerts, missing-buff reminders, and debuff warnings.
 -->
 
-# CueSense
+# AuraCue
 
-**Turn your own buffs and debuffs into a sound, an on-screen flash, or both.**
+**Turn your own buffs and debuffs into a sound, a spoken name, and/or an on-screen flash.**
 
-CueSense is an accessibility addon. It watches the auras *you* choose and
-fires a cue when each one is **gained** or **fades** — on whichever
-channel you need:
+AuraCue watches the auras *you* choose and fires a cue when each one is
+**gained** or **fades** — handy for proc alerts, missing-buff reminders, and
+debuff warnings. Pick whichever cue you want:
 
-- **Deaf / hard-of-hearing?** Watch a clear on-screen flash.
-- **Blind / low-vision?** Hear a distinct cue on the audio channel you pick.
-- Or run both at once.
+- **Sound** — a distinct tone on the audio channel you pick.
+- **Speech** — the aura's name spoken aloud (text-to-speech).
+- **On-screen flash** — center text and/or a screen-edge glow, with separate
+  colors for gained vs faded.
+- Or run several at once.
 
 ## Works inside raids, Mythic+, and PvP
 
 Midnight's addon restrictions hide enemy combat data, which is why broad
-trackers went dark this expansion. CueSense is built around that: it reads
+trackers went dark this expansion. AuraCue is built around that: it reads
 only **your own auras** — which stay readable in combat — so your cues keep
 firing where it matters. Nothing it does is combat-locked.
 

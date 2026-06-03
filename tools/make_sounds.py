@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Generate CueSense's bundled cue sounds.
+"""Generate AuraCue's bundled cue sounds.
 
 Synthesizes a small palette of short, perceptually-distinct tones and writes
 them as .mp3 into ../Sounds. Stdlib only for synthesis (wave + math); ffmpeg
 on PATH is required for the WAV -> MP3 step (WoW's PlaySoundFile takes .mp3 or
 .ogg, not .wav; mp3 via libmp3lame is the most broadly available encoder).
 
-The point of the palette is *distinctness*: a blind / low-vision player keys
-different auras to different tones, so each one must be easy to tell apart by
-ear — different pitch contour (rising / falling / flat), count (single /
-double / triple), and register (high / low).
+The point of the palette is *distinctness*: you key different auras to
+different tones, so each one must be easy to tell apart by ear — different
+pitch contour (rising / falling / flat), count (single / double / triple),
+and register (high / low).
 
 Re-run after editing the TONES table:  python3 tools/make_sounds.py
 """

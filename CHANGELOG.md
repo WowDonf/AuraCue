@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.25.0
+
+- **Renamed to AuraCue.** The addon is now a general-purpose personal
+  aura-alert tool — turn your own buffs and debuffs into sound, speech, or
+  on-screen flashes for proc alerts, missing-buff reminders, and debuff
+  warnings. Your existing settings and aura catalog carry over automatically
+  on first login. The `/cue` command still works (with `/auracue` as an
+  alias).
+
 ## v0.24.0
 
 - Sharing moved to its own page in the left-hand list, with separate
@@ -103,7 +112,7 @@
 ## v0.18.0
 
 - **Spoken cues (text-to-speech).** Pick "Speak the name (TTS)" as a buff's
-  or debuff's gained/faded sound and CueSense says the aura's name aloud — a
+  or debuff's gained/faded sound and AuraCue says the aura's name aloud — a
   big help for blind / low-vision players, and it works in instances for
   self-cast buffs. New Speech voice / rate / volume controls in the Audio
   section.
@@ -131,7 +140,7 @@
 
 - **Debuff cues in instances (private auras).** Most boss / mob debuffs in
   delves and dungeons are "private auras", which addons can't read — but the
-  game can play a sound when one is applied to you. CueSense now registers
+  game can play a sound when one is applied to you. AuraCue now registers
   your watched debuffs' Gained sound that way, so you get an audio cue for
   them in instanced content. (It's sound-only on apply there — no visual, no
   faded — since that's all the game exposes.)
@@ -186,14 +195,14 @@
 
 ## v0.12.0
 
-- **Minimap button.** Left-click opens options, right-click toggles CueSense
+- **Minimap button.** Left-click opens options, right-click toggles AuraCue
   on/off, and you can drag it around the minimap. Hide or show it with the
   "Show minimap button" option in General.
 
 ## v0.11.0
 
 - **Buffs and Debuffs are now separate pages in the settings list**, instead
-  of tabs inside one panel. The main CueSense page holds the general and
+  of tabs inside one panel. The main AuraCue page holds the general and
   audio settings; "Buffs" and "Debuffs" each get their own page (in the left
   sidebar) with that kind's window appearance and its watched-aura editor.
   Cleaner and less cluttered, and each picker only offers auras of its kind.
@@ -274,7 +283,7 @@
   tones — Rise, Fall, Ping, Beep, Double, Triple, Chirp, Thud — so you can
   give different auras different sounds and recognize them by ear. Replaces
   the previous built-in game sounds.
-- **Addon icon.** CueSense now has its own icon in the addon list and
+- **Addon icon.** AuraCue now has its own icon in the addon list and
   compartment button.
 
 ## v0.6.1
@@ -289,7 +298,7 @@
   kind at a time — switch with the Buffs / Debuffs tabs (each shows its
   count) instead of scrolling one combined list.
 - **Debuffs remember where they came from.** When an aura is first seen,
-  CueSense records the dungeon, and debuffs file themselves under that
+  AuraCue records the dungeon, and debuffs file themselves under that
   dungeon's heading automatically. The source mob is captured too and shown
   when you hover a row — though the game hides it inside many instances, so
   it can read "unknown" there.
@@ -332,7 +341,7 @@
 
 ## v0.3.1
 
-- Fix a Lua error on login ("attempt to index global 'CueSenseDB'") caused
+- Fix a Lua error on login ("attempt to index global 'AuraCueDB'") caused
   by the new spell-picker building its menu before saved variables loaded.
 
 ## v0.3.0
@@ -373,7 +382,7 @@ Initial release.
   (Master / SFX / Music / Ambience / Dialog) so cue volume can be balanced
   against game audio. Ships with six built-in tones; custom bundled sounds
   are planned.
-- **Built for Midnight (12.x) restrictions.** CueSense only reads the
+- **Built for Midnight (12.x) restrictions.** AuraCue only reads the
   player's own auras, which Blizzard keeps non-secret even in combat, and
   routes every value through a secret-value guard — so it works inside raid
   encounters, Mythic+, and PvP where addons can't read enemy combat data.

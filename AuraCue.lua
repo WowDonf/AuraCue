@@ -1,15 +1,15 @@
 -- =====================================================================
--- CueSense - Core
+-- AuraCue - Core
 -- =====================================================================
--- Accessibility cue layer for World of Warcraft: Midnight (12.x).
+-- Aura cue layer for World of Warcraft: Midnight (12.x).
 -- Translates the player's OWN auras into configurable cues — a sound,
--- an on-screen visual flash, or both — so a player who can't perceive
--- one channel still gets the other. This is the audio<->visual bridge.
+-- spoken name, and/or an on-screen flash — for proc alerts, missing-buff
+-- reminders, and debuff warnings.
 --
 -- DESIGN CONSTRAINT (Midnight "Secret Values"). Inside raid encounters,
 -- M+, and PvP the client masks combat data from addons: tainted code may
 -- not read, compare, or do arithmetic on a "secret" value. The player's
--- OWN auras and casts are explicitly NON-secret, so CueSense deliberately
+-- OWN auras and casts are explicitly NON-secret, so AuraCue deliberately
 -- stays on the safe side of that wall by tracking only player-owned data.
 -- Every value that *could* ever be secret is still routed through
 -- IsSecret() / Reveal() so a later enemy/whitelist phase can extend the
@@ -20,10 +20,10 @@
 local addonName, ns = ...
 ns.addonName = addonName
 
--- Chat helper: prefixes addon-originated lines with a teal [CueSense] tag.
+-- Chat helper: prefixes addon-originated lines with a teal [AuraCue] tag.
 -- Use for prefixed lines; raw print() for indented continuation lines.
 local function chatPrint(msg)
-    print("|cff33ddbb[CueSense]|r " .. msg)
+    print("|cff33ddbb[AuraCue]|r " .. msg)
 end
 ns.chatPrint = chatPrint
 
@@ -50,7 +50,7 @@ ns.Reveal = Reveal
 
 -- ---------------------------------------------------------------------
 -- Storage model:
---   CueSenseDB (account-wide) = {
+--   AuraCueDB (account-wide) = {
 --     seen     = { ... },                  -- WoW-wide catalog of observed auras
 --     profiles = { [key] = PROFILE, ... }, -- per-character tracked settings
 --   }
@@ -116,7 +116,7 @@ local DB_DEFAULTS = {
 }
 
 -- The active profile (resolved on login). All tracked-setting reads go
--- through this; `CueSenseDB.seen` stays account-wide.
+-- through this; `AuraCueDB.seen` stays account-wide.
 local activeProfile
 local function P() return activeProfile end
 ns.P = P
@@ -263,14 +263,14 @@ ns.ValidateRanges = ValidateRanges
 -- .mp3 under Sounds/.
 ns.SOUNDS = {
     { key = "speak",  label = "Speak the name (TTS)" },   -- special: text-to-speech
-    { key = "rise",   label = "Rise (two-tone up)",   file = "Interface\\AddOns\\CueSense\\Sounds\\rise.mp3" },
-    { key = "fall",   label = "Fall (two-tone down)", file = "Interface\\AddOns\\CueSense\\Sounds\\fall.mp3" },
-    { key = "ping",   label = "Ping (high)",          file = "Interface\\AddOns\\CueSense\\Sounds\\ping.mp3" },
-    { key = "beep",   label = "Beep (mid)",           file = "Interface\\AddOns\\CueSense\\Sounds\\beep.mp3" },
-    { key = "double", label = "Double beep",          file = "Interface\\AddOns\\CueSense\\Sounds\\double.mp3" },
-    { key = "triple", label = "Triple beep",          file = "Interface\\AddOns\\CueSense\\Sounds\\triple.mp3" },
-    { key = "chirp",  label = "Chirp (sweep up)",     file = "Interface\\AddOns\\CueSense\\Sounds\\chirp.mp3" },
-    { key = "thud",   label = "Thud (low)",           file = "Interface\\AddOns\\CueSense\\Sounds\\thud.mp3" },
+    { key = "rise",   label = "Rise (two-tone up)",   file = "Interface\\AddOns\\AuraCue\\Sounds\\rise.mp3" },
+    { key = "fall",   label = "Fall (two-tone down)", file = "Interface\\AddOns\\AuraCue\\Sounds\\fall.mp3" },
+    { key = "ping",   label = "Ping (high)",          file = "Interface\\AddOns\\AuraCue\\Sounds\\ping.mp3" },
+    { key = "beep",   label = "Beep (mid)",           file = "Interface\\AddOns\\AuraCue\\Sounds\\beep.mp3" },
+    { key = "double", label = "Double beep",          file = "Interface\\AddOns\\AuraCue\\Sounds\\double.mp3" },
+    { key = "triple", label = "Triple beep",          file = "Interface\\AddOns\\AuraCue\\Sounds\\triple.mp3" },
+    { key = "chirp",  label = "Chirp (sweep up)",     file = "Interface\\AddOns\\AuraCue\\Sounds\\chirp.mp3" },
+    { key = "thud",   label = "Thud (low)",           file = "Interface\\AddOns\\AuraCue\\Sounds\\thud.mp3" },
 }
 
 ns.CHANNELS = { "Master", "SFX", "Music", "Ambience", "Dialog" }
@@ -322,7 +322,7 @@ ns.VisCfg = VisCfg
 
 local function MakeOverlay(kind)
     local suffix = (kind == "debuff") and "Debuff" or "Buff"
-    local f = CreateFrame("Frame", "CueSenseOverlay" .. suffix, UIParent, "BackdropTemplate")
+    local f = CreateFrame("Frame", "AuraCueOverlay" .. suffix, UIParent, "BackdropTemplate")
     f.kind = kind
     f:SetSize(560, 90)
     f:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -393,7 +393,7 @@ ns.RestorePosition = RestorePosition
 -- gradient strips we color ourselves (edge -> transparent inward), so the
 -- glow is EXACTLY the cue/text colour — not tinted by a baked-in texture.
 -- Click-through; the whole frame's alpha is faded out.
-local edge = CreateFrame("Frame", "CueSenseEdge", UIParent)
+local edge = CreateFrame("Frame", "AuraCueEdge", UIParent)
 edge:SetAllPoints(UIParent)
 edge:SetFrameStrata("FULLSCREEN_DIALOG")
 edge:EnableMouse(false)
@@ -468,7 +468,7 @@ function ns.SetRepositionMode(kind, on)
         f:SetBackdropColor(0, 0, 0, 0.6)
         f:SetBackdropBorderColor(v.color.r, v.color.g, v.color.b, 1)
         f:EnableMouse(true)
-        f.text:SetText("CueSense " .. (kind == "debuff" and "debuffs" or "buffs") .. " — drag to move, X to close")
+        f.text:SetText("AuraCue " .. (kind == "debuff" and "debuffs" or "buffs") .. " — drag to move, X to close")
         f.text:SetTextColor(v.color.r, v.color.g, v.color.b)
         f:SetScale(v.scale or 1.0)
         f:SetAlpha(1)
@@ -634,13 +634,13 @@ local function ResolveSource(data, harmful)
 end
 
 local function RecordSeen(sid, data)
-    if not CueSenseDB.seen then CueSenseDB.seen = {} end
+    if not AuraCueDB.seen then AuraCueDB.seen = {} end
     local key = tostring(sid)
     local harmful = Reveal(data.isHarmful) and true or false
     -- isFromPlayerOrPlayerPet is a never-secret field: it tells us the aura
     -- was applied by the player (or pet), i.e. "cast by myself".
     local mine = Reveal(data.isFromPlayerOrPlayerPet) and true or false
-    local existing = CueSenseDB.seen[key]
+    local existing = AuraCueDB.seen[key]
     if existing then
         -- Backfill provenance we couldn't capture on first sighting (e.g.
         -- first seen in the open world, later re-seen inside a dungeon).
@@ -649,7 +649,7 @@ local function RecordSeen(sid, data)
         if existing.mine == nil then existing.mine = mine end
         return
     end
-    CueSenseDB.seen[key] = {
+    AuraCueDB.seen[key] = {
         name    = Reveal(data.name) or C_Spell.GetSpellName(sid),
         icon    = Reveal(data.icon),
         kind    = harmful and "debuff" or "buff",
@@ -835,7 +835,7 @@ local function RefreshPrivateAuras()
         pcall(A.RemovePrivateAuraAppliedSound, id)
     end
     wipe(privAuraSoundIDs)
-    if not activeProfile or not CueSenseDB or not CueSenseDB.audioEnabled then return end
+    if not activeProfile or not AuraCueDB or not AuraCueDB.audioEnabled then return end
     if not activeProfile.trackDebuffs then return end
     for key, cue in pairs(activeProfile.cues) do
         -- "speak" can't be registered as a private-aura sound (no TTS hook),
@@ -869,7 +869,7 @@ function ns.AddCue(spellID)
     spellID = tonumber(spellID)
     if not spellID then return false end
     local name = C_Spell.GetSpellName(spellID)
-    local seen = CueSenseDB.seen[tostring(spellID)]
+    local seen = AuraCueDB.seen[tostring(spellID)]
     local kind = (seen and seen.kind) or "buff"
     local dungeon = seen and seen.dungeon
     local source = seen and seen.source
@@ -940,8 +940,8 @@ end
 -- name. Returns { spellID, name, icon, secret }.
 function ns.GetSeenAuras()
     local out = {}
-    local seen = CueSenseDB and CueSenseDB.seen or {}
-    local castable = (CueSenseDB and CueSenseDB.castable) or {}
+    local seen = AuraCueDB and AuraCueDB.seen or {}
+    local castable = (AuraCueDB and AuraCueDB.castable) or {}
     for key, info in pairs(seen) do
         local sid = tonumber(key)
         local kind = info.kind or "buff"
@@ -1022,13 +1022,13 @@ local function SetActiveProfile()
     -- Migrate a pre-per-spec profile (keyed by character only) into the
     -- current spec the first time we see this spec.
     local charKey = CharKey()
-    if CueSenseDB.profiles[charKey] and not CueSenseDB.profiles[key] then
-        CueSenseDB.profiles[key] = CueSenseDB.profiles[charKey]
-        CueSenseDB.profiles[charKey] = nil
+    if AuraCueDB.profiles[charKey] and not AuraCueDB.profiles[key] then
+        AuraCueDB.profiles[key] = AuraCueDB.profiles[charKey]
+        AuraCueDB.profiles[charKey] = nil
     end
 
-    CueSenseDB.profiles[key] = CueSenseDB.profiles[key] or {}
-    activeProfile = CueSenseDB.profiles[key]
+    AuraCueDB.profiles[key] = AuraCueDB.profiles[key] or {}
+    activeProfile = AuraCueDB.profiles[key]
     MigrateVisual(activeProfile)
     MergeDefaults(activeProfile, PROFILE_DEFAULTS)
     ValidateRanges(activeProfile)
@@ -1044,15 +1044,15 @@ local function InitProfile()
     -- it into the current spec.
     local hasFlat = false
     for _, k in ipairs(SETTING_KEYS) do
-        if CueSenseDB[k] ~= nil then hasFlat = true; break end
+        if AuraCueDB[k] ~= nil then hasFlat = true; break end
     end
     if hasFlat then
         local charKey = CharKey()
-        local prof = CueSenseDB.profiles[charKey] or {}
+        local prof = AuraCueDB.profiles[charKey] or {}
         for _, k in ipairs(SETTING_KEYS) do
-            if CueSenseDB[k] ~= nil then prof[k] = CueSenseDB[k]; CueSenseDB[k] = nil end
+            if AuraCueDB[k] ~= nil then prof[k] = AuraCueDB[k]; AuraCueDB[k] = nil end
         end
-        CueSenseDB.profiles[charKey] = prof
+        AuraCueDB.profiles[charKey] = prof
     end
 
     SetActiveProfile()
@@ -1065,8 +1065,16 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
         local name = ...
         if name ~= addonName then return end
-        CueSenseDB = CueSenseDB or {}
-        MergeDefaults(CueSenseDB, DB_DEFAULTS)
+        -- One-time carry-over from the addon's former name. CueSenseDB is
+        -- still listed in the TOC SavedVariables so the old data loads; this
+        -- adopts it, then clears it. The extra SavedVariables entry can be
+        -- dropped in a later version once users have migrated.
+        if not AuraCueDB and CueSenseDB then
+            AuraCueDB = CueSenseDB
+            CueSenseDB = nil
+        end
+        AuraCueDB = AuraCueDB or {}
+        MergeDefaults(AuraCueDB, DB_DEFAULTS)
 
     elseif event == "PLAYER_LOGIN" then
         InitProfile()
@@ -1099,9 +1107,9 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         local unit, _, spellID = ...
         if unit == "player" and spellID then
-            if CueSenseDB then
-                CueSenseDB.castable = CueSenseDB.castable or {}
-                CueSenseDB.castable[tostring(spellID)] = true
+            if AuraCueDB then
+                AuraCueDB.castable = AuraCueDB.castable or {}
+                AuraCueDB.castable[tostring(spellID)] = true
             end
             OnSelfCast(spellID)
         end
@@ -1199,7 +1207,7 @@ function ns.ExportProfile()
 end
 
 function ns.ExportCatalog()
-    return CATALOG_MAGIC .. base64enc(serialize(CueSenseDB.seen or {}))
+    return CATALOG_MAGIC .. base64enc(serialize(AuraCueDB.seen or {}))
 end
 
 -- Import either a profile or a catalog string. Returns (ok, message).
@@ -1208,7 +1216,7 @@ function ns.ImportShare(str)
     if str == "" then return false, "Nothing to import." end
     local magic = str:sub(1, 5)
     if magic ~= PROFILE_MAGIC and magic ~= CATALOG_MAGIC then
-        return false, "That isn't a CueSense string."
+        return false, "That isn't a AuraCue string."
     end
     local payload = base64dec(str:sub(6))
     if not payload then return false, "Could not decode the string." end
@@ -1221,7 +1229,7 @@ function ns.ImportShare(str)
         ValidateRanges(data)
         if type(data.cues) ~= "table" then data.cues = {} end
         BackfillCues(data.cues)
-        CueSenseDB.profiles[ProfileKey()] = data
+        AuraCueDB.profiles[ProfileKey()] = data
         activeProfile = data
         RestorePosition("buff")
         RestorePosition("debuff")
@@ -1233,11 +1241,11 @@ function ns.ImportShare(str)
         for _ in pairs(data.cues) do n = n + 1 end
         return true, "Imported a profile (" .. n .. " auras) into this spec."
     else
-        CueSenseDB.seen = CueSenseDB.seen or {}
+        AuraCueDB.seen = AuraCueDB.seen or {}
         local added = 0
         for k, v in pairs(data) do
-            if type(v) == "table" and CueSenseDB.seen[k] == nil then
-                CueSenseDB.seen[k] = v
+            if type(v) == "table" and AuraCueDB.seen[k] == nil then
+                AuraCueDB.seen[k] = v
                 added = added + 1
             end
         end
@@ -1248,8 +1256,8 @@ end
 
 function ns.SeenCount()
     local n = 0
-    if CueSenseDB and CueSenseDB.seen then
-        for _ in pairs(CueSenseDB.seen) do n = n + 1 end
+    if AuraCueDB and AuraCueDB.seen then
+        for _ in pairs(AuraCueDB.seen) do n = n + 1 end
     end
     return n
 end
@@ -1258,14 +1266,14 @@ end
 -- secret in instanced content (Reveal returns nil), so this gathers mostly in
 -- the open world / on target dummies. Returns the number of NEW auras added.
 function ns.GatherAuras()
-    if not CueSenseDB then return 0 end
-    CueSenseDB.seen = CueSenseDB.seen or {}
+    if not AuraCueDB then return 0 end
+    AuraCueDB.seen = AuraCueDB.seen or {}
     local before = ns.SeenCount()
     local function rec(data, harmful)
         if not data then return false end
         local sid = Reveal(data.spellId)
-        if sid and not CueSenseDB.seen[tostring(sid)] then
-            CueSenseDB.seen[tostring(sid)] = {
+        if sid and not AuraCueDB.seen[tostring(sid)] then
+            AuraCueDB.seen[tostring(sid)] = {
                 name = Reveal(data.name) or C_Spell.GetSpellName(sid),
                 icon = Reveal(data.icon),
                 kind = harmful and "debuff" or "buff",
@@ -1290,10 +1298,10 @@ end
 -- ---------------------------------------------------------------------
 -- Slash commands
 -- ---------------------------------------------------------------------
-SLASH_CUESENSE1 = "/cue"
-SLASH_CUESENSE2 = "/cuesense"
+SLASH_AURACUE1 = "/cue"
+SLASH_AURACUE2 = "/auracue"
 
-SlashCmdList["CUESENSE"] = function(msg)
+SlashCmdList["AURACUE"] = function(msg)
     local ok, err = pcall(function()
         msg = (msg or ""):lower():trim()
         local cmd, rest = msg:match("^(%S+)%s*(.-)$")
@@ -1359,7 +1367,7 @@ SlashCmdList["CUESENSE"] = function(msg)
             chatPrint("overlay positions reset.")
 
         elseif cmd == "forget" then
-            CueSenseDB.seen = {}
+            AuraCueDB.seen = {}
             chatPrint("cleared the remembered-aura list (it refills as auras appear on you).")
             ns.RefreshOptions()
 
@@ -1378,12 +1386,12 @@ SlashCmdList["CUESENSE"] = function(msg)
             local TS = C_TTSSettings
             if TS and TS.GetSpeechVolume then
                 local okv, vol = pcall(TS.GetSpeechVolume)
-                chatPrint("  Accessibility TTS volume = " .. (okv and tostring(vol) or "?")
-                    .. "  (if 0, speech is silent no matter what CueSense sends)")
+                chatPrint("  Game speech volume = " .. (okv and tostring(vol) or "?")
+                    .. "  (if 0, speech is silent no matter what AuraCue sends)")
             end
             if C and C.SpeakText and v then
                 -- 12.0.0 signature: SpeakText(voiceID, text, rate, volume).
-                local ok, err = pcall(C.SpeakText, v, "CueSense speech test", 0, 100)
+                local ok, err = pcall(C.SpeakText, v, "AuraCue speech test", 0, 100)
                 chatPrint("  SpeakText ok=" .. tostring(ok) .. (err and (" err=" .. tostring(err)) or ""))
             end
 
@@ -1404,7 +1412,7 @@ SlashCmdList["CUESENSE"] = function(msg)
 
         elseif cmd == "status" then
             local seenN = 0
-            for _ in pairs(CueSenseDB.seen) do seenN = seenN + 1 end
+            for _ in pairs(AuraCueDB.seen) do seenN = seenN + 1 end
             chatPrint("status:")
             print("  enabled:        " .. tostring(activeProfile.enabled))
             print("  watched auras:  " .. ns.CueCount())
@@ -1440,7 +1448,7 @@ end
 -- ---------------------------------------------------------------------
 -- Addon compartment hooks (wired via the AddonCompartmentFunc* TOC fields)
 -- ---------------------------------------------------------------------
-function CueSense_OnCompartmentClick(_, button)
+function AuraCue_OnCompartmentClick(_, button)
     if button == "RightButton" then
         activeProfile.enabled = not activeProfile.enabled
         chatPrint(activeProfile.enabled and "|cff00ff00enabled|r" or "|cffff0000disabled|r")
@@ -1449,9 +1457,9 @@ function CueSense_OnCompartmentClick(_, button)
     end
 end
 
-function CueSense_OnCompartmentEnter(_, button)
+function AuraCue_OnCompartmentEnter(_, button)
     GameTooltip:SetOwner(button, "ANCHOR_LEFT")
-    GameTooltip:SetText("CueSense", 0.2, 0.86, 0.75)
+    GameTooltip:SetText("AuraCue", 0.2, 0.86, 0.75)
     GameTooltip:AddLine(activeProfile.enabled and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r", 1, 1, 1)
     GameTooltip:AddLine("Watching " .. ns.CueCount() .. " aura(s)", 1, 1, 1)
     GameTooltip:AddLine(" ")
@@ -1460,6 +1468,6 @@ function CueSense_OnCompartmentEnter(_, button)
     GameTooltip:Show()
 end
 
-function CueSense_OnCompartmentLeave()
+function AuraCue_OnCompartmentLeave()
     GameTooltip:Hide()
 end

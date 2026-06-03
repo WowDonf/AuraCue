@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate CueSense's addon icon with Pillow.
+"""Generate AuraCue's addon icon with Pillow.
 
 Draws a "pulse" motif — a glowing dot with two emanating rings — in the
 addon's teal on a dark rounded square, at 4x supersample then downscaled

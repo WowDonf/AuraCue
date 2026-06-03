@@ -1,5 +1,5 @@
 -- =====================================================================
--- CueSense - Minimap.lua
+-- AuraCue - Minimap.lua
 -- =====================================================================
 -- LibDataBroker launcher + LibDBIcon minimap button.
 --
@@ -11,7 +11,7 @@
 -- =====================================================================
 local _, ns = ...
 
-local ICON_NAME = "CueSense"
+local ICON_NAME = "AuraCue"
 
 local LDB     = LibStub and LibStub("LibDataBroker-1.1", true)
 local LDBIcon = LibStub and LibStub("LibDBIcon-1.0",      true)
@@ -19,23 +19,23 @@ local LDBIcon = LibStub and LibStub("LibDBIcon-1.0",      true)
 -- Defined even without the libraries so the options "Show minimap button"
 -- checkbox still toggles the saved preference in a lib-less dev checkout.
 function ns.SetMinimapShown(shown)
-    if not (CueSenseDB and CueSenseDB.minimap) then return end
-    CueSenseDB.minimap.hide = not shown
+    if not (AuraCueDB and AuraCueDB.minimap) then return end
+    AuraCueDB.minimap.hide = not shown
     if LDBIcon then
         if shown then LDBIcon:Show(ICON_NAME) else LDBIcon:Hide(ICON_NAME) end
     end
 end
 
 function ns.IsMinimapShown()
-    return not (CueSenseDB and CueSenseDB.minimap and CueSenseDB.minimap.hide)
+    return not (AuraCueDB and AuraCueDB.minimap and AuraCueDB.minimap.hide)
 end
 
 if not LDB or not LDBIcon then return end   -- no libraries: no button, no error
 
 local launcher = LDB:NewDataObject(ICON_NAME, {
     type = "launcher",
-    text = "CueSense",
-    icon = "Interface\\AddOns\\CueSense\\Icon.png",
+    text = "AuraCue",
+    icon = "Interface\\AddOns\\AuraCue\\Icon.png",
 
     OnClick = function(_, button)
         if button == "RightButton" then
@@ -55,7 +55,7 @@ local launcher = LDB:NewDataObject(ICON_NAME, {
     end,
 
     OnTooltipShow = function(tt)
-        tt:AddLine("CueSense", 0.20, 0.86, 0.75)
+        tt:AddLine("AuraCue", 0.20, 0.86, 0.75)
         local p = ns.P and ns.P()
         if p then
             tt:AddLine(p.enabled and "|cff00ff00Enabled|r" or "|cffff0000Disabled|r")
@@ -75,7 +75,7 @@ local launcher = LDB:NewDataObject(ICON_NAME, {
 local init = CreateFrame("Frame")
 init:RegisterEvent("PLAYER_LOGIN")
 init:SetScript("OnEvent", function()
-    CueSenseDB = CueSenseDB or {}
-    CueSenseDB.minimap = CueSenseDB.minimap or { hide = false }
-    LDBIcon:Register(ICON_NAME, launcher, CueSenseDB.minimap)
+    AuraCueDB = AuraCueDB or {}
+    AuraCueDB.minimap = AuraCueDB.minimap or { hide = false }
+    LDBIcon:Register(ICON_NAME, launcher, AuraCueDB.minimap)
 end)

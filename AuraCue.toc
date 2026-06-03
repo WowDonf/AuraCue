@@ -1,0 +1,20 @@
+## Interface: 120005
+## Title: AuraCue
+## Notes: Turn your own buffs and debuffs into sound, speech, or on-screen flashes — proc alerts, missing-buff reminders, and debuff warnings.
+## Author: WowDonf
+## Version: v0.25.0
+## SavedVariables: AuraCueDB CueSenseDB
+## IconTexture: Interface\AddOns\AuraCue\Icon.png
+## Category-enUS: AuraCue
+## AddonCompartmentFunc: AuraCue_OnCompartmentClick
+## AddonCompartmentFuncOnEnter: AuraCue_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: AuraCue_OnCompartmentLeave
+
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
+
+AuraCue.lua
+Options.lua
+Minimap.lua

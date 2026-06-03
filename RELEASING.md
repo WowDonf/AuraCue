@@ -8,7 +8,7 @@ line, and CHANGELOG entries all use the `v` prefix.
 
 1. Add a new entry at the top of `CHANGELOG.md` for the version you're
    about to release.
-2. Bump `## Version:` in `CueSense.toc` to match the tag you'll push.
+2. Bump `## Version:` in `AuraCue.toc` to match the tag you'll push.
 3. Sanity-check Lua syntax locally:
 
    ```bash
@@ -32,8 +32,8 @@ The workflow `.github/workflows/release.yml` triggers on tag push and runs
 `BigWigsMods/packager@v2`. It will:
 
 - Read `.pkgmeta`, drop the paths listed under `ignore:`, and package the
-  remaining files into a `CueSense/` folder inside the zip.
-- Generate a release zip named `CueSense-v0.1.1.zip`.
+  remaining files into a `AuraCue/` folder inside the zip.
+- Generate a release zip named `AuraCue-v0.1.1.zip`.
 - Upload to CurseForge (`CF_API_KEY`), Wago (`WAGO_API_TOKEN`), and create
   a GitHub Release attached to the tag (`GITHUB_TOKEN`, auto-provided).
 - Use `CHANGELOG.md` as the release-notes body (see the `manual-changelog:`
@@ -52,7 +52,7 @@ Configure under Settings → Secrets and variables → Actions:
 ## Project IDs
 
 Once the CurseForge and Wago projects exist, add these lines to
-`CueSense.toc` so the packager publishes to the right projects:
+`AuraCue.toc` so the packager publishes to the right projects:
 
 ```
 ## X-Curse-Project-ID: 123456

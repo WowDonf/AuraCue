@@ -1,14 +1,16 @@
-# CueSense
+# AuraCue
 
-An accessibility addon for World of Warcraft (Midnight, 12.x). CueSense
-turns your own buffs and debuffs into a **sound**, an **on-screen flash**,
-or **both** — an audio↔visual bridge so a player who can't perceive one
-channel still gets the cue on the other.
+A personal aura-alert addon for World of Warcraft (Midnight, 12.x). AuraCue
+turns your own buffs and debuffs into a **sound**, a **spoken name**, and/or
+an **on-screen flash** — for proc alerts, missing-buff reminders, and debuff
+warnings.
 
-- **Deaf / hard-of-hearing:** see a flash — center text and/or a screen-edge
-  glow — when a tracked aura is gained or fades.
-- **Blind / low-vision:** hear a distinct tone, or have the aura's name
-  **spoken aloud** (text-to-speech), routed through the audio channel you pick.
+- **Sound:** play a distinct tone when a tracked aura is gained or fades, on
+  the audio channel you pick.
+- **Speech:** have the aura's name **spoken aloud** (text-to-speech) instead
+  of, or alongside, a tone.
+- **On-screen flash:** center text and/or a screen-edge glow, with separate
+  colors for gained vs faded.
 
 Each aura can also be limited to fire only in combat, only in instances, or
 only in the open world.
@@ -17,7 +19,7 @@ only in the open world.
 
 Midnight (patch 12.0) hides most combat data from addons behind "secret
 values" during raid encounters, Mythic+, and PvP — which is why broad
-hazard-tracking addons lost almost all their coverage. CueSense sidesteps
+hazard-tracking addons lost almost all of their coverage. AuraCue sidesteps
 that wall on purpose: it only reads **your own auras**, which Blizzard
 keeps readable even in combat, and guards every value it touches so it
 never errors on a masked one. Sound playback and the on-screen overlay
@@ -59,7 +61,7 @@ Tip: look up spell IDs on Wowhead — the ID is in the page URL.
 - **Audio cue:** a master "Play sound cues" switch and the channel sounds
   route through. Any aura can be set to "None (silent)" for visual-only.
 - **Buffs vs debuffs:** track buffs and debuffs independently, and manage
-  each on its own page in the settings list (CueSense ▸ Buffs / Debuffs).
+  each on its own page in the settings list (AuraCue ▸ Buffs / Debuffs).
   Debuffs file themselves under the dungeon they were
   first seen in; hover a row to see its source mob (when the game exposes
   it). Type a Group name on any row to re-file it under your own heading.
@@ -75,8 +77,8 @@ Tip: look up spell IDs on Wowhead — the ID is in the page URL.
 
 ## Profiles & sharing
 
-Settings are saved per character and specialization. The main page's
-**Sharing** section exports the current spec's profile, or the whole aura
+Settings are saved per character and specialization. The **Sharing** page
+(in the settings list) exports the current spec's profile, or the whole aura
 catalog, to a string you can save or share — and imports one back. The aura
 catalog itself is account-wide (shared across all your characters).
 

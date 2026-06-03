@@ -1,7 +1,7 @@
 -- =====================================================================
--- CueSense - Options panels (Settings canvas + subcategories)
+-- AuraCue - Options panels (Settings canvas + subcategories)
 -- =====================================================================
--- Three registered panels: a main "CueSense" page (General + Audio) and
+-- Three registered panels: a main "AuraCue" page (General + Audio) and
 -- two subcategories in the left list, "Buffs" and "Debuffs", each holding
 -- that kind's window appearance and its watched-aura editor. All tracked-
 -- setting reads go through ns.P() (the active profile); the account-wide
@@ -293,17 +293,17 @@ end
 -- ---------------------------------------------------------------------
 -- Main panel: General + Audio.
 -- ---------------------------------------------------------------------
-local main = NewPanel("CueSense")
+local main = NewPanel("AuraCue")
 do
     local content, LEFT = main.content, main.LEFT
 
     local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
     titleFS:SetPoint("TOPLEFT", LEFT, main.y)
-    titleFS:SetText("CueSense")
+    titleFS:SetText("AuraCue")
     main.y = main.y - 22
     local subFS = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     subFS:SetPoint("TOPLEFT", LEFT, main.y)
-    subFS:SetText("Turn your own auras into sound and/or on-screen cues. Configure buffs and debuffs in the sections to the left.")
+    subFS:SetText("Turn your own buffs and debuffs into sound, speech, and/or on-screen flashes. Configure them in the sections to the left.")
     main.y = main.y - 18
 
     -- Per-spec profile indicator.
@@ -319,7 +319,7 @@ do
     main.y = main.y - 18
 
     main.Header("Global Settings")
-    main.Check("Enable CueSense",
+    main.Check("Enable AuraCue",
         function() return ns.P().enabled end,
         function(v) ns.P().enabled = v end)
     main.Check("Track buffs (helpful auras)",
@@ -337,8 +337,8 @@ do
         function() return ns.P().audioEnabled end,
         function(v) ns.P().audioEnabled = v end)
     main.Desc("Master switch for all cue sounds. Each aura's gained / faded sound is set in " ..
-        "its section; this is the audio channel they route through, so blind / low-vision " ..
-        "players can balance cue volume against game audio.")
+        "its section; this is the audio channel they route through, so you can balance cue " ..
+        "volume against game audio.")
     local channelDropdown = main.Dropdown("Audio channel", 200)
     channelDropdown:SetDefaultText("Choose a channel")
     channelDropdown:SetupMenu(function(_, root)
@@ -358,7 +358,7 @@ do
     main.Button("Play test cue", 160, function() ns.PlayTestCue() end)
 
     main.Desc("Spoken cues: pick \"Speak the name (TTS)\" as a buff's or debuff's sound to have " ..
-        "CueSense say its name aloud. These settings control the voice.")
+        "AuraCue say its name aloud. These settings control the voice.")
     local voiceDD = main.Dropdown("Speech voice", 240)
     voiceDD:SetDefaultText("Default voice")
     voiceDD:SetupMenu(function(_, root)
@@ -387,7 +387,7 @@ do
     main.Slider("Speech volume", 0, 100, 5, "%d",
         function() return ns.P().ttsVolume end,
         function(v) ns.P().ttsVolume = v end)
-    main.Button("Test speech", 160, function() ns.Speak("CueSense speech test") end)
+    main.Button("Test speech", 160, function() ns.Speak("AuraCue speech test") end)
 
     content:SetHeight(-main.y + 20)
 end
@@ -806,7 +806,7 @@ local function BuildKindPanel(kind)
                             local c = row.spellID and ns.P().cues[row.spellID]
                             if not c then return end
                             c[field] = key
-                            if key == "speak" then ns.Speak("CueSense") else ns.PlaySoundEntry(key, c.channel or ns.P().channel) end
+                            if key == "speak" then ns.Speak("AuraCue") else ns.PlaySoundEntry(key, c.channel or ns.P().channel) end
                             if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end
                             C_Timer.After(0, function() dd:GenerateMenu() end)
                         end)
@@ -1016,7 +1016,7 @@ end
 -- ---------------------------------------------------------------------
 local mainCategory
 if Settings and Settings.RegisterCanvasLayoutCategory then
-    mainCategory = Settings.RegisterCanvasLayoutCategory(main.panel, "CueSense")
+    mainCategory = Settings.RegisterCanvasLayoutCategory(main.panel, "AuraCue")
     Settings.RegisterAddOnCategory(mainCategory)
     if Settings.RegisterCanvasLayoutSubcategory then
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs")
