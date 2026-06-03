@@ -73,20 +73,22 @@ local PROFILE_DEFAULTS = {
     -- their own size / position / color / duration.
     visual = {
         buff = {
-            enabled  = true,
-            color    = { r = 0.20, g = 0.86, b = 0.75 },   -- teal
-            scale    = 1.0,
-            duration = 1.5,
-            locked   = true,
-            position = nil,      -- { point, relativePoint, x, y }
+            enabled   = true,
+            color     = { r = 0.20, g = 0.86, b = 0.75 },   -- teal
+            scale     = 1.0,
+            duration  = 1.5,
+            locked    = true,
+            position  = nil,      -- { point, relativePoint, x, y }
+            edgeFlash = false,    -- also flash the screen edges
         },
         debuff = {
-            enabled  = true,
-            color    = { r = 1.00, g = 0.45, b = 0.30 },   -- warm red-orange
-            scale    = 1.2,
-            duration = 2.0,
-            locked   = true,
-            position = nil,
+            enabled   = true,
+            color     = { r = 1.00, g = 0.45, b = 0.30 },   -- warm red-orange
+            scale     = 1.2,
+            duration  = 2.0,
+            locked    = true,
+            position  = nil,
+            edgeFlash = false,
         },
     },
     -- Watched auras, keyed by spellID-as-string -> cue config.
@@ -355,6 +357,37 @@ local function RestorePosition(kind)
 end
 ns.RestorePosition = RestorePosition
 
+-- Optional full-screen edge glow, shared by both kinds (it's modal-ish, so
+-- one is enough). Click-through; tints the standard low-health vignette.
+local edge = CreateFrame("Frame", "CueSenseEdge", UIParent)
+edge:SetAllPoints(UIParent)
+edge:SetFrameStrata("FULLSCREEN_DIALOG")
+edge:EnableMouse(false)
+edge:Hide()
+edge.tex = edge:CreateTexture(nil, "OVERLAY")
+edge.tex:SetAllPoints()
+edge.tex:SetTexture("Interface\\FullScreenTextures\\LowHealth")
+edge.tex:SetBlendMode("ADD")
+edge.fadeElapsed, edge.fadeDuration = 0, 0
+edge:SetScript("OnUpdate", function(self, dt)
+    if self.fadeDuration <= 0 then return end
+    self.fadeElapsed = self.fadeElapsed + dt
+    local remain = self.fadeDuration - self.fadeElapsed
+    if remain <= 0 then
+        self.fadeDuration = 0
+        self:Hide()
+    else
+        self.tex:SetAlpha(remain / self.fadeDuration)
+    end
+end)
+
+local function ShowEdge(color, duration)
+    edge.tex:SetVertexColor(color.r, color.g, color.b)
+    edge.tex:SetAlpha(1)
+    edge.fadeElapsed, edge.fadeDuration = 0, (duration or 1.0)
+    edge:Show()
+end
+
 local function ShowVisual(kind, message)
     local f = overlays[kind]
     local v = VisCfg(kind)
@@ -364,6 +397,7 @@ local function ShowVisual(kind, message)
     f:SetAlpha(1)
     f.fadeElapsed, f.fadeDuration = 0, (v.duration or 1.5)
     f:Show()
+    if v.edgeFlash then ShowEdge(v.color, v.duration) end
 end
 ns.ShowVisual = ShowVisual
 

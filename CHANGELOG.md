@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.20.0
+
+- **Screen-edge flash.** Optionally flash the screen edges in the cue's color
+  when a watched aura changes — a high-visibility, peripheral-vision cue on
+  top of the center text. Toggle it per buff / debuff window.
+
 ## v0.19.0
 
 - **Per-cue conditions.** Each watched aura has a "When" button (cycles

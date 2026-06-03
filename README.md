@@ -5,10 +5,13 @@ turns your own buffs and debuffs into a **sound**, an **on-screen flash**,
 or **both** — an audio↔visual bridge so a player who can't perceive one
 channel still gets the cue on the other.
 
-- **Deaf / hard-of-hearing:** see a flash when a tracked aura is gained or
-  fades.
-- **Blind / low-vision:** hear a distinct cue routed through the audio
-  channel you choose.
+- **Deaf / hard-of-hearing:** see a flash — center text and/or a screen-edge
+  glow — when a tracked aura is gained or fades.
+- **Blind / low-vision:** hear a distinct tone, or have the aura's name
+  **spoken aloud** (text-to-speech), routed through the audio channel you pick.
+
+Each aura can also be limited to fire only in combat, only in instances, or
+only in the open world.
 
 ## Why it works inside instances
 
