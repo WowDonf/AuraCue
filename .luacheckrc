@@ -34,7 +34,7 @@ read_globals = {
     -- Text-to-speech
     "C_VoiceChat", "Enum",
     -- Auras / spell data
-    "C_UnitAuras", "AuraUtil", "C_Spell", "IsPlayerSpell",
+    "C_UnitAuras", "AuraUtil", "C_Spell", "IsPlayerSpell", "IsSpellKnown",
     -- Instance / unit identity (cue provenance: dungeon + source mob)
     "IsInInstance", "GetInstanceInfo", "UnitExists", "UnitName",
     -- Character / spec identity (per-character, per-spec profile keys)

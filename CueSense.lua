@@ -102,6 +102,9 @@ local DB_DEFAULTS = {
     -- it accumulates across every character and can be shared.
     seen = {},
     profiles = {},
+    -- Spell IDs the player has been seen to cast (account-wide). Used to mark
+    -- catalog auras as cast-trackable (i.e. they work in instances).
+    castable = {},
     -- LibDBIcon's button state (position + hide); account-wide.
     minimap = { hide = false },
 }
@@ -871,14 +874,20 @@ end
 function ns.GetSeenAuras()
     local out = {}
     local seen = CueSenseDB and CueSenseDB.seen or {}
+    local castable = (CueSenseDB and CueSenseDB.castable) or {}
     for key, info in pairs(seen) do
         local sid = tonumber(key)
         local kind = info.kind or "buff"
         -- "Instance-trackable": debuffs (private-aura sound works in instances)
-        -- and buffs you can cast (cast-tracked). Other buffs are open-world
-        -- only, since the game hides their reads in instanced combat.
+        -- and buffs that cast-track. We know a buff cast-tracks if we've seen
+        -- you cast that exact spell; IsPlayerSpell / IsSpellKnown are
+        -- best-effort fallbacks (unreliable when the aura id differs from the
+        -- cast id, which is why the cast record is the primary signal).
         local instanceable = (kind == "debuff")
-            or (IsPlayerSpell and IsPlayerSpell(sid) and true) or false
+            or (castable[key] and true)
+            or (IsPlayerSpell and IsPlayerSpell(sid) and true)
+            or (IsSpellKnown and IsSpellKnown(sid) and true)
+            or false
         out[#out + 1] = {
             spellID = sid,
             name    = info.name or C_Spell.GetSpellName(sid) or ("Spell " .. key),
@@ -1023,7 +1032,13 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
 
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         local unit, _, spellID = ...
-        if unit == "player" and spellID then OnSelfCast(spellID) end
+        if unit == "player" and spellID then
+            if CueSenseDB then
+                CueSenseDB.castable = CueSenseDB.castable or {}
+                CueSenseDB.castable[tostring(spellID)] = true
+            end
+            OnSelfCast(spellID)
+        end
     end
 end)
 

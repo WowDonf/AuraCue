@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.20.2
+
+- Fix the "trackable in instances" filter missing buffs you cast. It now
+  remembers the spells you actually cast and flags those (the old check
+  misjudged buffs whose aura ID differs from the cast spell). Cast a buff
+  once after updating and it'll show under the filter.
+
 ## v0.20.1
 
 - The screen-edge flash now uses the exact cue color (same as the text). It
