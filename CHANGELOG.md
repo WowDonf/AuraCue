@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.21.1
+
+- **Fix cues only firing once.** A cast-tracked aura could get stuck "on" if
+  its faded wasn't detected, so it never re-triggered. Reads now clear it when
+  the buff actually drops (with a short grace window after a cast so it isn't
+  marked faded before it registers), so gaining it again cues correctly.
+
 ## v0.21.0
 
 - **Shape the screen-edge flash.** New per-window sliders for edge **thickness**

@@ -572,6 +572,7 @@ end
 -- list, and is robust to refreshes and stack changes.
 local present = {}
 local castFade = {}   -- spellID -> token, for cast-driven faded timers
+local castAt = {}     -- spellID -> GetTime() of last cast (grace window)
 
 -- Record an aura we've seen on the player into the registry the picker
 -- draws from. Only the first sighting matters; later sightings are cheap
@@ -684,26 +685,29 @@ local function ScanPlayerAuras()
     if IsInInstance() and InCombatLockdown() then return end
 
     local cues = activeProfile.cues
+    local now = GetTime()
     local newPresent = {}
     for key, cue in pairs(cues) do
         local sid = tonumber(key)
-        if cue.castSeen then
-            -- Cast-tracked: owned entirely by cast events + the faded timer,
-            -- so reads never touch its state (consistent in every zone).
-            newPresent[sid] = present[sid]
+        local state, data = ReadAura(sid)
+        if state == "present" then
+            newPresent[sid] = true
+            if data then
+                local d = Reveal(data.duration)   -- learn duration for cast timing
+                if d and d > 0 then cue.castDuration = d end
+            end
+            -- Cast-tracked auras fire "applied" from the cast event, not here.
+            if not present[sid] and cue.applied and not cue.castSeen then
+                FireCue(cue, C_Spell.GetSpellName(sid), "applied")
+            end
+        elseif state == "unknown" then
+            newPresent[sid] = present[sid]   -- secret-masked: hold
         else
-            local state, data = ReadAura(sid)
-            if state == "present" then
-                newPresent[sid] = true
-                if data then
-                    local d = Reveal(data.duration)   -- learn duration for cast timing
-                    if d and d > 0 then cue.castDuration = d end
-                end
-                if not present[sid] and cue.applied then
-                    FireCue(cue, C_Spell.GetSpellName(sid), "applied")
-                end
-            elseif state == "unknown" then
-                newPresent[sid] = present[sid]   -- secret-masked: hold
+            -- Absent. For a just-cast aura, give it a brief grace window to
+            -- register before declaring it faded (avoids a spurious faded
+            -- right after the cast, which would also block re-triggering).
+            if cue.castSeen and (now - (castAt[sid] or 0)) < 0.5 then
+                newPresent[sid] = present[sid]
             elseif present[sid] and cue.faded then
                 FireCue(cue, C_Spell.GetSpellName(sid), "faded")
             end
@@ -735,9 +739,9 @@ local function OnSelfCast(spellID)
     if not activeProfile then return end
     local cue = activeProfile.cues[tostring(spellID)]
     if not cue then return end
-    -- Once we've seen its cast, this cue is cast-tracked from now on — the
-    -- same behavior in every zone (the read scanner leaves it alone).
+    -- Once we've seen its cast, this cue is cast-tracked from now on.
     cue.castSeen = true
+    castAt[spellID] = GetTime()
     if not present[spellID] and cue.applied then
         FireCue(cue, C_Spell.GetSpellName(spellID), "applied")
     end

@@ -42,7 +42,7 @@ read_globals = {
     -- Secret-value regime (Midnight 12.0+); nil on older clients
     "issecretvalue", "C_Secrets",
     -- Timing
-    "C_Timer",
+    "C_Timer", "GetTime",
     -- Combat / protected-frame state
     "InCombatLockdown",
     -- Tables / misc
