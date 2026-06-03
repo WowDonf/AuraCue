@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.26.0
+
+- **Wrangle the aura picker.** The two filter checkboxes are now a single
+  **Show** filter dropdown with combinable options, including a new
+  **"Only abilities I know"** filter that hides toys, food, and world buffs
+  (most of the clutter) and leaves your actual class/spec abilities.
+- **Hide individual auras.** Each search result has a small ✕ to permanently
+  hide that aura from the picker (e.g. Cozy Fire and other one-offs). Hidden
+  auras are remembered account-wide; "Show hidden auras" reveals them and
+  **Reset hidden** clears the list.
+
 ## v0.25.1
 
 - The settings carry-over from the old CueSense name now prints a

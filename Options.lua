@@ -471,7 +471,8 @@ local function BuildKindPanel(kind)
     -- Forward-declare the editor pieces that reference each other.
     local rows, headers = {}, {}
     local RebuildList, MakeRow, MakeHeader, UpdateSearchResults
-    local pickerSearch, pickerMineOnly, pickerInstanceOnly = "", false, false
+    local pickerSearch = ""
+    local pickerMineOnly, pickerKnownOnly, pickerInstanceOnly, pickerShowHidden = false, false, false, false
 
     -- Primary "Add": pick from catalogued auras of this kind.
     local pickLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -495,7 +496,9 @@ local function BuildKindPanel(kind)
     -- True if an aura belongs in this panel and passes the filters.
     local function passes(sp)
         if ((sp.kind == "debuff") and "debuff" or "buff") ~= kind then return false end
+        if sp.ignored and not pickerShowHidden then return false end
         if pickerMineOnly and not sp.mine then return false end
+        if pickerKnownOnly and not sp.known then return false end
         if pickerInstanceOnly and not sp.instanceable then return false end
         return true
     end
@@ -530,8 +533,27 @@ local function BuildKindPanel(kind)
         b.icon:SetPoint("LEFT", b, "LEFT", 2, 0)
         b.text = b:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         b.text:SetPoint("LEFT", b.icon, "RIGHT", 6, 0)
-        b.text:SetPoint("RIGHT", b, "RIGHT", -4, 0)
+        b.text:SetPoint("RIGHT", b, "RIGHT", -22, 0)
         b.text:SetJustifyH("LEFT")
+        -- A small "hide" (✕) control that prunes this aura from the picker.
+        b.hide = CreateFrame("Button", nil, b)
+        b.hide:SetSize(14, 14)
+        b.hide:SetPoint("RIGHT", b, "RIGHT", -3, 0)
+        b.hide:SetNormalTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
+        b.hide:SetHighlightTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Highlight")
+        b.hide:SetScript("OnClick", function()
+            if not b.spellID then return end
+            ns.SetAuraIgnored(b.spellID, true)
+            addStatus:SetText("|cff808080Hid " .. (b.auraName or b.spellID) .. " from the list.|r")
+            addDD:GenerateMenu()
+            UpdateSearchResults()
+        end)
+        b.hide:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Hide from this list")
+            GameTooltip:Show()
+        end)
+        b.hide:SetScript("OnLeave", function() GameTooltip:Hide() end)
         b:SetScript("OnClick", function(self)
             if not self.spellID then return end
             if ns.P().cues[tostring(self.spellID)] then
@@ -639,12 +661,61 @@ local function BuildKindPanel(kind)
     end)
     ctx.y = ctx.y - 38
 
-    ctx.Check("Only show auras I cast",
-        function() return pickerMineOnly end,
-        function(v) pickerMineOnly = v; addDD:GenerateMenu(); UpdateSearchResults() end)
-    ctx.Check("Only show ones trackable in instances",
-        function() return pickerInstanceOnly end,
-        function(v) pickerInstanceOnly = v; addDD:GenerateMenu(); UpdateSearchResults() end)
+    -- Combinable filters to wrangle the catalog, plus a button to clear the
+    -- hidden list. The "abilities I know" filter drops toys / food / world
+    -- buffs (their aura isn't a known spell), which is most of the clutter.
+    local filterLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    filterLabel:SetPoint("TOPLEFT", LEFT, ctx.y)
+    filterLabel:SetText("Show:")
+    local filterDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+    filterDD:SetPoint("LEFT", filterLabel, "RIGHT", 12, 0)
+    filterDD:SetSize(240, 30)
+
+    local function FilterText()
+        local n = 0
+        if pickerMineOnly then n = n + 1 end
+        if pickerKnownOnly then n = n + 1 end
+        if pickerInstanceOnly then n = n + 1 end
+        if pickerShowHidden then n = n + 1 end
+        return (n == 0) and "All auras I've seen" or ("Filters: " .. n .. " on")
+    end
+    local function ApplyFilters()
+        filterDD:SetDefaultText(FilterText())
+        addDD:GenerateMenu()
+        UpdateSearchResults()
+    end
+    filterDD:SetDefaultText(FilterText())
+
+    local function FilterToggle(root, text, get, set)
+        root:CreateCheckbox(text, get, function()
+            set(not get())
+            ApplyFilters()
+            return MenuResponse and MenuResponse.Refresh or nil
+        end)
+    end
+    filterDD:SetupMenu(function(_, root)
+        FilterToggle(root, "Only auras I cast",
+            function() return pickerMineOnly end, function(v) pickerMineOnly = v end)
+        FilterToggle(root, "Only abilities I know (hides toys / food)",
+            function() return pickerKnownOnly end, function(v) pickerKnownOnly = v end)
+        FilterToggle(root, "Only ones trackable in instances",
+            function() return pickerInstanceOnly end, function(v) pickerInstanceOnly = v end)
+        root:CreateDivider()
+        FilterToggle(root, "Show hidden auras",
+            function() return pickerShowHidden end, function(v) pickerShowHidden = v end)
+    end)
+
+    local resetHidden = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    resetHidden:SetPoint("LEFT", filterDD, "RIGHT", 12, 0)
+    resetHidden:SetSize(110, 22)
+    resetHidden:SetText("Reset hidden")
+    resetHidden:SetScript("OnClick", function()
+        ns.ResetIgnored()
+        addStatus:SetText("|cff808080Hidden-aura list cleared.|r")
+        addDD:GenerateMenu()
+        UpdateSearchResults()
+    end)
+    ctx.y = ctx.y - 36
 
     -- Secondary "Add": by raw spell ID.
     local addLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")

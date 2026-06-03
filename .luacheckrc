@@ -28,7 +28,7 @@ globals = {
 read_globals = {
     -- Frame + UI infrastructure
     "CreateFrame", "UIParent", "GetScreenHeight", "CreateColor",
-    "Settings", "SettingsPanel", "HideUIPanel",
+    "Settings", "SettingsPanel", "HideUIPanel", "MenuResponse",
     "ColorPickerFrame",
     "GameTooltip",
     -- Sound

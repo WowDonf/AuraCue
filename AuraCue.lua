@@ -111,6 +111,9 @@ local DB_DEFAULTS = {
     -- Spell IDs the player has been seen to cast (account-wide). Used to mark
     -- catalog auras as cast-trackable (i.e. they work in instances).
     castable = {},
+    -- Spell IDs the player chose to hide from the picker (account-wide), so the
+    -- catalog can be pruned of toys / food / world buffs and other clutter.
+    ignored = {},
     -- LibDBIcon's button state (position + hide); account-wide.
     minimap = { hide = false },
 }
@@ -942,6 +945,7 @@ function ns.GetSeenAuras()
     local out = {}
     local seen = AuraCueDB and AuraCueDB.seen or {}
     local castable = (AuraCueDB and AuraCueDB.castable) or {}
+    local ignored = (AuraCueDB and AuraCueDB.ignored) or {}
     for key, info in pairs(seen) do
         local sid = tonumber(key)
         local kind = info.kind or "buff"
@@ -961,11 +965,26 @@ function ns.GetSeenAuras()
             secret  = ns.IsSpellAuraSecret(sid),
             kind    = kind,
             mine    = info.mine and true or false,
+            -- A spell in your spellbook -> a class/spec ability, as opposed to
+            -- a toy / food / world buff (whose aura id isn't a known spell).
+            known   = (SpellKnown and SpellKnown(sid)) and true or false,
+            ignored = ignored[key] and true or false,
             instanceable = instanceable,
         }
     end
     table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)
     return out
+end
+
+-- Hide / unhide a catalogued aura from the picker (account-wide).
+function ns.SetAuraIgnored(spellID, on)
+    if not AuraCueDB then return end
+    AuraCueDB.ignored = AuraCueDB.ignored or {}
+    AuraCueDB.ignored[tostring(spellID)] = on and true or nil
+end
+
+function ns.ResetIgnored()
+    if AuraCueDB then AuraCueDB.ignored = {} end
 end
 
 -- ---------------------------------------------------------------------
