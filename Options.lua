@@ -182,8 +182,8 @@ end
 -- ---------------------------------------------------------------------
 -- A colour-swatch button bound to a color table getter.
 -- ---------------------------------------------------------------------
-local function AddColorButton(ctx, getColor)
-    local colorBtn = ctx.Button("Flash color...", 140, function() end)
+local function AddColorButton(ctx, getColor, label)
+    local colorBtn = ctx.Button(label or "Flash color...", 160, function() end)
     local swatch = colorBtn:CreateTexture(nil, "OVERLAY")
     swatch:SetSize(14, 14)
     swatch:SetPoint("LEFT", colorBtn, "LEFT", 8, 0)
@@ -327,7 +327,7 @@ do
 
     local boxBG = CreateFrame("Frame", nil, content, "BackdropTemplate")
     boxBG:SetPoint("TOPLEFT", LEFT, main.y)
-    boxBG:SetSize(520, 58)
+    boxBG:SetSize(520, 120)
     boxBG:SetBackdrop({
         bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -335,25 +335,49 @@ do
         insets   = { left = 4, right = 4, top = 4, bottom = 4 },
     })
     boxBG:SetBackdropColor(0, 0, 0, 0.6)
-    local shareBox = CreateFrame("EditBox", nil, boxBG)
+
+    -- The exported string is long and wraps over many lines, so the editbox
+    -- lives in a scroll frame and the wheel scrolls within the box (rather
+    -- than spilling past its edges or scrolling the settings panel behind it).
+    local shareScroll = CreateFrame("ScrollFrame", nil, boxBG, "UIPanelScrollFrameTemplate")
+    shareScroll:SetPoint("TOPLEFT", 8, -8)
+    shareScroll:SetPoint("BOTTOMRIGHT", -28, 8)
+    local shareBox = CreateFrame("EditBox", nil, shareScroll)
     shareBox:SetMultiLine(true)
-    shareBox:SetPoint("TOPLEFT", 8, -6)
-    shareBox:SetPoint("BOTTOMRIGHT", -8, 6)
+    shareBox:SetWidth(480)
     shareBox:SetAutoFocus(false)
     shareBox:SetFontObject("ChatFontNormal")
     shareBox:SetMaxLetters(0)
     shareBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    main.y = main.y - 66
+    -- Keep the caret/selection visible as it moves through a long string.
+    shareBox:SetScript("OnCursorChanged", function(_, _, y, _, h)
+        local top = -y
+        local bottom = top + h
+        local view = shareScroll:GetHeight()
+        local s = shareScroll:GetVerticalScroll()
+        if top < s then shareScroll:SetVerticalScroll(top)
+        elseif bottom > s + view then shareScroll:SetVerticalScroll(bottom - view) end
+    end)
+    shareScroll:SetScrollChild(shareBox)
+    shareScroll:EnableMouseWheel(true)
+    shareScroll:SetScript("OnMouseWheel", function(self, delta)
+        local maxScroll = self:GetVerticalScrollRange()
+        local new = math.max(0, math.min(maxScroll, self:GetVerticalScroll() - delta * 24))
+        self:SetVerticalScroll(new)
+    end)
+    main.y = main.y - 128
 
     local shareStatus = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
 
     main.SideBySide(
         "Export profile", function()
-            shareBox:SetText(ns.ExportProfile()); shareBox:SetFocus(); shareBox:HighlightText()
+            shareBox:SetText(ns.ExportProfile()); shareScroll:SetVerticalScroll(0)
+            shareBox:SetFocus(); shareBox:HighlightText()
             shareStatus:SetText("|cff808080Profile string ready — Ctrl+A, Ctrl+C to copy.|r")
         end,
         "Export catalog", function()
-            shareBox:SetText(ns.ExportCatalog()); shareBox:SetFocus(); shareBox:HighlightText()
+            shareBox:SetText(ns.ExportCatalog()); shareScroll:SetVerticalScroll(0)
+            shareBox:SetFocus(); shareBox:HighlightText()
             shareStatus:SetText("|cff808080Catalog string ready — Ctrl+A, Ctrl+C to copy.|r")
         end)
     main.Button("Import from box", 160, function()
@@ -399,7 +423,8 @@ local function BuildKindPanel(kind)
     ctx.Slider("Edge intensity", 0.1, 1.0, 0.05, "%.2f",
         function() return Vis().edgeIntensity end,
         function(v) Vis().edgeIntensity = v end)
-    AddColorButton(ctx, function() return Vis().color end)
+    AddColorButton(ctx, function() return Vis().color end, "Gained flash color...")
+    AddColorButton(ctx, function() return Vis().colorFaded end, "Faded flash color...")
     ctx.Slider("Flash size", 0.5, 3.0, 0.05, "%.2fx",
         function() return Vis().scale end,
         function(v) Vis().scale = v end)

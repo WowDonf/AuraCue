@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.23.0
+
+- Gained and faded flashes can now use different colors. Each window
+  (Buffs / Debuffs) has separate "Gained flash color" and "Faded flash
+  color" pickers; the screen-edge glow matches whichever fired. Existing
+  setups get sensible faded defaults automatically.
+- Fixed the Sharing box: the export string now lives in a scrollable box,
+  so it stays inside its frame and the mouse wheel scrolls the text
+  instead of spilling over the panel.
+
 ## v0.22.1
 
 - Full audit of the addon's API usage against the current 12.x client.

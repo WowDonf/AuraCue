@@ -74,7 +74,8 @@ local PROFILE_DEFAULTS = {
     visual = {
         buff = {
             enabled   = true,
-            color     = { r = 0.20, g = 0.86, b = 0.75 },   -- teal
+            color      = { r = 0.20, g = 0.86, b = 0.75 },   -- gained: teal
+            colorFaded = { r = 0.45, g = 0.55, b = 0.70 },   -- faded: muted blue-gray
             scale     = 1.0,
             duration  = 1.5,
             locked    = true,
@@ -85,7 +86,8 @@ local PROFILE_DEFAULTS = {
         },
         debuff = {
             enabled   = true,
-            color     = { r = 1.00, g = 0.45, b = 0.30 },   -- warm red-orange
+            color      = { r = 1.00, g = 0.45, b = 0.30 },   -- gained: warm red-orange
+            colorFaded = { r = 0.65, g = 0.40, b = 0.55 },   -- faded: muted mauve
             scale     = 1.2,
             duration  = 2.0,
             locked    = true,
@@ -202,6 +204,23 @@ local DEFAULT_COLORS = {
     buff   = { r = 0.20, g = 0.86, b = 0.75 },
     debuff = { r = 1.00, g = 0.45, b = 0.30 },
 }
+local DEFAULT_COLORS_FADED = {
+    buff   = { r = 0.45, g = 0.55, b = 0.70 },
+    debuff = { r = 0.65, g = 0.40, b = 0.55 },
+}
+
+-- Clamp/heal one {r,g,b} field on `v` against a default, returning the table.
+local function HealColor(v, field, dc)
+    local c = v[field]
+    if type(c) ~= "table" then
+        v[field] = { r = dc.r, g = dc.g, b = dc.b }
+    else
+        c.r = (type(c.r) == "number") and math.max(0, math.min(1, c.r)) or dc.r
+        c.g = (type(c.g) == "number") and math.max(0, math.min(1, c.g)) or dc.g
+        c.b = (type(c.b) == "number") and math.max(0, math.min(1, c.b)) or dc.b
+    end
+    return v[field]
+end
 
 local function ValidateRanges(db)
     if type(db.visual) ~= "table" then db.visual = {} end
@@ -221,15 +240,8 @@ local function ValidateRanges(db)
         if type(v.edgeIntensity) ~= "number" then v.edgeIntensity = 0.7 end
         v.edgeIntensity = math.max(0.1, math.min(1.0, v.edgeIntensity))
 
-        local dc = DEFAULT_COLORS[key]
-        local c = v.color
-        if type(c) ~= "table" then
-            v.color = { r = dc.r, g = dc.g, b = dc.b }
-        else
-            c.r = (type(c.r) == "number") and math.max(0, math.min(1, c.r)) or dc.r
-            c.g = (type(c.g) == "number") and math.max(0, math.min(1, c.g)) or dc.g
-            c.b = (type(c.b) == "number") and math.max(0, math.min(1, c.b)) or dc.b
-        end
+        HealColor(v, "color", DEFAULT_COLORS[key])
+        HealColor(v, "colorFaded", DEFAULT_COLORS_FADED[key])
     end
 
     local validChannel = false
@@ -422,16 +434,24 @@ local function ShowEdge(color, duration, intensity, thickness)
     edge:Show()
 end
 
-local function ShowVisual(kind, message)
+-- The flash uses a different color for "gained" vs "faded" so the two
+-- events read distinctly. Pre-colorFaded configs fall back to `color`.
+local function VisColor(v, eventKind)
+    if eventKind == "faded" and v.colorFaded then return v.colorFaded end
+    return v.color
+end
+
+local function ShowVisual(kind, message, eventKind)
     local f = overlays[kind]
     local v = VisCfg(kind)
+    local c = VisColor(v, eventKind)
     f.text:SetText(message)
-    f.text:SetTextColor(v.color.r, v.color.g, v.color.b)
+    f.text:SetTextColor(c.r, c.g, c.b)
     f:SetScale(v.scale or 1.0)
     f:SetAlpha(1)
     f.fadeElapsed, f.fadeDuration = 0, (v.duration or 1.5)
     f:Show()
-    if v.edgeFlash then ShowEdge(v.color, v.duration, v.edgeIntensity, v.edgeThickness) end
+    if v.edgeFlash then ShowEdge(c, v.duration, v.edgeIntensity, v.edgeThickness) end
 end
 ns.ShowVisual = ShowVisual
 
@@ -533,7 +553,7 @@ local function FireCue(cue, spellName, eventKind)
     end
     local kind = (cue.kind == "debuff") and "debuff" or "buff"
     if cue.visual and VisCfg(kind).enabled and not ns.testMode then
-        ShowVisual(kind, label .. " " .. verb)
+        ShowVisual(kind, label .. " " .. verb, eventKind)
     end
 end
 
@@ -550,7 +570,7 @@ function ns.PreviewCue(spellKey, eventKind)
     PlayOrSpeak(snd, cue.channel or activeProfile.channel, (cue.label or "Aura") .. " " .. verb)
     if cue.visual then
         local kind = (cue.kind == "debuff") and "debuff" or "buff"
-        ShowVisual(kind, (cue.label or "Aura") .. " " .. (eventKind == "faded" and "faded" or "gained"))
+        ShowVisual(kind, (cue.label or "Aura") .. " " .. (eventKind == "faded" and "faded" or "gained"), eventKind)
     end
 end
 
