@@ -1346,6 +1346,12 @@ SlashCmdList["CUESENSE"] = function(msg)
             local v = (activeProfile and activeProfile.ttsVoice) or (voices[1] and voices[1].voiceID)
             chatPrint("TTS: SpeakText=" .. tostring(C and C.SpeakText ~= nil)
                 .. ", voices=" .. #voices .. ", using voiceID=" .. tostring(v))
+            local TS = C_TTSSettings
+            if TS and TS.GetSpeechVolume then
+                local okv, vol = pcall(TS.GetSpeechVolume)
+                chatPrint("  Accessibility TTS volume = " .. (okv and tostring(vol) or "?")
+                    .. "  (if 0, speech is silent no matter what CueSense sends)")
+            end
             if C and C.SpeakText and v then
                 local dest = (Enum and Enum.VoiceTtsDestination and Enum.VoiceTtsDestination.QueuedLocalPlayback) or 1
                 local ok, err = pcall(C.SpeakText, v, "CueSense speech test", dest, 0, 100)

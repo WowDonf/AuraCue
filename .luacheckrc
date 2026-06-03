@@ -32,7 +32,7 @@ read_globals = {
     -- Sound
     "PlaySound", "PlaySoundFile", "SOUNDKIT",
     -- Text-to-speech
-    "C_VoiceChat", "Enum",
+    "C_VoiceChat", "C_TTSSettings", "Enum",
     -- Auras / spell data
     "C_UnitAuras", "AuraUtil", "C_Spell", "IsPlayerSpell", "IsSpellKnown",
     -- Instance / unit identity (cue provenance: dungeon + source mob)

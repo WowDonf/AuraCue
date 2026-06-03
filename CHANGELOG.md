@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.21.4
+
+- `/cue tts` now also reports your Accessibility text-to-speech volume, so you
+  can tell at a glance whether speech is silent because that volume is 0
+  (which the addon can't override).
+
 ## v0.21.3
 
 - **Faded cues work again for cast buffs.** A read now detects when a
