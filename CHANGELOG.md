@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.22.0
+
+- Fixed spoken cues being silent. The text-to-speech call was using an
+  older argument order; the current client dropped the `destination`
+  argument, which shifted our volume into the wrong slot and effectively
+  spoke at volume 0. Speech now uses the correct `(voice, text, rate,
+  volume)` order and is audible.
+- Note: on Windows, the client routes text-to-speech through the **Effects**
+  audio channel, so keep Effects volume up if speech is too quiet.
+
 ## v0.21.4
 
 - `/cue tts` now also reports your Accessibility text-to-speech volume, so you

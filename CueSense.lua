@@ -486,8 +486,8 @@ function ns.Speak(text)
     local p = activeProfile or {}
     local voice = p.ttsVoice or DefaultTtsVoice()
     if not voice then return end
-    local dest = (Enum and Enum.VoiceTtsDestination and Enum.VoiceTtsDestination.QueuedLocalPlayback) or 1
-    pcall(C.SpeakText, voice, text, dest, p.ttsRate or 0, p.ttsVolume or 100)
+    -- 12.0.0 dropped the `destination` argument: SpeakText(voiceID, text, rate, volume[, overlap]).
+    pcall(C.SpeakText, voice, text, p.ttsRate or 0, p.ttsVolume or 100)
 end
 
 -- Play a cue's sound key, or speak `text` if the key is the special "speak".
@@ -1353,8 +1353,8 @@ SlashCmdList["CUESENSE"] = function(msg)
                     .. "  (if 0, speech is silent no matter what CueSense sends)")
             end
             if C and C.SpeakText and v then
-                local dest = (Enum and Enum.VoiceTtsDestination and Enum.VoiceTtsDestination.QueuedLocalPlayback) or 1
-                local ok, err = pcall(C.SpeakText, v, "CueSense speech test", dest, 0, 100)
+                -- 12.0.0 signature: SpeakText(voiceID, text, rate, volume).
+                local ok, err = pcall(C.SpeakText, v, "CueSense speech test", 0, 100)
                 chatPrint("  SpeakText ok=" .. tostring(ok) .. (err and (" err=" .. tostring(err)) or ""))
             end
 
