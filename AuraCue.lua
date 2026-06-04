@@ -664,6 +664,11 @@ local function RecordSeen(sid, data)
     -- was applied by the player (or pet), i.e. "cast by myself".
     local mine = Reveal(data.isFromPlayerOrPlayerPet) and true or false
     local boss = Reveal(data.isBossAura) and true or false
+    -- Permanent auras report a 0 duration; anything else is timed.
+    local permanent = (Reveal(data.duration) or 0) == 0
+    -- Whether the game tags this aura as relevant to a combat role.
+    local roleAura = (Reveal(data.isDPSRoleAura) or Reveal(data.isHealerRoleAura)
+        or Reveal(data.isTankRoleAura)) and true or false
     local existing = AuraCueDB.seen[key]
     if existing then
         -- Backfill provenance we couldn't capture on first sighting (e.g.
@@ -672,6 +677,8 @@ local function RecordSeen(sid, data)
         if not existing.source then existing.source = ResolveSource(data, harmful) end
         if existing.mine == nil then existing.mine = mine end
         if boss and not existing.boss then existing.boss = true end
+        if existing.permanent == nil then existing.permanent = permanent end
+        if roleAura and not existing.roleAura then existing.roleAura = true end
         return
     end
     AuraCueDB.seen[key] = {
@@ -682,6 +689,8 @@ local function RecordSeen(sid, data)
         source  = ResolveSource(data, harmful),
         mine    = mine,
         boss    = boss,
+        permanent = permanent,
+        roleAura  = roleAura,
     }
 end
 
@@ -996,6 +1005,8 @@ function ns.GetSeenAuras()
             ignored = ignored[key] and true or false,
             mount   = (GetMount and GetMount(sid)) and true or false,
             boss    = info.boss and true or false,
+            permanent = info.permanent and true or false,
+            roleAura  = info.roleAura and true or false,
             group   = groups[key],
             dungeon = info.dungeon,
             instanceable = instanceable,

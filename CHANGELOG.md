@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.33.0
+
+- Auras you already track are now **always** left out of the Add picker
+  (it's the default — no more checkbox), so the list only shows things you
+  could still add.
+- New Show filters: **Only permanent auras** / **Only timed auras** (from the
+  aura's duration, mutually exclusive) and **Only role auras** (Tank /
+  Healer / DPS-tagged). These fill in as you encounter the auras.
+
 ## v0.32.0
 
 - More ways to thin the "Add" dropdown via the Show filter: **Hide mounts**,
