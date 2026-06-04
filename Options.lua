@@ -1498,6 +1498,47 @@ do
         if oki then importBox:SetText("") end
     end)
 
+    -- Copy from another character/spec on this account (no string needed).
+    sharePanel.Header("Copy from another character")
+    sharePanel.Desc("Replace this character and spec's profile with a copy of another saved profile " ..
+        "on this account. A copy is made, so the two stay independent afterward.")
+    local copyLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    copyLabel:SetPoint("TOPLEFT", LEFT, sharePanel.y)
+    copyLabel:SetText("Profile:")
+    local selectedProfile, selectedLabel
+    local copyDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+    copyDD:SetPoint("LEFT", copyLabel, "RIGHT", 12, 0)
+    copyDD:SetSize(260, 26)
+    copyDD:SetDefaultText("Choose a profile")
+    copyDD:SetupMenu(function(_, root)
+        local list = ns.ListProfiles and ns.ListProfiles() or {}
+        if #list == 0 then
+            root:CreateButton("|cff808080No other characters' profiles yet|r", function() end)
+            return
+        end
+        for _, p in ipairs(list) do
+            local key, lbl = p.key, p.label
+            root:CreateRadio(lbl,
+                function() return selectedProfile == key end,
+                function() selectedProfile = key; selectedLabel = lbl; copyDD:SetText(lbl); copyDD:GenerateMenu() end)
+        end
+    end)
+    sharePanel.y = sharePanel.y - 34
+    local copyStatus = AddStatusLine(sharePanel)
+    sharePanel.Button("Copy here", 160, function()
+        if not selectedProfile then copyStatus:SetText("|cffff6060Pick a profile first.|r"); return end
+        local nm = selectedLabel or "that profile"
+        StaticPopup_Show("AURACUE_CONFIRM",
+            "Replace this character/spec's AuraCue profile with a copy of \"" .. nm .. "\"? " ..
+            "Your current watch list and settings here are overwritten.",
+            nil, { onaccept = function()
+                local ok, res = ns.CopyProfileFrom(selectedProfile)
+                copyStatus:SetText(ok
+                    and ("|cff60ff60Copied " .. tostring(res) .. " aura(s) from " .. nm .. ".|r")
+                    or  ("|cffff6060" .. tostring(res) .. "|r"))
+            end })
+    end)
+
     content:SetHeight(-sharePanel.y + 20)
 end
 

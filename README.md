@@ -74,7 +74,9 @@ it again.
 Settings are saved **per character and specialization**, so each spec keeps its
 own watch list and windows. The **Sharing** page exports the current spec's
 profile, or the whole aura catalog, to a copy-paste string — and imports one
-back. The catalog is account-wide (shared across all your characters).
+back. It can also **copy a profile from another character/spec** on your
+account directly (no string needed). The catalog is account-wide (shared across
+all your characters).
 
 ## Usage
 

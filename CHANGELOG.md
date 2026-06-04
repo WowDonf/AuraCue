@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.46.0
+
+- **Copy a profile from another character.** The Sharing page has a new "Copy
+  from another character" section — pick any saved character/spec profile on
+  your account and copy it into the current one, no export string needed. It
+  makes an independent copy and confirms before overwriting.
+
 ## v0.45.0
 
 - **Decluttered the Buffs/Debuffs pages.** The on-screen window look (colors,

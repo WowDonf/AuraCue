@@ -1619,6 +1619,54 @@ function ns.ImportShare(str)
     end
 end
 
+-- Human label for a profile key ("Name-Realm|specID") -> "Name-Realm (Spec)".
+local function ProfileLabel(key)
+    local char, spec = key:match("^(.-)|(%-?%d+)$")
+    if not char then return key end
+    local id, specName = tonumber(spec), nil
+    if id and id > 0 then
+        local fn = (C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfoByID)
+            or GetSpecializationInfoByID
+        if fn then local ok, _, nm = pcall(fn, id); if ok and nm then specName = nm end end
+    end
+    return char .. " (" .. (specName or (id and id > 0 and ("spec " .. id) or "no spec")) .. ")"
+end
+
+-- All saved profiles other than the current one, for "copy from another char".
+function ns.ListProfiles()
+    local cur, out = ProfileKey(), {}
+    for key in pairs((AuraCueDB and AuraCueDB.profiles) or {}) do
+        if key ~= cur then out[#out + 1] = { key = key, label = ProfileLabel(key) } end
+    end
+    table.sort(out, function(a, b) return a.label < b.label end)
+    return out
+end
+
+-- Copy another saved profile into this character+spec (deep copy via the
+-- serializer so the two never share table references). Mirrors ImportShare.
+function ns.CopyProfileFrom(sourceKey)
+    local src = AuraCueDB and AuraCueDB.profiles and AuraCueDB.profiles[sourceKey]
+    if not src or sourceKey == ProfileKey() then return false, "Pick a different profile." end
+    local copy = deserialize(serialize(src))
+    if type(copy) ~= "table" then return false, "Could not copy that profile." end
+    MigrateVisual(copy)
+    MergeDefaults(copy, PROFILE_DEFAULTS)
+    ValidateRanges(copy)
+    if type(copy.cues) ~= "table" then copy.cues = {} end
+    BackfillCues(copy.cues)
+    AuraCueDB.profiles[ProfileKey()] = copy
+    activeProfile = copy
+    RebuildAliases()
+    RestorePosition("buff")
+    RestorePosition("debuff")
+    ResyncTracking()
+    RefreshPrivateAuras()
+    if ns.RefreshOptions then ns.RefreshOptions() end
+    local n = 0
+    for _ in pairs(copy.cues) do n = n + 1 end
+    return true, n
+end
+
 function ns.SeenCount()
     local n = 0
     if AuraCueDB and AuraCueDB.seen then

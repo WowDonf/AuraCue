@@ -46,7 +46,7 @@ read_globals = {
     "IsInInstance", "GetInstanceInfo", "UnitExists", "UnitName", "UnitClass",
     -- Character / spec identity (per-character, per-spec profile keys)
     "GetRealmName", "C_SpecializationInfo",
-    "GetSpecialization", "GetSpecializationInfo",
+    "GetSpecialization", "GetSpecializationInfo", "GetSpecializationInfoByID",
     -- Secret-value regime (Midnight 12.0+); nil on older clients
     "issecretvalue", "C_Secrets",
     -- Timing
