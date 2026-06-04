@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.46.3
+
+- Self-applied debuffs are now filed under "Debuffs" in the watched list
+  instead of the dungeon they were cast in. Already-added ones get moved on
+  login (only if still on the auto dungeon label).
+
 ## v0.46.2
 
 - Moved the Appearance page above Buffs in the settings list.

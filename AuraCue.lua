@@ -1104,11 +1104,12 @@ function ns.AddCue(spellID)
     local kind = (seen and seen.kind) or "buff"
     local dungeon = seen and seen.dungeon
     local source = seen and seen.source
-    -- Debuffs file under the dungeon they came from (the useful grouping);
-    -- buffs default to a single "Buffs" group. Either can be retyped.
+    -- Debuffs from mobs file under the dungeon they came from (the useful
+    -- grouping); a debuff you applied to yourself is just a "Debuffs" entry,
+    -- not dungeon content. Buffs default to "Buffs". Either can be retyped.
     local category
     if kind == "debuff" then
-        category = dungeon or "Other"
+        category = (seen and seen.mine and "Debuffs") or dungeon or "Other"
     else
         category = "Buffs"
     end
@@ -1299,10 +1300,16 @@ local SETTING_KEYS = { "enabled", "channel", "audioEnabled",
 -- gained/faded, and remap any unknown sound key onto a bundled tone (`false`
 -- = None / silent is preserved). Shared by login and profile import.
 local function BackfillCues(cues)
-    for _, cue in pairs(cues) do
+    for key, cue in pairs(cues) do
         if not cue.kind then cue.kind = "buff" end
         if not cue.category then
             cue.category = (cue.kind == "debuff") and "Debuffs" or "Buffs"
+        end
+        -- Re-file a self-applied debuff that was auto-filed under its dungeon
+        -- (back when those weren't separated) into the plain "Debuffs" group.
+        if cue.kind == "debuff" and cue.dungeon and cue.category == cue.dungeon then
+            local s = AuraCueDB.seen and AuraCueDB.seen[key]
+            if s and s.mine then cue.category = "Debuffs" end
         end
         if cue.sound ~= nil and cue.soundApplied == nil and cue.soundFaded == nil then
             cue.soundApplied = cue.sound
