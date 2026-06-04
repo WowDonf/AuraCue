@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.43.0
+
+- Removed the bundled starter-catalog mechanism. The picker fills in from your
+  own play, so there's no shipped seed list.
+
 ## v0.42.0
 
 - **Flip a cue between buff and debuff.** Right-click a watched aura and pick

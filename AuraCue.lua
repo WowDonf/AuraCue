@@ -1375,17 +1375,6 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             AuraCueDB.bossSanitized = true
         end
 
-        -- Merge the shipped starter catalog (Data.lua) once per its version,
-        -- so a fresh install opens to a useful aura list and bumping the
-        -- bundled version pushes new entries — without clobbering anything
-        -- the user has already changed (only missing keys are added).
-        local base = ns.BASE_CATALOG
-        if base and type(base.string) == "string" and base.string ~= ""
-           and (AuraCueDB.baseVersion or 0) < (base.version or 0) then
-            if ns.ImportShare then pcall(ns.ImportShare, base.string) end
-            AuraCueDB.baseVersion = base.version
-        end
-
     elseif event == "PLAYER_LOGIN" then
         InitProfile()
         chatPrint("loaded. Type |cffffd200/cue|r for commands.")
