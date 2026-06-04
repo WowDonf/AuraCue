@@ -673,6 +673,13 @@ local function RecordSeen(sid, data)
     -- Whether the game tags this aura as relevant to a combat role.
     local roleAura = (Reveal(data.isDPSRoleAura) or Reveal(data.isHealerRoleAura)
         or Reveal(data.isTankRoleAura)) and true or false
+    -- Your class, for an aura that's one of your own known spells (not a
+    -- mount). This is what files Avenging Wrath etc. under "Paladin" — and it
+    -- works whether the ability was cast or procced, since it's derived from
+    -- the aura, not from a cast event.
+    local GM = C_MountJournal and C_MountJournal.GetMountFromSpell
+    local className = (mine and SpellKnown and SpellKnown(sid) and not (GM and GM(sid)))
+        and (UnitClass("player")) or nil
     local existing = AuraCueDB.seen[key]
     if existing then
         -- Backfill provenance we couldn't capture on first sighting (e.g.
@@ -685,6 +692,7 @@ local function RecordSeen(sid, data)
         if existing.boss and (mine or not harmful) then existing.boss = false end
         if existing.permanent == nil then existing.permanent = permanent end
         if roleAura and not existing.roleAura then existing.roleAura = true end
+        if className and not existing.className then existing.className = className end
         return
     end
     AuraCueDB.seen[key] = {
@@ -697,6 +705,7 @@ local function RecordSeen(sid, data)
         boss    = boss,
         permanent = permanent,
         roleAura  = roleAura,
+        className = className,
     }
 end
 

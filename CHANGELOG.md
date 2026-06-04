@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.38.1
+
+- Class grouping now works for abilities that **proc** rather than being cast
+  (e.g. Avenging Wrath under Radiant Glory). The class tag is derived from the
+  aura itself — any of your own known-spell auras (not mounts) — so it no
+  longer depends on catching a cast event. Existing entries get the tag the
+  next time the aura is seen.
+
 ## v0.38.0
 
 - Castable abilities now show up in the picker even when they don't apply a
