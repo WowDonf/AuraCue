@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.41.1
+
+- Fixed the "faded" cue not firing for a hard-cast ability (while it worked for
+  a proc of the same aura). The duration-based fade timer was read before the
+  duration had been learned, so on a cast it often wasn't scheduled; it's now
+  scheduled with the freshly-learned duration (and re-scheduled as it updates).
+
 ## v0.41.0
 
 - **"Combine auras with the same name" is now a Global Setting** (main page),

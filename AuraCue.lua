@@ -846,6 +846,23 @@ local function SeedPresent()
     end
 end
 
+-- Schedule the duration-based "faded" timer for a cast-tracked cue. The latest
+-- call wins (token), so calling it again with a freshly-learned duration just
+-- replaces the earlier estimate.
+local function ScheduleFade(cue, pid, dur)
+    if not (cue.faded and dur and dur > 0) then return end
+    castFade[pid] = (castFade[pid] or 0) + 1
+    local token = castFade[pid]
+    C_Timer.After(dur + 0.2, function()
+        -- Only fire if this is still the latest cast and the aura isn't
+        -- readably still up (a refresh in the open world would show it).
+        if castFade[pid] == token and present[pid] and CueRead(pid, cueAlts[tostring(pid)]) ~= "present" then
+            FireCue(cue, C_Spell.GetSpellName(pid), "faded")
+            present[pid] = nil
+        end
+    end)
+end
+
 -- Cast-driven tracking. Your own casts are NOT secret even in instances, so
 -- when you cast a watched aura's spell we can fire its "gained" cue (and,
 -- using the duration we learned in the open world, schedule its "faded")
@@ -875,29 +892,19 @@ local function OnSelfCast(spellID)
     end
     present[pid] = true
 
-    -- Learn the buff's duration just after the cast (readable in the open
-    -- world) so the faded timer is accurate, including later in instances.
+    -- Schedule the faded timer now using any previously-learned duration (so it
+    -- works in instances where reads are blocked), then re-learn the duration
+    -- just after the cast and reschedule with the fresh value. The reschedule
+    -- supersedes the first, and crucially this also schedules a timer on the
+    -- very first cast — when castDuration wasn't known yet.
+    ScheduleFade(cue, pid, cue.castDuration)
     C_Timer.After(0.1, function()
         local _, data = CueRead(pid, cueAlts[tostring(pid)])
         if data then
             local d = Reveal(data.duration)
-            if d and d > 0 then cue.castDuration = d end
+            if d and d > 0 then cue.castDuration = d; ScheduleFade(cue, pid, d) end
         end
     end)
-
-    local dur = cue.castDuration
-    if cue.faded and dur and dur > 0 then
-        castFade[pid] = (castFade[pid] or 0) + 1
-        local token = castFade[pid]
-        C_Timer.After(dur + 0.2, function()
-            -- Only fire if this is still the latest cast and the aura isn't
-            -- readably still up (a refresh in the open world would show it).
-            if castFade[pid] == token and present[pid] and CueRead(pid, cueAlts[tostring(pid)]) ~= "present" then
-                FireCue(cue, C_Spell.GetSpellName(pid), "faded")
-                present[pid] = nil
-            end
-        end)
-    end
 end
 
 -- ---------------------------------------------------------------------
