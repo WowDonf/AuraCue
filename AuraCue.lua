@@ -663,7 +663,11 @@ local function RecordSeen(sid, data)
     -- isFromPlayerOrPlayerPet is a never-secret field: it tells us the aura
     -- was applied by the player (or pet), i.e. "cast by myself".
     local mine = Reveal(data.isFromPlayerOrPlayerPet) and true or false
-    local boss = Reveal(data.isBossAura) and true or false
+    -- A boss aura is a harmful aura a boss applied to YOU — so it can't be one
+    -- of your own auras, and it's never a buff. Gating on (harmful and not
+    -- mine) stops self-buffs/passives (e.g. a Shaman's Reincarnation) being
+    -- mislabelled as boss debuffs just because the raw flag was set.
+    local boss = (Reveal(data.isBossAura) and harmful and not mine) and true or false
     -- Permanent auras report a 0 duration; anything else is timed.
     local permanent = (Reveal(data.duration) or 0) == 0
     -- Whether the game tags this aura as relevant to a combat role.
@@ -677,6 +681,8 @@ local function RecordSeen(sid, data)
         if not existing.source then existing.source = ResolveSource(data, harmful) end
         if existing.mine == nil then existing.mine = mine end
         if boss and not existing.boss then existing.boss = true end
+        -- Self-heal a wrong boss flag if we now see it's yours or not harmful.
+        if existing.boss and (mine or not harmful) then existing.boss = false end
         if existing.permanent == nil then existing.permanent = permanent end
         if roleAura and not existing.roleAura then existing.roleAura = true end
         return
@@ -1169,6 +1175,16 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         end
         AuraCueDB = AuraCueDB or {}
         MergeDefaults(AuraCueDB, DB_DEFAULTS)
+
+        -- One-time cleanup: clear boss flags that can't be real (your own
+        -- auras, or anything that isn't a debuff) from catalogs built before
+        -- the boss check was tightened.
+        if not AuraCueDB.bossSanitized then
+            for _, v in pairs(AuraCueDB.seen or {}) do
+                if v.boss and (v.mine or v.kind ~= "debuff") then v.boss = false end
+            end
+            AuraCueDB.bossSanitized = true
+        end
 
         -- Merge the shipped starter catalog (Data.lua) once per its version,
         -- so a fresh install opens to a useful aura list and bumping the

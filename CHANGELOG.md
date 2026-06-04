@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.34.3
+
+- Fixed self-buffs/passives (e.g. a Shaman's Reincarnation) being mislabelled
+  as boss debuffs. An aura is only treated as a boss aura now if it's harmful
+  and not one of your own, and existing catalogs are cleaned up on load.
+
 ## v0.34.2
 
 - Fixed panel widgets (watched-row close buttons, dropdowns, checkmarks)
