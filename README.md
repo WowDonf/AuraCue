@@ -38,6 +38,12 @@ You build your watch list from a catalog AuraCue fills in as you play — every
 aura it sees on you, plus every ability you cast. You never have to hunt for
 spell IDs (though you still can add one by ID).
 
+**No hard-coded ability list.** AuraCue has no built-in whitelist or blacklist
+of spells — it learns purely from what it observes you cast and what lands on
+you. This is by design: any aura works once it has been seen a single time,
+including brand-new or reworked abilities from a patch, with nothing on the
+addon's side to update or wait for.
+
 - **Grouped submenus.** Buffs group under **your class** (e.g. abilities your
   Shaman casts → "Shaman"), **Mounts**, **From you / your pet**, and **World &
   other**. Debuffs group under **Boss**, the **dungeon** they came from, or

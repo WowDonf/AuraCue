@@ -35,6 +35,12 @@ your own custom groups), filter and search to thin a big list, and hide the
 clutter you don't want. There's a built-in Wowhead search link if you ever do
 need an ID.
 
+**No hard-coded ability list.** There's no built-in whitelist or blacklist of
+spells — AuraCue learns purely from what it sees you cast and what lands on
+you. That's by design: any aura works once it's been seen a single time,
+including brand-new or reworked abilities from a patch, with nothing on the
+addon's side to update.
+
 ## More
 
 - **Combine variants** — make a base spell and its proc version (different
