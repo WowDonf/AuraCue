@@ -808,6 +808,7 @@ local function ScanPlayerAuras()
             elseif castConfirmed[sid] and present[sid] and cue.faded then
                 FireCue(cue, C_Spell.GetSpellName(sid), "faded")
                 castConfirmed[sid] = nil
+                castFade[sid] = (castFade[sid] or 0) + 1   -- invalidate any pending fade timer
             else
                 newPresent[sid] = present[sid]   -- not confirmed yet: hold
             end
@@ -836,14 +837,34 @@ end
 ns.ScanPlayerAuras = ScanPlayerAuras
 
 -- Re-seed `present` without firing, so adding a cue for an aura that's
--- already up doesn't instantly announce it.
+-- already up doesn't instantly announce it. For a cast-tracked cue whose aura
+-- currently reads present, also mark it confirmed — otherwise the cast-tracked
+-- "faded" path (which only trusts an absent read after a confirm) would never
+-- fire when the aura drops following any silent re-seed.
 local function SeedPresent()
     present = {}
     local cues = activeProfile and activeProfile.cues
     if not cues then return end
-    for key in pairs(cues) do
-        if CueRead(tonumber(key), cueAlts[key]) == "present" then present[tonumber(key)] = true end
+    for key, cue in pairs(cues) do
+        local sid = tonumber(key)
+        if CueRead(sid, cueAlts[key]) == "present" then
+            present[sid] = true
+            if cue.castSeen then castConfirmed[sid] = true end
+        end
     end
+end
+
+-- Fully reset the per-id runtime tracking. Use this whenever the cue set or the
+-- active profile changes (add/remove/kind/alias edits, spec swap, import): it
+-- clears the cast-side tables (which invalidates any pending fade timers, since
+-- their token no longer matches) and silently re-seeds presence so nothing
+-- fires. NOTE: a plain SeedPresent() is used for combat-end / zone re-syncs
+-- instead, to preserve in-flight cast fade timers.
+local function ResyncTracking()
+    wipe(castConfirmed)
+    wipe(castFade)
+    wipe(lastGained)
+    SeedPresent()
 end
 
 -- Schedule the duration-based "faded" timer for a cast-tracked cue. The latest
@@ -923,7 +944,7 @@ local function RefreshPrivateAuras()
         pcall(A.RemovePrivateAuraAppliedSound, id)
     end
     wipe(privAuraSoundIDs)
-    if not activeProfile or not AuraCueDB or not AuraCueDB.audioEnabled then return end
+    if not activeProfile or not activeProfile.audioEnabled then return end
     if not activeProfile.trackDebuffs then return end
     for key, cue in pairs(activeProfile.cues) do
         -- "speak" can't be registered as a private-aura sound (no TTS hook),
@@ -989,6 +1010,16 @@ local function RebuildAliases()
 end
 ns.RebuildAliases = RebuildAliases
 
+-- Apply a change to the cue set: rebuild aliases, fully reset tracking, re-
+-- register private-aura sounds, and refresh the options UI. One helper so every
+-- cue mutator resets state the same (correct) way.
+local function ApplyCueChange()
+    RebuildAliases()
+    ResyncTracking()
+    RefreshPrivateAuras()
+    if ns.RefreshOptions then ns.RefreshOptions() end
+end
+
 -- Set the extra spell ids that also trigger one cue (so e.g. base and proc
 -- Avenging Wrath are a single alert). Pass a list of numbers/strings.
 function ns.SetCueAlts(spellKey, list)
@@ -1000,10 +1031,7 @@ function ns.SetCueAlts(spellKey, list)
         if n and not used[tostring(n)] then used[tostring(n)] = true; clean[#clean + 1] = n end
     end
     cue.alts = (#clean > 0) and clean or nil
-    RebuildAliases()
-    SeedPresent()
-    RefreshPrivateAuras()
-    if ns.RefreshOptions then ns.RefreshOptions() end
+    ApplyCueChange()
 end
 
 -- Turn name-combining on/off for one cue. When turning it ON, absorb any other
@@ -1019,10 +1047,7 @@ function ns.SetMatchName(spellKey, on)
             if k ~= tostring(spellKey) and c.label == cue.label then cues[k] = nil end
         end
     end
-    RebuildAliases()
-    SeedPresent()
-    RefreshPrivateAuras()
-    if ns.RefreshOptions then ns.RefreshOptions() end
+    ApplyCueChange()
 end
 
 -- True if a watched cue name-combines this aura's name (so the picker can stop
@@ -1050,10 +1075,8 @@ function ns.SetCueKind(spellKey, kind)
         cue.category = (kind == "debuff") and "Debuffs" or "Buffs"
     end
     if AuraCueDB.seen and AuraCueDB.seen[key] then AuraCueDB.seen[key].kind = kind end
-    RebuildAliases()
-    SeedPresent()
-    RefreshPrivateAuras()
-    if ns.RefreshOptions then ns.RefreshOptions() end
+    cue.castSeen = nil   -- re-derive tracking mode for the new kind
+    ApplyCueChange()
 end
 
 -- Global toggle: combine every same-named aura into a single alert. Turning it
@@ -1070,10 +1093,7 @@ function ns.SetCombineByName(on)
             end
         end
     end
-    RebuildAliases()
-    SeedPresent()
-    RefreshPrivateAuras()
-    if ns.RefreshOptions then ns.RefreshOptions() end
+    ApplyCueChange()
 end
 
 function ns.AddCue(spellID)
@@ -1116,6 +1136,12 @@ function ns.RemoveCue(spellID)
     if not spellID then return false end
     local existed = activeProfile.cues[tostring(spellID)] ~= nil
     activeProfile.cues[tostring(spellID)] = nil
+    -- Drop this cue's runtime state so a leftover bit can't fire later (and
+    -- bump its fade token so any pending timer is invalidated).
+    present[spellID] = nil
+    castConfirmed[spellID] = nil
+    lastGained[spellID] = nil
+    castFade[spellID] = (castFade[spellID] or 0) + 1
     RebuildAliases()
     RefreshPrivateAuras()
     return existed
@@ -1320,6 +1346,7 @@ local function SetActiveProfile()
     ValidateRanges(activeProfile)
     BackfillCues(activeProfile.cues)
     RebuildAliases()
+    ResyncTracking()   -- fresh tracking state for the (possibly different) cue set
     RefreshPrivateAuras()
 end
 ns.SetActiveProfile = SetActiveProfile
@@ -1388,9 +1415,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         local unit = ...
         if unit and unit ~= "player" then return end
         if not activeProfile then return end
-        SetActiveProfile()
-        present = {}
-        SeedPresent()
+        SetActiveProfile()   -- resyncs tracking for the new spec's cues
         RestorePosition("buff")
         RestorePosition("debuff")
         if ns.RefreshOptions then ns.RefreshOptions() end
@@ -1441,7 +1466,6 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                         icon = (GT and GT(spellID)) or nil,
                         kind = "buff",
                         mine = true,
-                        castOnly = true,
                     }
                 end
                 -- Tag the casting class on an ability you cast (known player
@@ -1575,8 +1599,7 @@ function ns.ImportShare(str)
         RebuildAliases()
         RestorePosition("buff")
         RestorePosition("debuff")
-        present = {}
-        SeedPresent()
+        ResyncTracking()   -- new cue set: full reset, not just a re-seed
         RefreshPrivateAuras()
         if ns.RefreshOptions then ns.RefreshOptions() end
         local n = 0

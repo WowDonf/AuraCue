@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.44.0
+
+Engine consolidation and bug-fix pass (from a code review of the tracking core):
+
+- **Fixed: instanced-debuff sounds never played.** The private-aura sound
+  registration was gated on a setting that didn't exist, so it silently never
+  ran. It now checks the real audio master switch.
+- **Fixed: cast-tracked "faded" could stop firing** after combat ended, a zone
+  change, or a spec swap — a re-synced cue wasn't re-confirmed, so its drop went
+  uncued until the next cast. Re-syncs now re-confirm present cast cues.
+- **Fixed: stale tracking state** when removing a cue, swapping spec, importing
+  a profile, or flipping a cue's kind could cause a ghost or double "faded".
+  All cue/profile changes now reset tracking state cleanly (and invalidate any
+  pending fade timer), via a single shared path.
+- Removed dead code and an unused field.
+
 ## v0.43.0
 
 - Removed the bundled starter-catalog mechanism. The picker fills in from your

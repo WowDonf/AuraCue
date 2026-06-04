@@ -164,7 +164,6 @@ local function RefreshAllPanels()
     for _, fn in ipairs(refreshers) do fn() end
 end
 ns.RefreshOptions = RefreshAllPanels
-ns.RebuildList = RefreshAllPanels
 
 -- ---------------------------------------------------------------------
 -- Panel factory: a scrollable canvas with a running-y layout cursor and
