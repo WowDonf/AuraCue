@@ -1797,9 +1797,9 @@ if Settings and Settings.RegisterCanvasLayoutCategory then
     mainCategory = Settings.RegisterCanvasLayoutCategory(main.panel, "AuraCue")
     Settings.RegisterAddOnCategory(mainCategory)
     if Settings.RegisterCanvasLayoutSubcategory then
+        Settings.RegisterCanvasLayoutSubcategory(mainCategory, appearancePanel.panel, "Appearance")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, debuffPanel.panel, "Debuffs")
-        Settings.RegisterCanvasLayoutSubcategory(mainCategory, appearancePanel.panel, "Appearance")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, managePanel.panel, "Manage Auras")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, sharePanel.panel, "Sharing")
     end

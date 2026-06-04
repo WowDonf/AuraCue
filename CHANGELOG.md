@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.46.2
+
+- Moved the Appearance page above Buffs in the settings list.
+
 ## v0.46.1
 
 - Moved "Copy from another character" to the top of the Sharing page.
