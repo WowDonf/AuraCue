@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.46.1
+
+- Moved "Copy from another character" to the top of the Sharing page.
+
 ## v0.46.0
 
 - **Copy a profile from another character.** The Sharing page has a new "Copy

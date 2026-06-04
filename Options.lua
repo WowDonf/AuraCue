@@ -1468,36 +1468,6 @@ do
     titleFS:SetText("Sharing")
     sharePanel.y = sharePanel.y - 24
 
-    -- Export.
-    sharePanel.Header("Export")
-    sharePanel.Desc("Export this spec's profile, or the whole aura catalog, to a string you can save " ..
-        "or share. The string appears below — click the box, then Ctrl+A and Ctrl+C to copy it.")
-    local exportBox, exportScroll = AddShareBox(sharePanel, 130)
-    local exportStatus = AddStatusLine(sharePanel)
-    sharePanel.SideBySide(
-        "Export profile", function()
-            exportBox:SetText(ns.ExportProfile()); exportScroll:SetVerticalScroll(0)
-            exportBox:SetFocus(); exportBox:HighlightText()
-            exportStatus:SetText("|cff808080Profile string ready — Ctrl+A, Ctrl+C to copy.|r")
-        end,
-        "Export catalog", function()
-            exportBox:SetText(ns.ExportCatalog()); exportScroll:SetVerticalScroll(0)
-            exportBox:SetFocus(); exportBox:HighlightText()
-            exportStatus:SetText("|cff808080Catalog string ready — Ctrl+A, Ctrl+C to copy.|r")
-        end)
-
-    -- Import.
-    sharePanel.Header("Import")
-    sharePanel.Desc("Paste a profile or catalog string into the box below, then click Import. " ..
-        "A profile replaces this spec's tracked auras and settings; a catalog merges into your aura list.")
-    local importBox = AddShareBox(sharePanel, 130)
-    local importStatus = AddStatusLine(sharePanel)
-    sharePanel.Button("Import", 160, function()
-        local oki, msg = ns.ImportShare(importBox:GetText() or "")
-        importStatus:SetText((oki and "|cff60ff60" or "|cffff6060") .. (msg or "") .. "|r")
-        if oki then importBox:SetText("") end
-    end)
-
     -- Copy from another character/spec on this account (no string needed).
     sharePanel.Header("Copy from another character")
     sharePanel.Desc("Replace this character and spec's profile with a copy of another saved profile " ..
@@ -1537,6 +1507,36 @@ do
                     and ("|cff60ff60Copied " .. tostring(res) .. " aura(s) from " .. nm .. ".|r")
                     or  ("|cffff6060" .. tostring(res) .. "|r"))
             end })
+    end)
+
+    -- Export.
+    sharePanel.Header("Export")
+    sharePanel.Desc("Export this spec's profile, or the whole aura catalog, to a string you can save " ..
+        "or share. The string appears below — click the box, then Ctrl+A and Ctrl+C to copy it.")
+    local exportBox, exportScroll = AddShareBox(sharePanel, 130)
+    local exportStatus = AddStatusLine(sharePanel)
+    sharePanel.SideBySide(
+        "Export profile", function()
+            exportBox:SetText(ns.ExportProfile()); exportScroll:SetVerticalScroll(0)
+            exportBox:SetFocus(); exportBox:HighlightText()
+            exportStatus:SetText("|cff808080Profile string ready — Ctrl+A, Ctrl+C to copy.|r")
+        end,
+        "Export catalog", function()
+            exportBox:SetText(ns.ExportCatalog()); exportScroll:SetVerticalScroll(0)
+            exportBox:SetFocus(); exportBox:HighlightText()
+            exportStatus:SetText("|cff808080Catalog string ready — Ctrl+A, Ctrl+C to copy.|r")
+        end)
+
+    -- Import.
+    sharePanel.Header("Import")
+    sharePanel.Desc("Paste a profile or catalog string into the box below, then click Import. " ..
+        "A profile replaces this spec's tracked auras and settings; a catalog merges into your aura list.")
+    local importBox = AddShareBox(sharePanel, 130)
+    local importStatus = AddStatusLine(sharePanel)
+    sharePanel.Button("Import", 160, function()
+        local oki, msg = ns.ImportShare(importBox:GetText() or "")
+        importStatus:SetText((oki and "|cff60ff60" or "|cffff6060") .. (msg or "") .. "|r")
+        if oki then importBox:SetText("") end
     end)
 
     content:SetHeight(-sharePanel.y + 20)
