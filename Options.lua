@@ -614,8 +614,10 @@ local function BuildKindPanel(kind)
     local function passes(sp)
         if ((sp.kind == "debuff") and "debuff" or "buff") ~= kind then return false end
         if sp.ignored and not pickerShowHidden then return false end
-        -- Auras you already track are never offered for adding again.
+        -- Auras you already track are never offered for adding again, and
+        -- neither are variants a name-combining cue already covers.
         if ns.P().cues[tostring(sp.spellID)] then return false end
+        if ns.IsNameCombined and ns.IsNameCombined(sp.name) then return false end
         if pickerMineOnly and not sp.mine then return false end
         if pickerKnownOnly and not sp.known then return false end
         if pickerBossOnly and not sp.boss then return false end
@@ -1172,7 +1174,7 @@ local function BuildKindPanel(kind)
                     root:CreateTitle(cue.label or "Aura")
                     root:CreateCheckbox("Auto-combine auras with the same name",
                         function() return cue.matchName end,
-                        function() cue.matchName = not cue.matchName; ns.SetCueAlts(key, cue.alts) end)
+                        function() ns.SetMatchName(key, not cue.matchName) end)
                     root:CreateButton("Add other spell IDs by hand…", openDialog)
                     if cue.alts and #cue.alts > 0 then
                         root:CreateButton("Clear hand-added IDs", function() ns.SetCueAlts(key, {}) end)

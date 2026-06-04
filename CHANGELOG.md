@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.40.1
+
+- Turning on "Auto-combine auras with the same name" now collapses to a single
+  entry: it removes any other watched cues with that name (they're already
+  covered) and stops the picker offering the same-named variants separately.
+  So base + proc Avenging Wrath end up as one alert, one row.
+
 ## v0.40.0
 
 - **Auto-combine by name.** Right-click a watched aura and tick "Auto-combine

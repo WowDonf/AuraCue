@@ -997,6 +997,35 @@ function ns.SetCueAlts(spellKey, list)
     if ns.RefreshOptions then ns.RefreshOptions() end
 end
 
+-- Turn name-combining on/off for one cue. When turning it ON, absorb any other
+-- watched cues that share the name (they're now redundant — this one alert
+-- already covers their ids), so you end up with a single entry.
+function ns.SetMatchName(spellKey, on)
+    local cues = activeProfile and activeProfile.cues
+    local cue = cues and cues[tostring(spellKey)]
+    if not cue then return end
+    cue.matchName = on and true or nil
+    if on and cue.label then
+        for k, c in pairs(cues) do
+            if k ~= tostring(spellKey) and c.label == cue.label then cues[k] = nil end
+        end
+    end
+    RebuildAliases()
+    SeedPresent()
+    RefreshPrivateAuras()
+    if ns.RefreshOptions then ns.RefreshOptions() end
+end
+
+-- True if a watched cue name-combines this aura's name (so the picker can stop
+-- offering the same-named variants as separate adds).
+function ns.IsNameCombined(name)
+    if not name or not activeProfile then return false end
+    for _, c in pairs(activeProfile.cues) do
+        if c.matchName and c.label == name then return true end
+    end
+    return false
+end
+
 function ns.AddCue(spellID)
     spellID = tonumber(spellID)
     if not spellID then return false end
