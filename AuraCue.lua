@@ -624,6 +624,8 @@ local present = {}
 local castFade = {}      -- spellID -> token, for cast-driven faded timers
 local lastGained = {}    -- spellID -> GetTime() of last fired "gained" (debounce)
 local castConfirmed = {} -- spellID -> true once a read has seen the cast aura up
+local aliasOwner = {}    -- alt-spellID-as-string -> primary cue key (one alert,
+                         -- many trigger ids, e.g. base + proc Avenging Wrath)
 
 -- Record an aura we've seen on the player into the registry the picker
 -- draws from. Only the first sighting matters; later sightings are cheap
@@ -753,6 +755,23 @@ local function CatalogVisibleAuras()
     AuraUtil.ForEachAura("player", "HARMFUL", nil, handle, true)
 end
 
+-- Combined read across a cue's primary id and any alias ids: "present" if any
+-- is up, "unknown" if a read was masked and none were up, else "absent". This
+-- is what lets one alert cover several spell ids (base + proc versions).
+local function CueRead(cue, sid)
+    local state, data = ReadAura(sid)
+    if state == "present" then return state, data end
+    local best = state
+    if cue and cue.alts then
+        for _, alt in ipairs(cue.alts) do
+            local s, d = ReadAura(alt)
+            if s == "present" then return "present", d end
+            if s == "unknown" then best = "unknown" end
+        end
+    end
+    return best
+end
+
 local function ScanPlayerAuras()
     if not activeProfile or not activeProfile.enabled then return end
 
@@ -772,7 +791,7 @@ local function ScanPlayerAuras()
             -- aura was up since the cast — so a cast buff whose aura id differs
             -- from the cast id (read never finds it) never falsely fades, while
             -- a normal same-id buff fades correctly when it drops.
-            local state, data = ReadAura(sid)
+            local state, data = CueRead(cue, sid)
             if state == "present" then
                 castConfirmed[sid] = true
                 newPresent[sid] = true
@@ -789,7 +808,7 @@ local function ScanPlayerAuras()
                 newPresent[sid] = present[sid]   -- not confirmed yet: hold
             end
         else
-            local state, data = ReadAura(sid)
+            local state, data = CueRead(cue, sid)
             if state == "present" then
                 newPresent[sid] = true
                 if data then
@@ -818,8 +837,8 @@ local function SeedPresent()
     present = {}
     local cues = activeProfile and activeProfile.cues
     if not cues then return end
-    for key in pairs(cues) do
-        if ReadAura(tonumber(key)) == "present" then present[tonumber(key)] = true end
+    for key, cue in pairs(cues) do
+        if CueRead(cue, tonumber(key)) == "present" then present[tonumber(key)] = true end
     end
 end
 
@@ -830,24 +849,32 @@ end
 -- matches the aura spell id (true for most self-buffs).
 local function OnSelfCast(spellID)
     if not activeProfile then return end
+    -- The cast id may be the cue's primary id OR one of its aliases; in either
+    -- case drive the cue under its PRIMARY id so all tracking state stays keyed
+    -- consistently with ScanPlayerAuras.
     local cue = activeProfile.cues[tostring(spellID)]
+    local pid = spellID
+    if not cue then
+        local owner = aliasOwner[tostring(spellID)]
+        if owner then cue = activeProfile.cues[owner]; pid = tonumber(owner) end
+    end
     if not cue then return end
     -- Once we've seen its cast, this cue is cast-tracked from now on.
     cue.castSeen = true
-    castConfirmed[spellID] = nil   -- require a fresh read to confirm before fading
+    castConfirmed[pid] = nil   -- require a fresh read to confirm before fading
     -- Fire "gained" on each cast (debounced ~1s), so repeated casts re-cue
     -- even when we can't detect the buff dropping in between.
     local now = GetTime()
-    if cue.applied and (now - (lastGained[spellID] or 0)) > 0.8 then
-        lastGained[spellID] = now
-        FireCue(cue, C_Spell.GetSpellName(spellID), "applied")
+    if cue.applied and (now - (lastGained[pid] or 0)) > 0.8 then
+        lastGained[pid] = now
+        FireCue(cue, C_Spell.GetSpellName(pid), "applied")
     end
-    present[spellID] = true
+    present[pid] = true
 
     -- Learn the buff's duration just after the cast (readable in the open
     -- world) so the faded timer is accurate, including later in instances.
     C_Timer.After(0.1, function()
-        local _, data = ReadAura(spellID)
+        local _, data = CueRead(cue, pid)
         if data then
             local d = Reveal(data.duration)
             if d and d > 0 then cue.castDuration = d end
@@ -856,14 +883,14 @@ local function OnSelfCast(spellID)
 
     local dur = cue.castDuration
     if cue.faded and dur and dur > 0 then
-        castFade[spellID] = (castFade[spellID] or 0) + 1
-        local token = castFade[spellID]
+        castFade[pid] = (castFade[pid] or 0) + 1
+        local token = castFade[pid]
         C_Timer.After(dur + 0.2, function()
             -- Only fire if this is still the latest cast and the aura isn't
             -- readably still up (a refresh in the open world would show it).
-            if castFade[spellID] == token and present[spellID] and ReadAura(spellID) ~= "present" then
-                FireCue(cue, C_Spell.GetSpellName(spellID), "faded")
-                present[spellID] = nil
+            if castFade[pid] == token and present[pid] and CueRead(cue, pid) ~= "present" then
+                FireCue(cue, C_Spell.GetSpellName(pid), "faded")
+                present[pid] = nil
             end
         end)
     end
@@ -892,20 +919,26 @@ local function RefreshPrivateAuras()
         -- and a "world"-only cue shouldn't fire in instances.
         if cue.kind == "debuff" and cue.applied and cue.soundApplied
            and cue.soundApplied ~= "speak" and cue.when ~= "world" then
-            local sid = tonumber(key)
             local playable, isFile = ResolveSound(cue.soundApplied)
             -- The private-aura API only accepts a sound file (soundFileName /
             -- soundFileID FileDataID), not a SOUNDKIT id, so kit-based sounds
             -- can't be registered here. All shipped cues are file-based.
-            if sid and playable and isFile then
-                local opts = {
-                    unitToken = "player",
-                    spellID = sid,
-                    outputChannel = string.lower(cue.channel or activeProfile.channel or "master"),
-                    soundFileName = playable,
-                }
-                local ok, id = pcall(A.AddPrivateAuraAppliedSound, opts)
-                if ok and id then privAuraSoundIDs[#privAuraSoundIDs + 1] = id end
+            if playable and isFile then
+                -- Register for the cue's primary id and each alias id.
+                local ids = { tonumber(key) }
+                if cue.alts then for _, a in ipairs(cue.alts) do ids[#ids + 1] = a end end
+                for _, sid in ipairs(ids) do
+                    if sid then
+                        local opts = {
+                            unitToken = "player",
+                            spellID = sid,
+                            outputChannel = string.lower(cue.channel or activeProfile.channel or "master"),
+                            soundFileName = playable,
+                        }
+                        local ok, id = pcall(A.AddPrivateAuraAppliedSound, opts)
+                        if ok and id then privAuraSoundIDs[#privAuraSoundIDs + 1] = id end
+                    end
+                end
             end
         end
     end
@@ -915,6 +948,37 @@ ns.RefreshPrivateAuras = RefreshPrivateAuras
 -- ---------------------------------------------------------------------
 -- Watch-list mutation (driven by slash commands and the in-panel editor)
 -- ---------------------------------------------------------------------
+-- Rebuild the alias -> primary-cue lookup from the active profile's cues.
+local function RebuildAliases()
+    wipe(aliasOwner)
+    if not activeProfile or not activeProfile.cues then return end
+    for key, cue in pairs(activeProfile.cues) do
+        if cue.alts then
+            for _, alt in ipairs(cue.alts) do
+                aliasOwner[tostring(alt)] = key
+            end
+        end
+    end
+end
+ns.RebuildAliases = RebuildAliases
+
+-- Set the extra spell ids that also trigger one cue (so e.g. base and proc
+-- Avenging Wrath are a single alert). Pass a list of numbers/strings.
+function ns.SetCueAlts(spellKey, list)
+    local cue = activeProfile and activeProfile.cues[tostring(spellKey)]
+    if not cue then return end
+    local clean, used = {}, { [tostring(spellKey)] = true }
+    for _, v in ipairs(list or {}) do
+        local n = tonumber(v)
+        if n and not used[tostring(n)] then used[tostring(n)] = true; clean[#clean + 1] = n end
+    end
+    cue.alts = (#clean > 0) and clean or nil
+    RebuildAliases()
+    SeedPresent()
+    RefreshPrivateAuras()
+    if ns.RefreshOptions then ns.RefreshOptions() end
+end
+
 function ns.AddCue(spellID)
     spellID = tonumber(spellID)
     if not spellID then return false end
@@ -944,6 +1008,7 @@ function ns.AddCue(spellID)
         dungeon  = dungeon,
         source   = source,
     }
+    RebuildAliases()
     SeedPresent()
     RefreshPrivateAuras()
     return true, name
@@ -954,6 +1019,7 @@ function ns.RemoveCue(spellID)
     if not spellID then return false end
     local existed = activeProfile.cues[tostring(spellID)] ~= nil
     activeProfile.cues[tostring(spellID)] = nil
+    RebuildAliases()
     RefreshPrivateAuras()
     return existed
 end
@@ -1141,6 +1207,7 @@ local function SetActiveProfile()
     MergeDefaults(activeProfile, PROFILE_DEFAULTS)
     ValidateRanges(activeProfile)
     BackfillCues(activeProfile.cues)
+    RebuildAliases()
     RefreshPrivateAuras()
 end
 ns.SetActiveProfile = SetActiveProfile
@@ -1404,6 +1471,7 @@ function ns.ImportShare(str)
         BackfillCues(data.cues)
         AuraCueDB.profiles[ProfileKey()] = data
         activeProfile = data
+        RebuildAliases()
         RestorePosition("buff")
         RestorePosition("debuff")
         present = {}

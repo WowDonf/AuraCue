@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.39.0
+
+- **One alert, multiple spell IDs.** A watched aura can now have extra trigger
+  IDs, so things with more than one form — e.g. base Avenging Wrath and its
+  Radiant Glory proc — fire a single cue instead of needing two. Right-click a
+  watched row to add the other IDs (comma-separated); a `+N` marker shows when
+  a cue has aliases. Works for sound, visual, cast-tracking, and the in-
+  instance private-aura sound.
+
 ## v0.38.1
 
 - Class grouping now works for abilities that **proc** rather than being cast

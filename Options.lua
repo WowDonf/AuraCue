@@ -87,6 +87,40 @@ StaticPopupDialogs["AURACUE_LINK"] = {
     EditBoxOnEscapePressed = function(editBox) local d = editBox:GetParent(); if d then d:Hide() end end,
 }
 
+-- Apply comma/space-separated spell ids from the alias dialog to a cue.
+local function ApplyAltsFromDialog(data, text)
+    if not data or not data.key then return end
+    local list = {}
+    for tok in (text or ""):gmatch("[^,%s]+") do list[#list + 1] = tok end
+    ns.SetCueAlts(data.key, list)
+    if data.after then data.after() end
+end
+
+-- Edit the extra spell ids that also trigger one cue (one alert, many ids).
+StaticPopupDialogs["AURACUE_ALTS"] = {
+    text = "Other spell IDs that also trigger %s\n(comma-separated; leave blank to clear):",
+    button1 = "Save",
+    button2 = "Cancel",
+    hasEditBox = true,
+    editBoxWidth = 260,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    OnShow = function(self, data)
+        local eb = self.EditBox or self.editBox
+        if eb then eb:SetText((data and data.current) or ""); eb:HighlightText(); eb:SetFocus() end
+    end,
+    OnAccept = function(self, data)
+        local eb = self.EditBox or self.editBox
+        ApplyAltsFromDialog(data, eb and eb:GetText() or "")
+    end,
+    EditBoxOnEnterPressed = function(editBox)
+        local d = editBox:GetParent()
+        ApplyAltsFromDialog(d and d.data, editBox:GetText() or "")
+        if d then d:Hide() end
+    end,
+}
+
 -- Percent-encode a search term for a URL query.
 local function urlencode(s)
     return (tostring(s or ""):gsub("[^%w]", function(c) return string.format("%%%02X", c:byte()) end))
@@ -1113,9 +1147,21 @@ local function BuildKindPanel(kind)
             else
                 GameTooltip:AddLine("Tracked by: aura read — open world only. Cast it once to switch to cast tracking.", 0.75, 0.72, 0.45)
             end
+            if cue.alts and #cue.alts > 0 then
+                GameTooltip:AddLine("Also triggers on: " .. table.concat(cue.alts, ", "), 0.6, 0.8, 1)
+            end
+            GameTooltip:AddLine("Right-click to add other spell IDs that trigger this same alert.", 0.6, 0.6, 0.6)
             GameTooltip:Show()
         end)
         row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row:SetScript("OnMouseUp", function(self, button)
+            if button ~= "RightButton" or not self.spellID then return end
+            local cue = ns.P().cues[self.spellID]
+            if not cue then return end
+            local cur = cue.alts and table.concat(cue.alts, ", ") or ""
+            StaticPopup_Show("AURACUE_ALTS", cue.label or self.spellID, nil,
+                { key = self.spellID, current = cur, after = function() RefreshAllPanels() end })
+        end)
 
         row.name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 4, -6)
@@ -1299,7 +1345,8 @@ local function BuildKindPanel(kind)
                 row.spellID = sid
                 local cue = ns.P().cues[sid]
                 local nm = cue.label or C_Spell.GetSpellName(tonumber(sid)) or "Unknown"
-                row.name:SetText(nm .. "  |cff808080(" .. sid .. ")|r")
+                local altMark = (cue.alts and #cue.alts > 0) and ("  |cff60a0ff+" .. #cue.alts .. "|r") or ""
+                row.name:SetText(nm .. "  |cff808080(" .. sid .. ")|r" .. altMark)
                 row.applied:SetChecked(cue.applied and true or false)
                 row.faded:SetChecked(cue.faded and true or false)
                 row.visual:SetChecked(cue.visual and true or false)
