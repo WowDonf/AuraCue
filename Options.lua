@@ -14,8 +14,19 @@ local HEADER_H = 22
 local MAX_RESULTS = 10
 local RESULT_H = 20
 
--- Dialog for assigning a catalogued aura to a custom picker group. The opener
--- passes { sid, current, after } as the data argument.
+-- Apply a typed group name to one aura (data.sid) or many (data.sids).
+local function ApplyGroupFromDialog(data, text)
+    if not data then return end
+    if data.sids then
+        for _, sid in ipairs(data.sids) do ns.SetAuraGroup(sid, text) end
+    elseif data.sid then
+        ns.SetAuraGroup(data.sid, text)
+    end
+    if data.after then data.after() end
+end
+
+-- Dialog for assigning catalogued auras to a custom picker group. The opener
+-- passes { sid=<id> | sids={...}, current, after } as the data argument.
 StaticPopupDialogs["AURACUE_SET_GROUP"] = {
     text = "Custom group for %s:\n(leave blank to remove from any custom group)",
     button1 = "Save",
@@ -31,14 +42,11 @@ StaticPopupDialogs["AURACUE_SET_GROUP"] = {
     end,
     OnAccept = function(self, data)
         local eb = self.EditBox or self.editBox
-        if data and data.sid then ns.SetAuraGroup(data.sid, eb and eb:GetText() or "") end
-        if data and data.after then data.after() end
+        ApplyGroupFromDialog(data, eb and eb:GetText() or "")
     end,
     EditBoxOnEnterPressed = function(editBox)
         local dialog = editBox:GetParent()
-        local data = dialog and dialog.data
-        if data and data.sid then ns.SetAuraGroup(data.sid, editBox:GetText() or "") end
-        if data and data.after then data.after() end
+        ApplyGroupFromDialog(dialog and dialog.data, editBox:GetText() or "")
         if dialog then dialog:Hide() end
     end,
 }
@@ -1253,6 +1261,217 @@ do
 end
 
 -- ---------------------------------------------------------------------
+-- "Manage Auras" subcategory: an edit list over the whole account-wide
+-- catalog — set custom groups, hide clutter, or remove entries, one at a
+-- time or in bulk via the row checkboxes.
+-- ---------------------------------------------------------------------
+local MANAGE_CONFIRM = "AURACUE_MANAGE_FORGET"
+StaticPopupDialogs[MANAGE_CONFIRM] = {
+    text = "%s",
+    button1 = "Remove",
+    button2 = "Cancel",
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    OnAccept = function(_, data) if data and data.onaccept then data.onaccept() end end,
+}
+
+local managePanel = NewPanel("Manage Auras")
+do
+    local content, LEFT = managePanel.content, managePanel.LEFT
+    local ROW, MAX_ROWS = 24, 200
+
+    local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
+    titleFS:SetPoint("TOPLEFT", LEFT, managePanel.y)
+    titleFS:SetText("Manage Auras")
+    managePanel.y = managePanel.y - 24
+    managePanel.Desc("Your whole aura catalog (account-wide). Set a custom group, hide clutter, or " ..
+        "remove an entry. Tick rows to act on several at once. Removing an aura just forgets it here; " ..
+        "it returns to the list if you see it again.")
+
+    local search, showHidden = "", false
+    local selected = {}
+    local rows, Rebuild = {}, nil
+
+    -- Search box.
+    local sLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    sLabel:SetPoint("TOPLEFT", LEFT, managePanel.y)
+    sLabel:SetText("Search")
+    local sBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+    sBox:SetPoint("LEFT", sLabel, "RIGHT", 12, 0)
+    sBox:SetSize(220, 22)
+    sBox:SetAutoFocus(false)
+    sBox:SetFontObject("ChatFontNormal")
+    sBox:SetScript("OnTextChanged", function(self) search = (self:GetText() or ""):lower():trim(); Rebuild() end)
+    sBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
+    managePanel.y = managePanel.y - 30
+
+    managePanel.Check("Show hidden auras",
+        function() return showHidden end,
+        function(v) showHidden = v; Rebuild() end)
+
+    -- Selection + bulk actions.
+    local selFS = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    selFS:SetPoint("TOPLEFT", LEFT, managePanel.y)
+    selFS:SetJustifyH("LEFT")
+    managePanel.y = managePanel.y - 20
+
+    local function SelectedList()
+        local out = {}
+        for key in pairs(selected) do out[#out + 1] = tonumber(key) end
+        return out
+    end
+    local function UpdateSelFS()
+        local n = 0
+        for _ in pairs(selected) do n = n + 1 end
+        selFS:SetText("|cffffd200" .. n .. "|r selected — actions below apply to ticked rows")
+    end
+
+    local function smallBtn(label, w, onClick)
+        local b = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+        b:SetSize(w, 22)
+        b:SetText(label)
+        b:SetScript("OnClick", onClick)
+        return b
+    end
+    local bx = LEFT
+    local function placeBtn(b) b:SetPoint("TOPLEFT", bx, managePanel.y); bx = bx + b:GetWidth() + 6 end
+
+    local bGroup = smallBtn("Group…", 70, function()
+        local list = SelectedList()
+        if #list == 0 then return end
+        StaticPopup_Show("AURACUE_SET_GROUP", #list .. " selected auras", nil,
+            { sids = list, current = "", after = function() RefreshAllPanels() end })
+    end)
+    local bHide = smallBtn("Hide", 56, function()
+        for _, sid in ipairs(SelectedList()) do ns.SetAuraIgnored(sid, true) end
+        RefreshAllPanels()
+    end)
+    local bShow = smallBtn("Restore", 64, function()
+        for _, sid in ipairs(SelectedList()) do ns.SetAuraIgnored(sid, false) end
+        RefreshAllPanels()
+    end)
+    local bRemove = smallBtn("Remove", 70, function()
+        local list = SelectedList()
+        if #list == 0 then return end
+        StaticPopup_Show(MANAGE_CONFIRM, "Remove " .. #list .. " selected aura(s) from the catalog?", nil,
+            { onaccept = function()
+                for _, sid in ipairs(list) do ns.ForgetAura(sid); selected[tostring(sid)] = nil end
+                RefreshAllPanels()
+            end })
+    end)
+    local bClear = smallBtn("Clear", 56, function() wipe(selected); RefreshAllPanels() end)
+    placeBtn(bGroup); placeBtn(bHide); placeBtn(bShow); placeBtn(bRemove); placeBtn(bClear)
+    managePanel.y = managePanel.y - 30
+
+    local countFS = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    countFS:SetPoint("TOPLEFT", LEFT, managePanel.y)
+    countFS:SetJustifyH("LEFT")
+    managePanel.y = managePanel.y - 18
+
+    local listTop = managePanel.y
+
+    local function MakeManageRow(i)
+        local r = CreateFrame("Frame", nil, content)
+        r:SetHeight(ROW)
+        r:SetPoint("TOPLEFT", content, "TOPLEFT", LEFT, listTop - (i - 1) * ROW)
+        r:SetPoint("TOPRIGHT", content, "TOPRIGHT", -18, listTop - (i - 1) * ROW)
+        r.cb = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
+        r.cb:SetSize(22, 22)
+        r.cb:SetPoint("LEFT", r, "LEFT", 0, 0)
+        r.cb:SetScript("OnClick", function(self)
+            if not r.sid then return end
+            selected[tostring(r.sid)] = self:GetChecked() and true or nil
+            UpdateSelFS()
+        end)
+        r.icon = r:CreateTexture(nil, "ARTWORK")
+        r.icon:SetSize(18, 18)
+        r.icon:SetPoint("LEFT", r.cb, "RIGHT", 2, 0)
+        r.remove = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")
+        r.remove:SetSize(64, 20); r.remove:SetText("Remove")
+        r.remove:SetPoint("RIGHT", r, "RIGHT", -2, 0)
+        r.remove:SetScript("OnClick", function()
+            if not r.sid then return end
+            local nm = r.auraName or tostring(r.sid)
+            StaticPopup_Show(MANAGE_CONFIRM, "Remove " .. nm .. " from the catalog?", nil,
+                { onaccept = function()
+                    ns.ForgetAura(r.sid); selected[tostring(r.sid)] = nil; RefreshAllPanels()
+                end })
+        end)
+        r.hide = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")
+        r.hide:SetSize(54, 20)
+        r.hide:SetPoint("RIGHT", r.remove, "LEFT", -6, 0)
+        r.hide:SetScript("OnClick", function()
+            if not r.sid then return end
+            ns.SetAuraIgnored(r.sid, not r.ignored)
+            RefreshAllPanels()
+        end)
+        r.group = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")
+        r.group:SetSize(58, 20); r.group:SetText("Group")
+        r.group:SetPoint("RIGHT", r.hide, "LEFT", -6, 0)
+        r.group:SetScript("OnClick", function()
+            if not r.sid then return end
+            StaticPopup_Show("AURACUE_SET_GROUP", r.auraName or tostring(r.sid), nil,
+                { sid = r.sid, current = r.group_name or "", after = function() RefreshAllPanels() end })
+        end)
+        r.text = r:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        r.text:SetPoint("LEFT", r.icon, "RIGHT", 6, 0)
+        r.text:SetPoint("RIGHT", r.group, "LEFT", -8, 0)
+        r.text:SetJustifyH("LEFT")
+        r:SetScript("OnEnter", function()
+            if r.sid and GameTooltip.SetSpellByID then
+                GameTooltip:SetOwner(r, "ANCHOR_RIGHT"); GameTooltip:SetSpellByID(r.sid); GameTooltip:Show()
+            end
+        end)
+        r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        r:EnableMouse(true)
+        rows[i] = r
+        return r
+    end
+
+    Rebuild = function()
+        if not ns.P() then return end
+        UpdateSelFS()
+        local shown, total = 0, 0
+        for _, sp in ipairs(ns.GetSeenAuras()) do
+            if showHidden or not sp.ignored then
+                local nm = sp.name or ("Spell " .. sp.spellID)
+                if search == "" or nm:lower():find(search, 1, true) or tostring(sp.spellID):find(search, 1, true) then
+                    total = total + 1
+                    if shown < MAX_ROWS then
+                        shown = shown + 1
+                        local r = rows[shown] or MakeManageRow(shown)
+                        r.sid = sp.spellID
+                        r.auraName = nm
+                        r.ignored = sp.ignored
+                        r.group_name = sp.group
+                        r.icon:SetTexture(sp.icon or 134400)
+                        r.cb:SetChecked(selected[tostring(sp.spellID)] and true or false)
+                        r.hide:SetText(sp.ignored and "Show" or "Hide")
+                        local tag = (sp.kind == "debuff") and "  |cffff8080[debuff]|r" or ""
+                        if sp.group and sp.group ~= "" then tag = tag .. "  |cff80c0ff[" .. sp.group .. "]|r" end
+                        if sp.ignored then tag = tag .. "  |cffff6060(hidden)|r" end
+                        r.text:SetText(nm .. tag)
+                        r:Show()
+                    end
+                end
+            end
+        end
+        for i = shown + 1, #rows do rows[i]:Hide() end
+        if total == 0 then
+            countFS:SetText("|cff808080No auras match — see some in play, or clear the search.|r")
+        elseif total > shown then
+            countFS:SetText("Showing " .. shown .. " of " .. total .. " — search to narrow.")
+        else
+            countFS:SetText(total .. " aura(s).")
+        end
+        content:SetHeight(-(listTop - shown * ROW) + 24)
+    end
+
+    managePanel.rebuild = Rebuild
+end
+
+-- ---------------------------------------------------------------------
 -- Registration: main category + Buffs / Debuffs subcategories.
 -- ---------------------------------------------------------------------
 local mainCategory
@@ -1262,6 +1481,7 @@ if Settings and Settings.RegisterCanvasLayoutCategory then
     if Settings.RegisterCanvasLayoutSubcategory then
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, debuffPanel.panel, "Debuffs")
+        Settings.RegisterCanvasLayoutSubcategory(mainCategory, managePanel.panel, "Manage Auras")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, sharePanel.panel, "Sharing")
     end
 end

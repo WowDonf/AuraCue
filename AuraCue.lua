@@ -1017,6 +1017,30 @@ function ns.SetAuraGroup(spellID, name)
     AuraCueDB.groups[tostring(spellID)] = name
 end
 
+-- Remove an aura from the catalog entirely (and any group / hidden / cast
+-- record for it). Does not touch watched cues that reference it.
+function ns.ForgetAura(spellID)
+    if not AuraCueDB then return end
+    local key = tostring(spellID)
+    if AuraCueDB.seen then AuraCueDB.seen[key] = nil end
+    if AuraCueDB.groups then AuraCueDB.groups[key] = nil end
+    if AuraCueDB.ignored then AuraCueDB.ignored[key] = nil end
+    if AuraCueDB.castable then AuraCueDB.castable[key] = nil end
+end
+
+-- Distinct custom group names currently in use (sorted) — for suggestions.
+function ns.GetAuraGroupNames()
+    local set, out = {}, {}
+    for _, name in pairs((AuraCueDB and AuraCueDB.groups) or {}) do
+        if type(name) == "string" and name ~= "" and not set[name] then
+            set[name] = true
+            out[#out + 1] = name
+        end
+    end
+    table.sort(out)
+    return out
+end
+
 function ns.ResetIgnored()
     if AuraCueDB then AuraCueDB.ignored = {} end
 end

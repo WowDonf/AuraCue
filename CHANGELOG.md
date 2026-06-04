@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.30.0
+
+- **New "Manage Auras" page.** A full edit view of your account-wide aura
+  catalog in the settings list: search it, set a custom group, hide / show,
+  or remove any entry. Tick rows to act on several at once — **Group…**,
+  **Hide**, **Restore**, or **Remove** the whole selection in one go. (This
+  is the multi-select group-assignment path; removing an aura just forgets
+  it until you see it again.)
+
 ## v0.29.1
 
 - Fixed the hide / restore / group buttons being cut off the right edge of
