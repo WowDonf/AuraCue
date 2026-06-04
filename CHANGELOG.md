@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.31.0
+
+- **Boss auras.** AuraCue now records whether an aura was applied by a boss.
+  Boss debuffs get their own **Boss** group at the top of the Debuffs
+  picker, there's an **"Only boss auras"** filter, and the Manage Auras page
+  tags them `[boss]`. (Fills in as you encounter boss auras; instanced boss
+  debuffs that are only surfaced as a private-aura sound can't be read, so
+  those may not be flagged.)
+
 ## v0.30.0
 
 - **New "Manage Auras" page.** A full edit view of your account-wide aura

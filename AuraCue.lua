@@ -663,6 +663,7 @@ local function RecordSeen(sid, data)
     -- isFromPlayerOrPlayerPet is a never-secret field: it tells us the aura
     -- was applied by the player (or pet), i.e. "cast by myself".
     local mine = Reveal(data.isFromPlayerOrPlayerPet) and true or false
+    local boss = Reveal(data.isBossAura) and true or false
     local existing = AuraCueDB.seen[key]
     if existing then
         -- Backfill provenance we couldn't capture on first sighting (e.g.
@@ -670,6 +671,7 @@ local function RecordSeen(sid, data)
         if not existing.dungeon then existing.dungeon = CurrentDungeon() end
         if not existing.source then existing.source = ResolveSource(data, harmful) end
         if existing.mine == nil then existing.mine = mine end
+        if boss and not existing.boss then existing.boss = true end
         return
     end
     AuraCueDB.seen[key] = {
@@ -679,6 +681,7 @@ local function RecordSeen(sid, data)
         dungeon = CurrentDungeon(),
         source  = ResolveSource(data, harmful),
         mine    = mine,
+        boss    = boss,
     }
 end
 
@@ -992,6 +995,7 @@ function ns.GetSeenAuras()
             known   = (SpellKnown and SpellKnown(sid)) and true or false,
             ignored = ignored[key] and true or false,
             mount   = (GetMount and GetMount(sid)) and true or false,
+            boss    = info.boss and true or false,
             group   = groups[key],
             dungeon = info.dungeon,
             instanceable = instanceable,

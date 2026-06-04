@@ -510,6 +510,7 @@ local function BuildKindPanel(kind)
     local RebuildList, MakeRow, MakeHeader, UpdateSearchResults
     local pickerSearch = ""
     local pickerMineOnly, pickerKnownOnly, pickerInstanceOnly, pickerShowHidden = false, false, false, false
+    local pickerBossOnly = false
 
     -- Primary "Add": pick from catalogued auras of this kind.
     local pickLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -538,6 +539,7 @@ local function BuildKindPanel(kind)
         if sp.ignored and not pickerShowHidden then return false end
         if pickerMineOnly and not sp.mine then return false end
         if pickerKnownOnly and not sp.known then return false end
+        if pickerBossOnly and not sp.boss then return false end
         if pickerInstanceOnly and not sp.instanceable then return false end
         return true
     end
@@ -775,10 +777,11 @@ local function BuildKindPanel(kind)
     -- fall back to reliable auto-buckets (debuffs by dungeon; buffs by mount /
     -- cast-by-me / world). The auto-buckets have a fixed display order and sit
     -- below any custom groups.
-    local BUCKET_ORDER = { ["Cast by me"] = 1, ["Mounts"] = 2, ["World & other"] = 3, ["Other"] = 4 }
+    local BUCKET_ORDER = { ["Boss"] = 0, ["Cast by me"] = 1, ["Mounts"] = 2, ["World & other"] = 3, ["Other"] = 4 }
     local function GroupOf(sp)
         if sp.group and sp.group ~= "" then return sp.group end
         if kind == "debuff" then
+            if sp.boss then return "Boss" end
             return (sp.dungeon and sp.dungeon ~= "") and sp.dungeon or "Other"
         end
         if sp.mount then return "Mounts" end
@@ -853,6 +856,7 @@ local function BuildKindPanel(kind)
         local n = 0
         if pickerMineOnly then n = n + 1 end
         if pickerKnownOnly then n = n + 1 end
+        if pickerBossOnly then n = n + 1 end
         if pickerInstanceOnly then n = n + 1 end
         if pickerShowHidden then n = n + 1 end
         return (n == 0) and "All auras I've seen" or ("Filters: " .. n .. " on")
@@ -876,6 +880,8 @@ local function BuildKindPanel(kind)
             function() return pickerMineOnly end, function(v) pickerMineOnly = v end)
         FilterToggle(root, "Only abilities I know (hides toys / food)",
             function() return pickerKnownOnly end, function(v) pickerKnownOnly = v end)
+        FilterToggle(root, "Only boss auras",
+            function() return pickerBossOnly end, function(v) pickerBossOnly = v end)
         FilterToggle(root, "Only ones trackable in instances",
             function() return pickerInstanceOnly end, function(v) pickerInstanceOnly = v end)
         root:CreateDivider()
@@ -1449,6 +1455,7 @@ do
                         r.cb:SetChecked(selected[tostring(sp.spellID)] and true or false)
                         r.hide:SetText(sp.ignored and "Show" or "Hide")
                         local tag = (sp.kind == "debuff") and "  |cffff8080[debuff]|r" or ""
+                        if sp.boss then tag = tag .. "  |cffff4040[boss]|r" end
                         if sp.group and sp.group ~= "" then tag = tag .. "  |cff80c0ff[" .. sp.group .. "]|r" end
                         if sp.ignored then tag = tag .. "  |cffff6060(hidden)|r" end
                         r.text:SetText(nm .. tag)
