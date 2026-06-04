@@ -42,7 +42,6 @@ need an ID.
 - **Manage Auras page** — bulk-edit your whole catalog: group, hide, remove.
 - **Per character & spec** profiles, with export/import of profiles and the
   catalog.
-- **Minimap button** and Addon Compartment support.
 
 ## Getting started
 
