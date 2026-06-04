@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.35.0
+
+- The picker now catalogs auras from the spells you **cast**, not just ones
+  read off you out of combat. Previously a buff/debuff applied during combat
+  couldn't be recorded (the aura list hides spell ids in combat), so lots of
+  cast abilities never showed up to add. Casting now queries that exact id —
+  which works in combat — and files the aura it applies. (Catches abilities
+  whose aura shares the cast's spell id; a few procs with a different aura id
+  still rely on being seen out of combat.)
+
 ## v0.34.4
 
 - Self-applied debuffs now group under "From you / your pet" instead of being

@@ -1236,6 +1236,14 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                 AuraCueDB.castable[tostring(spellID)] = true
             end
             OnSelfCast(spellID)
+            -- Catalog the aura this cast applies. The aura list can't be read
+            -- in combat (its spell ids are secret), but querying this known id
+            -- works in and out of combat — so buffs/debuffs you cast in a fight
+            -- still make it into the picker (when the aura shares the cast id).
+            C_Timer.After(0.1, function()
+                local state, data = ReadAura(spellID)
+                if state == "present" and data then RecordSeen(spellID, data) end
+            end)
         end
     end
 end)
