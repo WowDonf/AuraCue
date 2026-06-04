@@ -777,7 +777,7 @@ local function BuildKindPanel(kind)
     -- fall back to reliable auto-buckets (debuffs by dungeon; buffs by mount /
     -- cast-by-me / world). The auto-buckets have a fixed display order and sit
     -- below any custom groups.
-    local BUCKET_ORDER = { ["Boss"] = 0, ["Cast by me"] = 1, ["Mounts"] = 2, ["World & other"] = 3, ["Other"] = 4 }
+    local BUCKET_ORDER = { ["Boss"] = 0, ["From you / your pet"] = 1, ["Mounts"] = 2, ["World & other"] = 3, ["Other"] = 4 }
     local function GroupOf(sp)
         if sp.group and sp.group ~= "" then return sp.group end
         if kind == "debuff" then
@@ -785,7 +785,7 @@ local function BuildKindPanel(kind)
             return (sp.dungeon and sp.dungeon ~= "") and sp.dungeon or "Other"
         end
         if sp.mount then return "Mounts" end
-        if sp.mine then return "Cast by me" end
+        if sp.mine then return "From you / your pet" end
         return "World & other"
     end
 
@@ -876,7 +876,7 @@ local function BuildKindPanel(kind)
         end)
     end
     filterDD:SetupMenu(function(_, root)
-        FilterToggle(root, "Only auras I cast",
+        FilterToggle(root, "Only auras from me / my pet",
             function() return pickerMineOnly end, function(v) pickerMineOnly = v end)
         FilterToggle(root, "Only abilities I know (hides toys / food)",
             function() return pickerKnownOnly end, function(v) pickerKnownOnly = v end)

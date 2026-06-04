@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.31.1
+
+- Renamed the "Cast by me" group (and its filter) to "From you / your pet".
+  It's based on the aura's source-is-you flag, which also covers procs,
+  trinkets, and consumables you triggered — not only spells you actively
+  cast — so the old label claimed more than the data shows.
+
 ## v0.31.0
 
 - **Boss auras.** AuraCue now records whether an aura was applied by a boss.
