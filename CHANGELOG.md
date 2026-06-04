@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.28.0
+
+- **Fixed "Only abilities I know" hiding almost everything.** The known-spell
+  check was using a function that reports passive talents and override spells
+  as *unknown* — i.e. most class abilities. It now uses the broader, correct
+  check, so the filter keeps your actual abilities and only drops toys / food
+  / world buffs.
+- **Made hiding discoverable.** Click into the "Search / hide" box (no need to
+  type) and your auras list right there, each with a ✕ to hide it (and a +
+  to restore when "Show hidden auras" is on). Previously the hide controls
+  only appeared once you started typing.
+
 ## v0.27.1
 
 - You can now un-hide a single aura, not just clear the whole hidden list.

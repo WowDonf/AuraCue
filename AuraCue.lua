@@ -129,7 +129,23 @@ ns.P = P
 -- the old global so the addon also runs on pre-11.2 clients.
 local GetSpec     = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization) or GetSpecialization
 local GetSpecInfo = (C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfo) or GetSpecializationInfo
-local SpellKnown  = (C_SpellBook and C_SpellBook.IsSpellKnown) or IsSpellKnown or IsPlayerSpell
+
+-- "Does the player know this spell?"  C_SpellBook.IsSpellKnown alone is too
+-- strict: it returns false for passive talents and for any spell that
+-- overrides a base spell, which is most class abilities. IsPlayerSpell is the
+-- broad, correct check ("can cast this, or something that overrides it"), so
+-- prefer it and fall back through the namespaced variants for robustness.
+local function SpellKnown(id)
+    if not id then return false end
+    if IsPlayerSpell and IsPlayerSpell(id) then return true end
+    local cb = C_SpellBook
+    if cb then
+        if cb.IsSpellKnownOrOverridesKnown and cb.IsSpellKnownOrOverridesKnown(id) then return true end
+        if cb.IsSpellKnown and cb.IsSpellKnown(id) then return true end
+    end
+    if IsSpellKnown and IsSpellKnown(id) then return true end
+    return false
+end
 
 -- Profile keys. CharKey identifies the character; ProfileKey adds the
 -- current specialization, so each spec keeps its own tracked auras and

@@ -486,12 +486,16 @@ local function BuildKindPanel(kind)
 
     local searchLabel = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     searchLabel:SetPoint("LEFT", addDD, "RIGHT", 16, 0)
-    searchLabel:SetText("Search")
+    searchLabel:SetText("Search / hide")
     local searchBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
     searchBox:SetPoint("LEFT", searchLabel, "RIGHT", 8, 0)
     searchBox:SetSize(140, 22)
     searchBox:SetAutoFocus(false)
     searchBox:SetFontObject("ChatFontNormal")
+    local searchHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    searchHint:SetPoint("LEFT", searchBox, "RIGHT", 8, 0)
+    searchHint:SetText("|cff808080(click here — ✕ hides an aura)|r")
+    local searchFocused = false
 
     -- True if an aura belongs in this panel and passes the filters.
     local function passes(sp)
@@ -581,7 +585,9 @@ local function BuildKindPanel(kind)
     end
 
     UpdateSearchResults = function()
-        if pickerSearch == "" or not ns.P() then searchResults:Hide(); return end
+        -- Show the list while typing OR while the box is focused (so the hide
+        -- ✕ / restore + controls are reachable without having to type first).
+        if not ns.P() or (pickerSearch == "" and not searchFocused) then searchResults:Hide(); return end
         local shown, more = 0, 0
         for _, sp in ipairs(ns.GetSeenAuras()) do
             local nm = sp.name or ("Spell " .. sp.spellID)
@@ -634,6 +640,20 @@ local function BuildKindPanel(kind)
     end)
     searchBox:SetScript("OnEscapePressed", function(self)
         self:SetText(""); self:ClearFocus(); searchResults:Hide()
+    end)
+    searchBox:SetScript("OnEditFocusGained", function()
+        searchFocused = true
+        UpdateSearchResults()
+    end)
+    searchBox:SetScript("OnEditFocusLost", function()
+        searchFocused = false
+        -- Defer so a click on a result button still registers; only close the
+        -- empty (browse-all) list, and only if the cursor has left the popup.
+        C_Timer.After(0.2, function()
+            if not searchFocused and pickerSearch == "" and not searchResults:IsMouseOver() then
+                searchResults:Hide()
+            end
+        end)
     end)
 
     -- Create an "add this aura" entry under `parent` (the root or a submenu).
