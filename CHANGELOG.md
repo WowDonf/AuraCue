@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.36.0
+
+- Added a **"Find an ID" → Search Wowhead** helper under each picker. Type a
+  spell name and it gives you a copyable Wowhead search link to open in your
+  browser (addons can't browse the web), where the spell ID is in the URL.
+
 ## v0.35.0
 
 - The picker now catalogs auras from the spells you **cast**, not just ones

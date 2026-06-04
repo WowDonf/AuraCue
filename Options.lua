@@ -64,6 +64,34 @@ StaticPopupDialogs["AURACUE_CONFIRM"] = {
     OnAccept = function(_, data) if data and data.onaccept then data.onaccept() end end,
 }
 
+-- A copyable link dialog (addons can't open a browser, so we hand the user a
+-- URL to copy). Opener passes { url } as data.
+StaticPopupDialogs["AURACUE_LINK"] = {
+    text = "Copy this link (Ctrl+C), then open it in your web browser:",
+    button1 = "Close",
+    hasEditBox = true,
+    editBoxWidth = 350,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    OnShow = function(self, data)
+        local eb = self.EditBox or self.editBox
+        if eb then
+            eb:SetText((data and data.url) or "")
+            eb:SetCursorPosition(0)
+            eb:HighlightText()
+            eb:SetFocus()
+        end
+    end,
+    EditBoxOnEnterPressed = function(editBox) local d = editBox:GetParent(); if d then d:Hide() end end,
+    EditBoxOnEscapePressed = function(editBox) local d = editBox:GetParent(); if d then d:Hide() end end,
+}
+
+-- Percent-encode a search term for a URL query.
+local function urlencode(s)
+    return (tostring(s or ""):gsub("[^%w]", function(c) return string.format("%%%02X", c:byte()) end))
+end
+
 -- Every panel registers a refresh function here; ns.RefreshOptions runs
 -- them all (used by slash commands and cross-panel updates).
 -- Per-cue "when" condition cycle (compact button on each row).
@@ -979,6 +1007,35 @@ local function BuildKindPanel(kind)
     addBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     addBtn:SetScript("OnClick", DoAdd)
     addStatus:SetPoint("LEFT", addBtn, "RIGHT", 14, 0)
+    ctx.y = ctx.y - 30
+
+    -- Don't know the ID? Type a spell name and get a copyable Wowhead search
+    -- link (the addon can't browse the web, so you look it up in a browser).
+    local whLabel = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    whLabel:SetPoint("TOPLEFT", LEFT, ctx.y)
+    whLabel:SetText("Find an ID:")
+    local whBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+    whBox:SetPoint("LEFT", whLabel, "RIGHT", 12, 0)
+    whBox:SetSize(150, 22)
+    whBox:SetAutoFocus(false)
+    whBox:SetFontObject("ChatFontNormal")
+    local whBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    whBtn:SetPoint("LEFT", whBox, "RIGHT", 8, 0)
+    whBtn:SetSize(130, 22)
+    whBtn:SetText("Search Wowhead")
+    local function DoWowhead()
+        local term = (whBox:GetText() or ""):trim()
+        local url = (term ~= "")
+            and ("https://www.wowhead.com/search?q=" .. urlencode(term))
+            or "https://www.wowhead.com/spells"
+        StaticPopup_Show("AURACUE_LINK", nil, nil, { url = url })
+    end
+    whBox:SetScript("OnEnterPressed", function(self) self:ClearFocus(); DoWowhead() end)
+    whBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    whBtn:SetScript("OnClick", DoWowhead)
+    local whHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    whHint:SetPoint("LEFT", whBtn, "RIGHT", 12, 0)
+    whHint:SetText("|cff808080On the page, the ID is in the URL (…/spell=12345).|r")
     ctx.y = ctx.y - 30
 
     local hint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
