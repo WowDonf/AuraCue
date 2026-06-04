@@ -1036,6 +1036,26 @@ function ns.IsNameCombined(name)
     return false
 end
 
+-- Flip a watched cue between buff and debuff (so a self-debuff that came in as
+-- a "buff" can be moved to the Debuffs side). Keeps the catalog entry in sync.
+function ns.SetCueKind(spellKey, kind)
+    local key = tostring(spellKey)
+    local cue = activeProfile and activeProfile.cues[key]
+    if not cue then return end
+    kind = (kind == "debuff") and "debuff" or "buff"
+    if cue.kind == kind then return end
+    cue.kind = kind
+    -- Move it out of the old kind's default category heading.
+    if cue.category == "Buffs" or cue.category == "Debuffs" then
+        cue.category = (kind == "debuff") and "Debuffs" or "Buffs"
+    end
+    if AuraCueDB.seen and AuraCueDB.seen[key] then AuraCueDB.seen[key].kind = kind end
+    RebuildAliases()
+    SeedPresent()
+    RefreshPrivateAuras()
+    if ns.RefreshOptions then ns.RefreshOptions() end
+end
+
 -- Global toggle: combine every same-named aura into a single alert. Turning it
 -- ON absorbs duplicate cues (keeps one per name).
 function ns.SetCombineByName(on)
@@ -1217,6 +1237,21 @@ end
 
 function ns.ResetIgnored()
     if AuraCueDB then AuraCueDB.ignored = {} end
+end
+
+-- Rename a custom group everywhere (newName blank/nil deletes the group).
+function ns.RenameAuraGroup(oldName, newName)
+    if not (AuraCueDB and AuraCueDB.groups and oldName) then return end
+    if type(newName) == "string" then newName = newName:trim() end
+    if newName == "" then newName = nil end
+    for k, v in pairs(AuraCueDB.groups) do
+        if v == oldName then AuraCueDB.groups[k] = newName end
+    end
+    if ns.RefreshOptions then ns.RefreshOptions() end
+end
+
+function ns.DeleteAuraGroup(name)
+    ns.RenameAuraGroup(name, nil)
 end
 
 -- ---------------------------------------------------------------------
@@ -1743,7 +1778,7 @@ SlashCmdList["AURACUE"] = function(msg)
             print("  audio channel:  " .. activeProfile.channel)
             print("  secret regime:  " .. tostring(issecret ~= nil))
 
-        else
+        else  -- "help" and anything unrecognized
             chatPrint("commands:")
             print("  |cffffd200/cue|r                 open options")
             print("  |cffffd200/cue test|r            preview a cue")
@@ -1753,9 +1788,11 @@ SlashCmdList["AURACUE"] = function(msg)
             print("  |cffffd200/cue toggle|r          enable/disable")
             print("  |cffffd200/cue move|r [|cffffd200debuff|r] / |cffffd200lock|r   move a window")
             print("  |cffffd200/cue reset|r           reset window positions")
-            print("  |cffffd200/cue forget|r          clear the remembered-aura list")
             print("  |cffffd200/cue gather|r          catalog auras on nearby units")
+            print("  |cffffd200/cue forget|r          clear the remembered-aura list")
+            print("  |cffffd200/cue tts|r             diagnose text-to-speech")
             print("  |cffffd200/cue status|r          print current settings")
+            print("  |cffffd200/cue help|r            show this list")
         end
     end)
     if not ok then

@@ -121,6 +121,32 @@ StaticPopupDialogs["AURACUE_ALTS"] = {
     end,
 }
 
+-- Rename (or, if blank, delete) a whole custom group. Opener passes { old }.
+StaticPopupDialogs["AURACUE_RENAME_GROUP"] = {
+    text = "Rename group \"%s\" to (blank = delete the group):",
+    button1 = "Save",
+    button2 = "Cancel",
+    hasEditBox = true,
+    editBoxWidth = 220,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    OnShow = function(self, data)
+        local eb = self.EditBox or self.editBox
+        if eb then eb:SetText((data and data.old) or ""); eb:HighlightText(); eb:SetFocus() end
+    end,
+    OnAccept = function(self, data)
+        local eb = self.EditBox or self.editBox
+        if data then ns.RenameAuraGroup(data.old, eb and eb:GetText() or ""); if data.after then data.after() end end
+    end,
+    EditBoxOnEnterPressed = function(editBox)
+        local d = editBox:GetParent()
+        local data = d and d.data
+        if data then ns.RenameAuraGroup(data.old, editBox:GetText() or ""); if data.after then data.after() end end
+        if d then d:Hide() end
+    end,
+}
+
 -- Percent-encode a search term for a URL query.
 local function urlencode(s)
     return (tostring(s or ""):gsub("[^%w]", function(c) return string.format("%%%02X", c:byte()) end))
@@ -1177,6 +1203,10 @@ local function BuildKindPanel(kind)
             if MenuUtil and MenuUtil.CreateContextMenu then
                 MenuUtil.CreateContextMenu(self, function(_, root)
                     root:CreateTitle(cue.label or "Aura")
+                    root:CreateButton(
+                        cue.kind == "debuff" and "Treat as a buff" or "Treat as a debuff",
+                        function() ns.SetCueKind(key, cue.kind == "debuff" and "buff" or "debuff") end)
+                    root:CreateDivider()
                     root:CreateCheckbox("Auto-combine auras with the same name",
                         function() return cue.matchName end,
                         function() ns.SetMatchName(key, not cue.matchName) end)
@@ -1544,6 +1574,45 @@ do
     local bClear = smallBtn("Clear selection", 110, function() wipe(selected); RefreshAllPanels() end)
     placeBtn(bGroup); placeBtn(bHide); placeBtn(bShow); placeBtn(bRemove); placeBtn(bClear)
     managePanel.y = managePanel.y - 30
+
+    -- Custom-group management: rename or delete a whole group at once.
+    local selectedGroup
+    local grpLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    grpLabel:SetPoint("TOPLEFT", LEFT, managePanel.y)
+    grpLabel:SetText("Custom groups:")
+    local grpDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+    grpDD:SetPoint("LEFT", grpLabel, "RIGHT", 12, 0)
+    grpDD:SetSize(180, 26)
+    grpDD:SetDefaultText("Pick a group")
+    grpDD:SetupMenu(function(_, root)
+        local names = ns.GetAuraGroupNames and ns.GetAuraGroupNames() or {}
+        if #names == 0 then root:CreateButton("|cff808080(no custom groups)|r", function() end); return end
+        for _, gnm in ipairs(names) do
+            root:CreateRadio(gnm,
+                function() return selectedGroup == gnm end,
+                function() selectedGroup = gnm; grpDD:SetText(gnm); grpDD:GenerateMenu() end)
+        end
+    end)
+    local function clearGroupSel()
+        selectedGroup = nil; grpDD:SetText("Pick a group"); grpDD:GenerateMenu()
+    end
+    local grpRename = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    grpRename:SetPoint("LEFT", grpDD, "RIGHT", 8, 0); grpRename:SetSize(80, 22); grpRename:SetText("Rename…")
+    grpRename:SetScript("OnClick", function()
+        if not selectedGroup then return end
+        StaticPopup_Show("AURACUE_RENAME_GROUP", selectedGroup, nil,
+            { old = selectedGroup, after = clearGroupSel })
+    end)
+    local grpDelete = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    grpDelete:SetPoint("LEFT", grpRename, "RIGHT", 6, 0); grpDelete:SetSize(70, 22); grpDelete:SetText("Delete")
+    grpDelete:SetScript("OnClick", function()
+        if not selectedGroup then return end
+        local g = selectedGroup
+        StaticPopup_Show("AURACUE_CONFIRM",
+            "Delete the group \"" .. g .. "\"? The auras stay; they just lose this group.",
+            nil, { onaccept = function() ns.DeleteAuraGroup(g); clearGroupSel() end })
+    end)
+    managePanel.y = managePanel.y - 32
 
     local countFS = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     countFS:SetPoint("TOPLEFT", LEFT, managePanel.y)

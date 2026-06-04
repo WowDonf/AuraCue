@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.42.0
+
+- **Flip a cue between buff and debuff.** Right-click a watched aura and pick
+  "Treat as a buff/debuff" — handy when a self-debuff you cast came in on the
+  Buffs side. It moves to the other page and the catalog stays in sync.
+- **Custom-group management.** The Manage Auras page can now rename or delete a
+  whole custom group at once (pick it from the dropdown), instead of editing
+  every aura.
+- **`/cue help`** lists the slash commands (and the list now includes `tts`).
+
 ## v0.41.1
 
 - Fixed the "faded" cue not firing for a hard-cast ability (while it worked for
