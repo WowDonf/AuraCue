@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.45.0
+
+- **Decluttered the Buffs/Debuffs pages.** The on-screen window look (colors,
+  edges, size, on-screen time, move/reset/test) moved to a new **Appearance**
+  page in the left list — covering both windows in one place. The Buffs and
+  Debuffs pages now open straight to the watched-aura list and the add
+  controls, instead of a wall of appearance sliders.
+
 ## v0.44.0
 
 Engine consolidation and bug-fix pass (from a code review of the tracking core):

@@ -542,7 +542,6 @@ local function BuildKindPanel(kind)
     local label = (kind == "debuff") and "Debuffs" or "Buffs"
     local ctx = NewPanel(label)
     local content, LEFT = ctx.content, ctx.LEFT
-    local function Vis() return ns.P().visual[kind] end
 
     -- Title
     local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
@@ -550,39 +549,8 @@ local function BuildKindPanel(kind)
     titleFS:SetText(label)
     ctx.y = ctx.y - 24
 
-    -- Window appearance for this kind.
-    ctx.Header("General Settings")
-    ctx.Check("Show on-screen flash",
-        function() return Vis().enabled end,
-        function(v) Vis().enabled = v end)
-    ctx.Check("Also flash the screen edges",
-        function() return Vis().edgeFlash end,
-        function(v) Vis().edgeFlash = v end)
-    ctx.Slider("Edge thickness", 40, 400, 10, "%d",
-        function() return Vis().edgeThickness end,
-        function(v) Vis().edgeThickness = v end)
-    ctx.Slider("Edge intensity", 0.1, 1.0, 0.05, "%.2f",
-        function() return Vis().edgeIntensity end,
-        function(v) Vis().edgeIntensity = v end)
-    AddColorPair(ctx,
-        function() return Vis().color end, "Gained flash color...",
-        function() return Vis().colorFaded end, "Faded flash color...")
-    ctx.Slider("Flash size", 0.5, 3.0, 0.05, "%.2fx",
-        function() return Vis().scale end,
-        function(v) Vis().scale = v end)
-    ctx.Slider("On-screen time", 0.5, 8.0, 0.1, "%.1fs",
-        function() return Vis().duration end,
-        function(v) Vis().duration = v end)
-    ctx.SideBySide(
-        "Move window", function()
-            ns.SetRepositionMode(kind, true)
-            if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
-        end,
-        "Reset position", function()
-            Vis().position = nil
-            ns.RestorePosition(kind)
-        end)
-    ctx.Button("Test this window", 160, function() ns.TestWindow(kind) end)
+    -- (Window appearance lives on the separate "Appearance" page now, so this
+    -- page is just the watched list + the add controls.)
 
     -- Watched-aura editor.
     ctx.Header("Watched " .. label:lower())
@@ -1433,6 +1401,61 @@ local buffPanel = BuildKindPanel("buff")
 local debuffPanel = BuildKindPanel("debuff")
 
 -- ---------------------------------------------------------------------
+-- Appearance subcategory: the on-screen window look for both kinds, kept
+-- off the Buffs/Debuffs pages so those stay focused on the aura list.
+-- ---------------------------------------------------------------------
+local function BuildAppearanceSection(ctx, kind)
+    local label = (kind == "debuff") and "Debuffs" or "Buffs"
+    local function Vis() return ns.P().visual[kind] end
+    ctx.Header(label .. " window")
+    ctx.Check("Show on-screen flash",
+        function() return Vis().enabled end,
+        function(v) Vis().enabled = v end)
+    ctx.Check("Also flash the screen edges",
+        function() return Vis().edgeFlash end,
+        function(v) Vis().edgeFlash = v end)
+    ctx.Slider("Edge thickness", 40, 400, 10, "%d",
+        function() return Vis().edgeThickness end,
+        function(v) Vis().edgeThickness = v end)
+    ctx.Slider("Edge intensity", 0.1, 1.0, 0.05, "%.2f",
+        function() return Vis().edgeIntensity end,
+        function(v) Vis().edgeIntensity = v end)
+    AddColorPair(ctx,
+        function() return Vis().color end, "Gained flash color...",
+        function() return Vis().colorFaded end, "Faded flash color...")
+    ctx.Slider("Flash size", 0.5, 3.0, 0.05, "%.2fx",
+        function() return Vis().scale end,
+        function(v) Vis().scale = v end)
+    ctx.Slider("On-screen time", 0.5, 8.0, 0.1, "%.1fs",
+        function() return Vis().duration end,
+        function(v) Vis().duration = v end)
+    ctx.SideBySide(
+        "Move window", function()
+            ns.SetRepositionMode(kind, true)
+            if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+        end,
+        "Reset position", function()
+            Vis().position = nil
+            ns.RestorePosition(kind)
+        end)
+    ctx.Button("Test this window", 160, function() ns.TestWindow(kind) end)
+end
+
+local appearancePanel = NewPanel("Appearance")
+do
+    local content, LEFT = appearancePanel.content, appearancePanel.LEFT
+    local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
+    titleFS:SetPoint("TOPLEFT", LEFT, appearancePanel.y)
+    titleFS:SetText("Appearance")
+    appearancePanel.y = appearancePanel.y - 24
+    appearancePanel.Desc("How the on-screen flash looks for each kind. Use \"Move window\" to drag a " ..
+        "window into place and \"Test this window\" to preview it.")
+    BuildAppearanceSection(appearancePanel, "buff")
+    BuildAppearanceSection(appearancePanel, "debuff")
+    content:SetHeight(-appearancePanel.y + 20)
+end
+
+-- ---------------------------------------------------------------------
 -- Sharing subcategory: export (profile / catalog) and import, each with
 -- its own scrollable box.
 -- ---------------------------------------------------------------------
@@ -1735,6 +1758,7 @@ if Settings and Settings.RegisterCanvasLayoutCategory then
     if Settings.RegisterCanvasLayoutSubcategory then
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, debuffPanel.panel, "Debuffs")
+        Settings.RegisterCanvasLayoutSubcategory(mainCategory, appearancePanel.panel, "Appearance")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, managePanel.panel, "Manage Auras")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, sharePanel.panel, "Sharing")
     end
