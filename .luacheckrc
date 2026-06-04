@@ -53,6 +53,8 @@ read_globals = {
     "C_Timer", "GetTime",
     -- Combat / protected-frame state
     "InCombatLockdown",
+    -- Modifier-key state (dropdown shift/ctrl-click actions)
+    "IsShiftKeyDown", "IsControlKeyDown",
     -- Tables / misc
     "wipe", "ReloadUI",
     -- Import/export serialization (Lua 5.1 globals on WoW)

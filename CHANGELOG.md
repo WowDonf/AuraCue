@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.29.1
+
+- Fixed the hide / restore / group buttons being cut off the right edge of
+  the options panel. The search list is now anchored to the panel's left
+  with a contained width and a short header explaining the controls, so the
+  per-row buttons always fit.
+- The same actions are now available from the **Add** dropdown too: plain
+  click adds an aura, **Shift-click** hides/restores it, and **Ctrl-click**
+  sets its custom group (shown in the entry's tooltip).
+
 ## v0.29.0
 
 - **Reworked picker grouping.** WoW exposes no spell→class mapping, so the

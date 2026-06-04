@@ -521,10 +521,8 @@ local function BuildKindPanel(kind)
     searchBox:SetSize(140, 22)
     searchBox:SetAutoFocus(false)
     searchBox:SetFontObject("ChatFontNormal")
-    local searchHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    searchHint:SetPoint("LEFT", searchBox, "RIGHT", 8, 0)
-    searchHint:SetText("|cff808080(click here — ✕ hides an aura)|r")
     local searchFocused = false
+    local RES_HEAD = 16   -- header row height inside the results popup
 
     -- True if an aura belongs in this panel and passes the filters.
     local function passes(sp)
@@ -536,11 +534,13 @@ local function BuildKindPanel(kind)
         return true
     end
 
-    -- Live results popup under the search box.
+    -- Live results popup. Anchored to the panel's left margin (not the search
+    -- box, which sits far right) with a contained width, so the per-row hide /
+    -- group buttons can't run off the right edge of the options panel.
     local resultBtns = {}
     local searchResults = CreateFrame("Frame", nil, content, "BackdropTemplate")
-    searchResults:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", -6, -3)
-    searchResults:SetWidth(320)
+    searchResults:SetPoint("TOPLEFT", pickLabel, "BOTTOMLEFT", 0, -6)
+    searchResults:SetWidth(520)
     searchResults:SetFrameLevel(content:GetFrameLevel() + 20)
     searchResults:SetBackdrop({
         bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -550,14 +550,19 @@ local function BuildKindPanel(kind)
     })
     searchResults:SetBackdropColor(0, 0, 0, 0.92)
     searchResults:Hide()
+    local resHeader = searchResults:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    resHeader:SetPoint("TOPLEFT", searchResults, "TOPLEFT", 8, -5)
+    resHeader:SetPoint("TOPRIGHT", searchResults, "TOPRIGHT", -8, -5)
+    resHeader:SetJustifyH("LEFT")
+    resHeader:SetText("|cff808080Click a name to add. Note icon sets a group; the button on the right hides / restores.|r")
     local moreText = searchResults:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     moreText:SetJustifyH("LEFT")
 
     local function MakeResultBtn(i)
         local b = CreateFrame("Button", nil, searchResults)
         b:SetHeight(RESULT_H)
-        b:SetPoint("TOPLEFT", searchResults, "TOPLEFT", 6, -6 - (i - 1) * RESULT_H)
-        b:SetPoint("TOPRIGHT", searchResults, "TOPRIGHT", -6, -6 - (i - 1) * RESULT_H)
+        b:SetPoint("TOPLEFT", searchResults, "TOPLEFT", 6, -6 - RES_HEAD - (i - 1) * RESULT_H)
+        b:SetPoint("TOPRIGHT", searchResults, "TOPRIGHT", -6, -6 - RES_HEAD - (i - 1) * RESULT_H)
         local hl = b:CreateTexture(nil, "HIGHLIGHT")
         hl:SetAllPoints()
         hl:SetColorTexture(1, 1, 1, 0.15)
@@ -669,10 +674,10 @@ local function BuildKindPanel(kind)
         end
         for i = shown + 1, #resultBtns do resultBtns[i]:Hide() end
         if shown == 0 then searchResults:Hide(); return end
-        local h = 12 + shown * RESULT_H
+        local h = 12 + RES_HEAD + shown * RESULT_H
         if more > 0 then
             moreText:ClearAllPoints()
-            moreText:SetPoint("TOPLEFT", searchResults, "TOPLEFT", 8, -6 - shown * RESULT_H)
+            moreText:SetPoint("TOPLEFT", searchResults, "TOPLEFT", 8, -6 - RES_HEAD - shown * RESULT_H)
             moreText:SetText("…and " .. more .. " more — keep typing")
             moreText:Show()
             h = h + 16
@@ -707,14 +712,37 @@ local function BuildKindPanel(kind)
         end)
     end)
 
+    -- Open the custom-group dialog for one aura, refreshing the picker after.
+    local function PromptGroup(sid, nm, current)
+        StaticPopup_Show("AURACUE_SET_GROUP", nm, nil, {
+            sid = sid, current = current or "",
+            after = function() addDD:GenerateMenu(); UpdateSearchResults() end,
+        })
+    end
+
     -- Create an "add this aura" entry under `parent` (the root or a submenu).
+    -- Plain click adds; Shift-click hides/restores; Ctrl-click sets a group —
+    -- so the same management is reachable from the dropdown, not just search.
     local function AddAuraButton(parent, sp)
         local sid = sp.spellID
         local nm = sp.name or ("Spell " .. sid)
         local txt = string.format("|T%d:16:16:0:0|t %s", sp.icon or 134400, nm)
         if ns.P().cues[tostring(sid)] then txt = txt .. "  |cff808080(watching)|r" end
+        if sp.group and sp.group ~= "" then txt = txt .. "  |cff80c0ff[" .. sp.group .. "]|r" end
+        if sp.ignored then txt = txt .. "  |cffff6060(hidden)|r" end
         if sp.secret then txt = txt .. "  |cffff6060(may be hidden in instances)|r" end
         local btn = parent:CreateButton(txt, function()
+            if IsControlKeyDown() then
+                PromptGroup(sid, nm, sp.group)
+                return MenuResponse and MenuResponse.Refresh or nil
+            elseif IsShiftKeyDown() then
+                ns.SetAuraIgnored(sid, not sp.ignored)
+                addStatus:SetText(sp.ignored
+                    and ("|cff60ff60Restored " .. nm .. ".|r")
+                    or  ("|cff808080Hid " .. nm .. ".|r"))
+                addDD:GenerateMenu(); UpdateSearchResults()
+                return MenuResponse and MenuResponse.Refresh or nil
+            end
             if ns.P().cues[tostring(sid)] then
                 addStatus:SetText("|cffffd200Already watching " .. nm .. ".|r")
                 return
@@ -726,6 +754,11 @@ local function BuildKindPanel(kind)
         if btn and btn.SetTooltip then
             btn:SetTooltip(function(tooltip)
                 if tooltip and tooltip.SetSpellByID then tooltip:SetSpellByID(sid) end
+                if tooltip and tooltip.AddLine then
+                    tooltip:AddLine(" ")
+                    tooltip:AddLine("Click: add   Shift-click: " .. (sp.ignored and "restore" or "hide")
+                        .. "   Ctrl-click: set group", 0.6, 0.6, 0.6)
+                end
             end)
         end
     end
