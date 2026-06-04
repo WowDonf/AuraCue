@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.40.0
+
+- **Auto-combine by name.** Right-click a watched aura and tick "Auto-combine
+  auras with the same name" — every catalogued aura sharing that name (e.g.
+  base and proc Avenging Wrath) then drives the one cue, with no need to enter
+  IDs. It updates automatically as new same-named IDs are catalogued. The
+  right-click menu also still lets you add specific IDs by hand. Rows show a
+  small "name" / "+N" marker for what's combined.
+
 ## v0.39.0
 
 - **One alert, multiple spell IDs.** A watched aura can now have extra trigger

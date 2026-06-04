@@ -1147,20 +1147,40 @@ local function BuildKindPanel(kind)
             else
                 GameTooltip:AddLine("Tracked by: aura read — open world only. Cast it once to switch to cast tracking.", 0.75, 0.72, 0.45)
             end
+            if cue.matchName then
+                GameTooltip:AddLine("Auto-combining auras named \"" .. (cue.label or "?") .. "\".", 0.6, 0.8, 1)
+            end
             if cue.alts and #cue.alts > 0 then
                 GameTooltip:AddLine("Also triggers on: " .. table.concat(cue.alts, ", "), 0.6, 0.8, 1)
             end
-            GameTooltip:AddLine("Right-click to add other spell IDs that trigger this same alert.", 0.6, 0.6, 0.6)
+            GameTooltip:AddLine("Right-click for combine options (same name / other IDs).", 0.6, 0.6, 0.6)
             GameTooltip:Show()
         end)
         row:SetScript("OnLeave", function() GameTooltip:Hide() end)
         row:SetScript("OnMouseUp", function(self, button)
             if button ~= "RightButton" or not self.spellID then return end
-            local cue = ns.P().cues[self.spellID]
+            local key = self.spellID
+            local cue = ns.P().cues[key]
             if not cue then return end
-            local cur = cue.alts and table.concat(cue.alts, ", ") or ""
-            StaticPopup_Show("AURACUE_ALTS", cue.label or self.spellID, nil,
-                { key = self.spellID, current = cur, after = function() RefreshAllPanels() end })
+            local function openDialog()
+                local cur = cue.alts and table.concat(cue.alts, ", ") or ""
+                StaticPopup_Show("AURACUE_ALTS", cue.label or key, nil,
+                    { key = key, current = cur, after = function() RefreshAllPanels() end })
+            end
+            if MenuUtil and MenuUtil.CreateContextMenu then
+                MenuUtil.CreateContextMenu(self, function(_, root)
+                    root:CreateTitle(cue.label or "Aura")
+                    root:CreateCheckbox("Auto-combine auras with the same name",
+                        function() return cue.matchName end,
+                        function() cue.matchName = not cue.matchName; ns.SetCueAlts(key, cue.alts) end)
+                    root:CreateButton("Add other spell IDs by hand…", openDialog)
+                    if cue.alts and #cue.alts > 0 then
+                        root:CreateButton("Clear hand-added IDs", function() ns.SetCueAlts(key, {}) end)
+                    end
+                end)
+            else
+                openDialog()
+            end
         end)
 
         row.name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -1345,7 +1365,9 @@ local function BuildKindPanel(kind)
                 row.spellID = sid
                 local cue = ns.P().cues[sid]
                 local nm = cue.label or C_Spell.GetSpellName(tonumber(sid)) or "Unknown"
-                local altMark = (cue.alts and #cue.alts > 0) and ("  |cff60a0ff+" .. #cue.alts .. "|r") or ""
+                local altMark = ""
+                if cue.matchName then altMark = altMark .. "  |cff60a0ffname|r" end
+                if cue.alts and #cue.alts > 0 then altMark = altMark .. "  |cff60a0ff+" .. #cue.alts .. "|r" end
                 row.name:SetText(nm .. "  |cff808080(" .. sid .. ")|r" .. altMark)
                 row.applied:SetChecked(cue.applied and true or false)
                 row.faded:SetChecked(cue.faded and true or false)

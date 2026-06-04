@@ -626,6 +626,9 @@ local lastGained = {}    -- spellID -> GetTime() of last fired "gained" (debounc
 local castConfirmed = {} -- spellID -> true once a read has seen the cast aura up
 local aliasOwner = {}    -- alt-spellID-as-string -> primary cue key (one alert,
                          -- many trigger ids, e.g. base + proc Avenging Wrath)
+local cueAlts = {}       -- primary cue key -> merged list of alt ids (the cue's
+                         -- hand-added ids plus, if matchName, same-named catalog
+                         -- ids). Runtime-only; rebuilt by RebuildAliases.
 
 -- Record an aura we've seen on the player into the registry the picker
 -- draws from. Only the first sighting matters; later sightings are cheap
@@ -755,15 +758,15 @@ local function CatalogVisibleAuras()
     AuraUtil.ForEachAura("player", "HARMFUL", nil, handle, true)
 end
 
--- Combined read across a cue's primary id and any alias ids: "present" if any
+-- Combined read across a primary id and a list of alias ids: "present" if any
 -- is up, "unknown" if a read was masked and none were up, else "absent". This
 -- is what lets one alert cover several spell ids (base + proc versions).
-local function CueRead(cue, sid)
+local function CueRead(sid, alts)
     local state, data = ReadAura(sid)
     if state == "present" then return state, data end
     local best = state
-    if cue and cue.alts then
-        for _, alt in ipairs(cue.alts) do
+    if alts then
+        for _, alt in ipairs(alts) do
             local s, d = ReadAura(alt)
             if s == "present" then return "present", d end
             if s == "unknown" then best = "unknown" end
@@ -791,7 +794,7 @@ local function ScanPlayerAuras()
             -- aura was up since the cast — so a cast buff whose aura id differs
             -- from the cast id (read never finds it) never falsely fades, while
             -- a normal same-id buff fades correctly when it drops.
-            local state, data = CueRead(cue, sid)
+            local state, data = CueRead(sid, cueAlts[key])
             if state == "present" then
                 castConfirmed[sid] = true
                 newPresent[sid] = true
@@ -808,7 +811,7 @@ local function ScanPlayerAuras()
                 newPresent[sid] = present[sid]   -- not confirmed yet: hold
             end
         else
-            local state, data = CueRead(cue, sid)
+            local state, data = CueRead(sid, cueAlts[key])
             if state == "present" then
                 newPresent[sid] = true
                 if data then
@@ -837,8 +840,8 @@ local function SeedPresent()
     present = {}
     local cues = activeProfile and activeProfile.cues
     if not cues then return end
-    for key, cue in pairs(cues) do
-        if CueRead(cue, tonumber(key)) == "present" then present[tonumber(key)] = true end
+    for key in pairs(cues) do
+        if CueRead(tonumber(key), cueAlts[key]) == "present" then present[tonumber(key)] = true end
     end
 end
 
@@ -874,7 +877,7 @@ local function OnSelfCast(spellID)
     -- Learn the buff's duration just after the cast (readable in the open
     -- world) so the faded timer is accurate, including later in instances.
     C_Timer.After(0.1, function()
-        local _, data = CueRead(cue, pid)
+        local _, data = CueRead(pid, cueAlts[tostring(pid)])
         if data then
             local d = Reveal(data.duration)
             if d and d > 0 then cue.castDuration = d end
@@ -888,7 +891,7 @@ local function OnSelfCast(spellID)
         C_Timer.After(dur + 0.2, function()
             -- Only fire if this is still the latest cast and the aura isn't
             -- readably still up (a refresh in the open world would show it).
-            if castFade[pid] == token and present[pid] and CueRead(cue, pid) ~= "present" then
+            if castFade[pid] == token and present[pid] and CueRead(pid, cueAlts[tostring(pid)]) ~= "present" then
                 FireCue(cue, C_Spell.GetSpellName(pid), "faded")
                 present[pid] = nil
             end
@@ -924,9 +927,9 @@ local function RefreshPrivateAuras()
             -- soundFileID FileDataID), not a SOUNDKIT id, so kit-based sounds
             -- can't be registered here. All shipped cues are file-based.
             if playable and isFile then
-                -- Register for the cue's primary id and each alias id.
+                -- Register for the cue's primary id and each (merged) alias id.
                 local ids = { tonumber(key) }
-                if cue.alts then for _, a in ipairs(cue.alts) do ids[#ids + 1] = a end end
+                if cueAlts[key] then for _, a in ipairs(cueAlts[key]) do ids[#ids + 1] = a end end
                 for _, sid in ipairs(ids) do
                     if sid then
                         local opts = {
@@ -948,16 +951,31 @@ ns.RefreshPrivateAuras = RefreshPrivateAuras
 -- ---------------------------------------------------------------------
 -- Watch-list mutation (driven by slash commands and the in-panel editor)
 -- ---------------------------------------------------------------------
--- Rebuild the alias -> primary-cue lookup from the active profile's cues.
+-- Rebuild the merged alias list per cue (hand-added ids + same-named catalog
+-- ids when matchName is on) and the alt -> primary-cue lookup.
 local function RebuildAliases()
     wipe(aliasOwner)
+    wipe(cueAlts)
     if not activeProfile or not activeProfile.cues then return end
+    local seen = AuraCueDB and AuraCueDB.seen or {}
     for key, cue in pairs(activeProfile.cues) do
-        if cue.alts then
-            for _, alt in ipairs(cue.alts) do
-                aliasOwner[tostring(alt)] = key
+        local merged, used = {}, { [key] = true }
+        local function add(v)
+            local n = tonumber(v)
+            if n and not used[tostring(n)] then
+                used[tostring(n)] = true
+                merged[#merged + 1] = n
+                aliasOwner[tostring(n)] = key
             end
         end
+        if cue.alts then for _, a in ipairs(cue.alts) do add(a) end end
+        -- Auto-combine: every catalogued aura sharing this cue's name.
+        if cue.matchName and cue.label then
+            for sidStr, info in pairs(seen) do
+                if info.name == cue.label then add(sidStr) end
+            end
+        end
+        cueAlts[key] = (#merged > 0) and merged or nil
     end
 end
 ns.RebuildAliases = RebuildAliases

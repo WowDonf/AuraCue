@@ -29,7 +29,7 @@ globals = {
 read_globals = {
     -- Frame + UI infrastructure
     "CreateFrame", "UIParent", "GetScreenHeight", "CreateColor",
-    "Settings", "SettingsPanel", "HideUIPanel", "MenuResponse",
+    "Settings", "SettingsPanel", "HideUIPanel", "MenuResponse", "MenuUtil",
     "ColorPickerFrame",
     "GameTooltip", "StaticPopup_Show",
     -- Mount detection (to keep mounts out of ability groups)
