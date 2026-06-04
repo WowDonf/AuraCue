@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.27.1
+
+- You can now un-hide a single aura, not just clear the whole hidden list.
+  Turn on **Show hidden auras**, search for it, and its row shows a **+**
+  (restore) button and a "(hidden)" tag — click the **+** to put just that
+  one back. Auras that aren't hidden still show the ✕ to hide them.
+
 ## v0.27.0
 
 - **The picker now groups into submenus.** Buffs are grouped by the class

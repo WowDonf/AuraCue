@@ -535,22 +535,25 @@ local function BuildKindPanel(kind)
         b.text:SetPoint("LEFT", b.icon, "RIGHT", 6, 0)
         b.text:SetPoint("RIGHT", b, "RIGHT", -22, 0)
         b.text:SetJustifyH("LEFT")
-        -- A small "hide" (✕) control that prunes this aura from the picker.
+        -- A small toggle that hides this aura from the picker, or restores it
+        -- when it's already hidden (so a mis-hidden ability is one click back).
+        -- Its icon/state is set per row in UpdateSearchResults via b.hidden.
         b.hide = CreateFrame("Button", nil, b)
         b.hide:SetSize(14, 14)
         b.hide:SetPoint("RIGHT", b, "RIGHT", -3, 0)
-        b.hide:SetNormalTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
-        b.hide:SetHighlightTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Highlight")
         b.hide:SetScript("OnClick", function()
             if not b.spellID then return end
-            ns.SetAuraIgnored(b.spellID, true)
-            addStatus:SetText("|cff808080Hid " .. (b.auraName or b.spellID) .. " from the list.|r")
+            local restore = b.hidden                  -- currently hidden -> restore
+            ns.SetAuraIgnored(b.spellID, not restore)
+            addStatus:SetText(restore
+                and ("|cff60ff60Restored " .. (b.auraName or b.spellID) .. " to the list.|r")
+                or  ("|cff808080Hid " .. (b.auraName or b.spellID) .. " from the list.|r"))
             addDD:GenerateMenu()
             UpdateSearchResults()
         end)
         b.hide:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Hide from this list")
+            GameTooltip:SetText(b.hidden and "Restore to the list" or "Hide from this list")
             GameTooltip:Show()
         end)
         b.hide:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -590,7 +593,16 @@ local function BuildKindPanel(kind)
                     b.spellID = sp.spellID
                     b.auraName = nm
                     b.icon:SetTexture(sp.icon or 134400)
+                    b.hidden = sp.ignored
+                    if sp.ignored then
+                        b.hide:SetNormalTexture("Interface\\Buttons\\UI-PlusButton-Up")
+                        b.hide:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight")
+                    else
+                        b.hide:SetNormalTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
+                        b.hide:SetHighlightTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Highlight")
+                    end
                     local mark = ns.P().cues[tostring(sp.spellID)] and "  |cff808080(watching)|r" or ""
+                    if sp.ignored then mark = mark .. "  |cffff6060(hidden)|r" end
                     b.text:SetText(nm .. mark)
                     b:Show()
                 else
