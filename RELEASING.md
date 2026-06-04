@@ -70,7 +70,7 @@ characters of plain text. The recommended copy sits at the top of
 
 ## Bundled assets
 
-Cue sounds (`Sounds/*.mp3`) and the addon icon (`Icon.tga`) are procedurally
+Cue sounds (`Sounds/*.mp3`) and the addon icon (`Icon.png`) are procedurally
 generated and committed. Regenerate with the scripts in `tools/`:
 
 ```bash
