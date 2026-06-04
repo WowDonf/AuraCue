@@ -807,12 +807,15 @@ local function BuildKindPanel(kind)
     local BUCKET_ORDER = { ["Boss"] = 0, ["From you / your pet"] = 1, ["Mounts"] = 2, ["World & other"] = 3, ["Other"] = 4 }
     local function GroupOf(sp)
         if sp.group and sp.group ~= "" then return sp.group end
+        if sp.mount then return "Mounts" end
+        -- Self-applied auras (buff OR debuff) are yours, not dungeon/boss
+        -- content — check this before the debuff dungeon/boss buckets so a
+        -- self-debuff cast in a dungeon doesn't get filed under it.
+        if sp.mine then return "From you / your pet" end
         if kind == "debuff" then
             if sp.boss then return "Boss" end
             return (sp.dungeon and sp.dungeon ~= "") and sp.dungeon or "Other"
         end
-        if sp.mount then return "Mounts" end
-        if sp.mine then return "From you / your pet" end
         return "World & other"
     end
 

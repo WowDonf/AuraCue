@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.34.4
+
+- Self-applied debuffs now group under "From you / your pet" instead of being
+  filed under the dungeon (or Boss) where you happened to cast them. The
+  self/mine check now applies to debuffs too, not just buffs.
+
 ## v0.34.3
 
 - Fixed self-buffs/passives (e.g. a Shaman's Reincarnation) being mislabelled
