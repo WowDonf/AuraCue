@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.34.2
+
+- Fixed panel widgets (watched-row close buttons, dropdowns, checkmarks)
+  showing through the aura search/hide list. The list now sits on a higher
+  layer with an opaque background, so it cleanly covers what's behind it.
+
 ## v0.34.1
 
 - Fixed the aura search/hide list overlapping the search box (its top row and

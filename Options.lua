@@ -575,6 +575,9 @@ local function BuildKindPanel(kind)
     -- than the label, so anchoring to the label's bottom overlapped them).
     searchResults:SetPoint("TOPLEFT", content, "TOPLEFT", LEFT, ctx.y - 30)
     searchResults:SetWidth(520)
+    -- A higher strata so it sits cleanly above the panel's own widgets (the
+    -- watched-row close buttons / dropdowns were poking through otherwise).
+    searchResults:SetFrameStrata("FULLSCREEN_DIALOG")
     searchResults:SetFrameLevel(content:GetFrameLevel() + 20)
     searchResults:SetBackdrop({
         bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -582,7 +585,7 @@ local function BuildKindPanel(kind)
         tile     = true, tileSize = 16, edgeSize = 16,
         insets   = { left = 4, right = 4, top = 4, bottom = 4 },
     })
-    searchResults:SetBackdropColor(0, 0, 0, 0.92)
+    searchResults:SetBackdropColor(0, 0, 0, 0.97)
     searchResults:Hide()
     local resHeader = searchResults:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     resHeader:SetPoint("TOPLEFT", searchResults, "TOPLEFT", 8, -5)
