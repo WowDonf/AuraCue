@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.32.0
+
+- More ways to thin the "Add" dropdown via the Show filter: **Hide mounts**,
+  **Hide ones I already track**, and **Only un-grouped auras** (to find what
+  still needs a custom group). They combine with the existing filters.
+
 ## v0.31.2
 
 - On the Manage Auras page, **"Show hidden auras" is now "Show only hidden

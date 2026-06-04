@@ -524,6 +524,7 @@ local function BuildKindPanel(kind)
     local pickerSearch = ""
     local pickerMineOnly, pickerKnownOnly, pickerInstanceOnly, pickerShowHidden = false, false, false, false
     local pickerBossOnly = false
+    local pickerHideMounts, pickerHideWatched, pickerUngroupedOnly = false, false, false
 
     -- Primary "Add": pick from catalogued auras of this kind.
     local pickLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -554,6 +555,9 @@ local function BuildKindPanel(kind)
         if pickerKnownOnly and not sp.known then return false end
         if pickerBossOnly and not sp.boss then return false end
         if pickerInstanceOnly and not sp.instanceable then return false end
+        if pickerHideMounts and sp.mount then return false end
+        if pickerHideWatched and ns.P().cues[tostring(sp.spellID)] then return false end
+        if pickerUngroupedOnly and sp.group and sp.group ~= "" then return false end
         return true
     end
 
@@ -867,11 +871,10 @@ local function BuildKindPanel(kind)
 
     local function FilterText()
         local n = 0
-        if pickerMineOnly then n = n + 1 end
-        if pickerKnownOnly then n = n + 1 end
-        if pickerBossOnly then n = n + 1 end
-        if pickerInstanceOnly then n = n + 1 end
-        if pickerShowHidden then n = n + 1 end
+        for _, on in ipairs({ pickerMineOnly, pickerKnownOnly, pickerBossOnly, pickerInstanceOnly,
+                              pickerHideMounts, pickerHideWatched, pickerUngroupedOnly, pickerShowHidden }) do
+            if on then n = n + 1 end
+        end
         return (n == 0) and "All auras I've seen" or ("Filters: " .. n .. " on")
     end
     local function ApplyFilters()
@@ -897,6 +900,13 @@ local function BuildKindPanel(kind)
             function() return pickerBossOnly end, function(v) pickerBossOnly = v end)
         FilterToggle(root, "Only ones trackable in instances",
             function() return pickerInstanceOnly end, function(v) pickerInstanceOnly = v end)
+        FilterToggle(root, "Only un-grouped auras",
+            function() return pickerUngroupedOnly end, function(v) pickerUngroupedOnly = v end)
+        root:CreateDivider()
+        FilterToggle(root, "Hide mounts",
+            function() return pickerHideMounts end, function(v) pickerHideMounts = v end)
+        FilterToggle(root, "Hide ones I already track",
+            function() return pickerHideWatched end, function(v) pickerHideWatched = v end)
         root:CreateDivider()
         FilterToggle(root, "Show hidden auras",
             function() return pickerShowHidden end, function(v) pickerShowHidden = v end)
