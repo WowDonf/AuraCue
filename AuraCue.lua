@@ -1242,20 +1242,38 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             -- works in and out of combat — so buffs/debuffs you cast in a fight
             -- still make it into the picker (when the aura shares the cast id).
             C_Timer.After(0.1, function()
+                local seen = AuraCueDB and AuraCueDB.seen
+                if not seen then return end
+                local key = tostring(spellID)
+                local known = SpellKnown(spellID) and true or false
+                local GM = C_MountJournal and C_MountJournal.GetMountFromSpell
+                local isMount = (GM and GM(spellID)) and true or false
                 local state, data = ReadAura(spellID)
-                if state ~= "present" or not data then return end
-                RecordSeen(spellID, data)
-                -- Tag the casting class on an ability you actually cast (a known
-                -- player spell, not a mount), so the picker can file it under
-                -- your class (e.g. Earth Shield -> Shaman). Other classes' auras
-                -- can't be derived — the game has no spell->class lookup — so
-                -- this only covers what you cast yourself.
-                local entry = AuraCueDB and AuraCueDB.seen and AuraCueDB.seen[tostring(spellID)]
-                if entry and not entry.className and SpellKnown(spellID) then
-                    local GM = C_MountJournal and C_MountJournal.GetMountFromSpell
-                    if not (GM and GM(spellID)) then
-                        entry.className = UnitClass("player")
-                    end
+                if state == "present" and data then
+                    -- The cast applied a same-id aura we can read: record it with
+                    -- its real kind / fields.
+                    RecordSeen(spellID, data)
+                elseif not seen[key] and known and not isMount then
+                    -- A known ability you cast that applies no readable same-id
+                    -- aura (no aura, or a proc with a different id). Offer it
+                    -- anyway so castable abilities aren't missing from the picker;
+                    -- it'll be cast-tracked. Kind is a best guess (buff).
+                    local GT = C_Spell.GetSpellTexture
+                    seen[key] = {
+                        name = C_Spell.GetSpellName(spellID),
+                        icon = (GT and GT(spellID)) or nil,
+                        kind = "buff",
+                        mine = true,
+                        castOnly = true,
+                    }
+                end
+                -- Tag the casting class on an ability you cast (known player
+                -- spell, not a mount), so the picker files it under your class
+                -- (e.g. Earth Shield -> Shaman). Other classes' auras can't be
+                -- derived — the game has no spell->class lookup.
+                local entry = seen[key]
+                if entry and not entry.className and known and not isMount then
+                    entry.className = UnitClass("player")
                 end
             end)
         end

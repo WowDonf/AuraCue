@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.38.0
+
+- Castable abilities now show up in the picker even when they don't apply a
+  readable aura. Previously only abilities whose cast applied a matching aura
+  were catalogued, so a lot of what you cast was missing. Now any known
+  ability you cast (not a mount) is offered and cast-tracked, filed under your
+  class. It fills in as you use your abilities; kind defaults to buff.
+
 ## v0.37.0
 
 - Abilities you cast are now auto-filed under **your class** in the picker
