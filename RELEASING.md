@@ -86,6 +86,22 @@ the icon at 4x supersample and downscales with LANCZOS for clean edges.
 `tools/` and `assets/` are excluded from the packaged zip (see `.pkgmeta`);
 `Sounds/` and `Icon.png` ship.
 
+## Shipped starter catalog (Data.lua)
+
+`Data.lua` can carry a base aura catalog so new users open the picker to a
+useful list. To build or update it:
+
+1. In-game, build the catalog you want to ship (play, `/cue gather`, normal
+   use), then Options → Sharing → **Export catalog** and copy the `CSC1!…`
+   string.
+2. Paste it into `ns.BASE_CATALOG.string` in `Data.lua` and bump
+   `ns.BASE_CATALOG.version` by 1.
+
+On load, if the bundled `version` exceeds what a player has already received
+(`AuraCueDB.baseVersion`), the catalog is merged into their list — only auras
+they don't already have are added, and a starter aura a player deletes stays
+gone until you bump `version` again. Leaving `string` empty ships no data.
+
 ## Libraries
 
 The minimap button needs LibStub / CallbackHandler-1.0 / LibDataBroker-1.1 /

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.34.0
+
+- Groundwork to **ship a starter aura catalog** with the addon (`Data.lua`).
+  When populated, a fresh install opens the picker to a useful list instead
+  of an empty one; it merges in once per bundled version and never clobbers a
+  player's own changes. (Ships empty for now — see RELEASING.md to fill it.)
+
 ## v0.33.0
 
 - Auras you already track are now **always** left out of the Add picker
