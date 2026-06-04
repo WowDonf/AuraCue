@@ -66,6 +66,7 @@ local PROFILE_DEFAULTS = {
     audioEnabled = true,         -- master switch for sound cues
     trackBuffs = true,           -- fire cues for helpful auras
     trackDebuffs = true,         -- fire cues for harmful auras
+    combineByName = false,       -- treat every same-named aura as one alert
     ttsRate = 0,                 -- text-to-speech rate (-10..10)
     ttsVolume = 100,             -- text-to-speech volume (0..100)
     ttsVoice = nil,              -- chosen TTS voice id (nil = first available)
@@ -969,8 +970,9 @@ local function RebuildAliases()
             end
         end
         if cue.alts then for _, a in ipairs(cue.alts) do add(a) end end
-        -- Auto-combine: every catalogued aura sharing this cue's name.
-        if cue.matchName and cue.label then
+        -- Auto-combine: every catalogued aura sharing this cue's name (when the
+        -- global setting is on, or this cue opted in).
+        if (activeProfile.combineByName or cue.matchName) and cue.label then
             for sidStr, info in pairs(seen) do
                 if info.name == cue.label then add(sidStr) end
             end
@@ -1020,10 +1022,31 @@ end
 -- offering the same-named variants as separate adds).
 function ns.IsNameCombined(name)
     if not name or not activeProfile then return false end
+    local global = activeProfile.combineByName
     for _, c in pairs(activeProfile.cues) do
-        if c.matchName and c.label == name then return true end
+        if (global or c.matchName) and c.label == name then return true end
     end
     return false
+end
+
+-- Global toggle: combine every same-named aura into a single alert. Turning it
+-- ON absorbs duplicate cues (keeps one per name).
+function ns.SetCombineByName(on)
+    if not activeProfile then return end
+    activeProfile.combineByName = on and true or nil
+    if on then
+        local cues, kept = activeProfile.cues, {}
+        for k, c in pairs(cues) do
+            local nm = c.label
+            if nm then
+                if kept[nm] then cues[k] = nil else kept[nm] = k end
+            end
+        end
+    end
+    RebuildAliases()
+    SeedPresent()
+    RefreshPrivateAuras()
+    if ns.RefreshOptions then ns.RefreshOptions() end
 end
 
 function ns.AddCue(spellID)

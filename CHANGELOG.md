@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.41.0
+
+- **"Combine auras with the same name" is now a Global Setting** (main page),
+  applying to every cue at once instead of per-aura. Turning it on merges
+  duplicate watched rows and stops the pickers offering same-named variants
+  separately. The per-aura right-click option is still there for finer control.
+
 ## v0.40.1
 
 - Turning on "Auto-combine auras with the same name" now collapses to a single

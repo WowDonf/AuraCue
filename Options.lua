@@ -440,6 +440,11 @@ do
     main.Check("Track debuffs (harmful auras)",
         function() return ns.P().trackDebuffs end,
         function(v) ns.P().trackDebuffs = v end)
+    main.Check("Combine auras with the same name",
+        function() return ns.P().combineByName end,
+        function(v) ns.SetCombineByName(v) end)
+    main.Desc("Treat every aura that shares a name as one alert (e.g. a spell and its " ..
+        "proc version). Merges duplicate watched rows and hides the same-named variants in the pickers.")
     main.Check("Show minimap button",
         function() return not ns.IsMinimapShown or ns.IsMinimapShown() end,
         function(v) if ns.SetMinimapShown then ns.SetMinimapShown(v) end end)
@@ -1149,7 +1154,7 @@ local function BuildKindPanel(kind)
             else
                 GameTooltip:AddLine("Tracked by: aura read — open world only. Cast it once to switch to cast tracking.", 0.75, 0.72, 0.45)
             end
-            if cue.matchName then
+            if cue.matchName or ns.P().combineByName then
                 GameTooltip:AddLine("Auto-combining auras named \"" .. (cue.label or "?") .. "\".", 0.6, 0.8, 1)
             end
             if cue.alts and #cue.alts > 0 then
@@ -1368,7 +1373,7 @@ local function BuildKindPanel(kind)
                 local cue = ns.P().cues[sid]
                 local nm = cue.label or C_Spell.GetSpellName(tonumber(sid)) or "Unknown"
                 local altMark = ""
-                if cue.matchName then altMark = altMark .. "  |cff60a0ffname|r" end
+                if cue.matchName or ns.P().combineByName then altMark = altMark .. "  |cff60a0ffname|r" end
                 if cue.alts and #cue.alts > 0 then altMark = altMark .. "  |cff60a0ff+" .. #cue.alts .. "|r" end
                 row.name:SetText(nm .. "  |cff808080(" .. sid .. ")|r" .. altMark)
                 row.applied:SetChecked(cue.applied and true or false)
