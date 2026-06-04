@@ -643,6 +643,13 @@ local function RecordSeen(sid, data)
     -- isFromPlayerOrPlayerPet is a never-secret field: it tells us the aura
     -- was applied by the player (or pet), i.e. "cast by myself".
     local mine = Reveal(data.isFromPlayerOrPlayerPet) and true or false
+    -- For class abilities the player applied, remember which class did it.
+    -- The catalog is account-wide, so this lets the picker group buffs you
+    -- cast under "Druid", "Mage", etc. We only tag it when the aura is a
+    -- known spell for the casting character (captured here, at cast time, so
+    -- it stays correct when viewed from another character) — that keeps toys,
+    -- food, and other non-spell auras out of the class groups.
+    local className = (mine and SpellKnown and SpellKnown(sid)) and (UnitClass("player")) or nil
     local existing = AuraCueDB.seen[key]
     if existing then
         -- Backfill provenance we couldn't capture on first sighting (e.g.
@@ -650,6 +657,7 @@ local function RecordSeen(sid, data)
         if not existing.dungeon then existing.dungeon = CurrentDungeon() end
         if not existing.source then existing.source = ResolveSource(data, harmful) end
         if existing.mine == nil then existing.mine = mine end
+        if className and not existing.className then existing.className = className end
         return
     end
     AuraCueDB.seen[key] = {
@@ -659,6 +667,7 @@ local function RecordSeen(sid, data)
         dungeon = CurrentDungeon(),
         source  = ResolveSource(data, harmful),
         mine    = mine,
+        className = className,
     }
 end
 
@@ -969,6 +978,8 @@ function ns.GetSeenAuras()
             -- a toy / food / world buff (whose aura id isn't a known spell).
             known   = (SpellKnown and SpellKnown(sid)) and true or false,
             ignored = ignored[key] and true or false,
+            className = info.className,
+            dungeon = info.dungeon,
             instanceable = instanceable,
         }
     end

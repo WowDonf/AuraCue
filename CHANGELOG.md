@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.27.0
+
+- **The picker now groups into submenus.** Buffs are grouped by the class
+  that cast them ("Druid", "Mage", …) with "Items & toys" and "World &
+  other" buckets for the rest; debuffs are grouped by the dungeon they were
+  seen in. Each group shows its count, and searching still shows a flat list.
+  Class grouping fills in as you cast abilities on each character (the game
+  doesn't expose a spell's class directly, so it's tagged from the casting
+  character — known spells only, so toys and food stay in their own bucket).
+
 ## v0.26.0
 
 - **Wrangle the aura picker.** The two filter checkboxes are now a single

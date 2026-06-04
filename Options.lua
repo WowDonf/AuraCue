@@ -624,39 +624,88 @@ local function BuildKindPanel(kind)
         self:SetText(""); self:ClearFocus(); searchResults:Hide()
     end)
 
+    -- Create an "add this aura" entry under `parent` (the root or a submenu).
+    local function AddAuraButton(parent, sp)
+        local sid = sp.spellID
+        local nm = sp.name or ("Spell " .. sid)
+        local txt = string.format("|T%d:16:16:0:0|t %s", sp.icon or 134400, nm)
+        if ns.P().cues[tostring(sid)] then txt = txt .. "  |cff808080(watching)|r" end
+        if sp.secret then txt = txt .. "  |cffff6060(may be hidden in instances)|r" end
+        local btn = parent:CreateButton(txt, function()
+            if ns.P().cues[tostring(sid)] then
+                addStatus:SetText("|cffffd200Already watching " .. nm .. ".|r")
+                return
+            end
+            ns.AddCue(sid)
+            addStatus:SetText("|cff60ff60Added " .. nm .. ".|r")
+            RefreshAllPanels()
+        end)
+        if btn and btn.SetTooltip then
+            btn:SetTooltip(function(tooltip)
+                if tooltip and tooltip.SetSpellByID then tooltip:SetSpellByID(sid) end
+            end)
+        end
+    end
+
+    -- Which submenu an aura belongs in: buffs group by the class that cast
+    -- them (then generic buckets); debuffs group by the dungeon they're from.
+    local GENERIC = { ["World & other"] = true, ["Items & toys"] = true, ["Other"] = true }
+    local function GroupOf(sp)
+        if kind == "debuff" then
+            return (sp.dungeon and sp.dungeon ~= "") and sp.dungeon or "Other"
+        end
+        if sp.className and sp.className ~= "" then return sp.className end
+        if not sp.mine then return "World & other" end
+        return "Items & toys"
+    end
+
     addDD:SetupMenu(function(_, root)
         if not ns.P() then return end
         if root.SetScrollMode then root:SetScrollMode(GetScreenHeight() * 0.6) end
-        local shown = 0
+
+        local matches = {}
         for _, sp in ipairs(ns.GetSeenAuras()) do
-            local sid = sp.spellID
-            local nm = sp.name or ("Spell " .. sid)
+            local nm = sp.name or ("Spell " .. sp.spellID)
             local matchText = pickerSearch == ""
                 or nm:lower():find(pickerSearch, 1, true)
-                or tostring(sid):find(pickerSearch, 1, true)
-            if matchText and passes(sp) then
-                shown = shown + 1
-                local txt = string.format("|T%d:16:16:0:0|t %s", sp.icon or 134400, nm)
-                if ns.P().cues[tostring(sid)] then txt = txt .. "  |cff808080(watching)|r" end
-                if sp.secret then txt = txt .. "  |cffff6060(may be hidden in instances)|r" end
-                local btn = root:CreateButton(txt, function()
-                    if ns.P().cues[tostring(sid)] then
-                        addStatus:SetText("|cffffd200Already watching " .. nm .. ".|r")
-                        return
-                    end
-                    ns.AddCue(sid)
-                    addStatus:SetText("|cff60ff60Added " .. nm .. ".|r")
-                    RefreshAllPanels()
-                end)
-                if btn and btn.SetTooltip then
-                    btn:SetTooltip(function(tooltip)
-                        if tooltip and tooltip.SetSpellByID then tooltip:SetSpellByID(sid) end
-                    end)
-                end
-            end
+                or tostring(sp.spellID):find(pickerSearch, 1, true)
+            if matchText and passes(sp) then matches[#matches + 1] = sp end
         end
-        if shown == 0 then
+
+        if #matches == 0 then
             root:CreateButton("|cff808080No " .. label:lower() .. " match — type, or add by spell ID|r", function() end)
+            return
+        end
+
+        -- While searching, a flat list scans faster than nested submenus.
+        if pickerSearch ~= "" then
+            for _, sp in ipairs(matches) do AddAuraButton(root, sp) end
+            return
+        end
+
+        -- Otherwise bucket into groups.
+        local groups, order = {}, {}
+        for _, sp in ipairs(matches) do
+            local g = GroupOf(sp)
+            if not groups[g] then groups[g] = {}; order[#order + 1] = g end
+            local t = groups[g]
+            t[#t + 1] = sp
+        end
+        -- One group only -> show it flat; no point in a single submenu.
+        if #order == 1 then
+            for _, sp in ipairs(groups[order[1]]) do AddAuraButton(root, sp) end
+            return
+        end
+        -- Named groups alphabetical; the generic buckets sink to the bottom.
+        table.sort(order, function(a, b)
+            local ga, gb = GENERIC[a] and 1 or 0, GENERIC[b] and 1 or 0
+            if ga ~= gb then return ga < gb end
+            return a < b
+        end)
+        for _, g in ipairs(order) do
+            local list = groups[g]
+            local sub = root:CreateButton(string.format("%s  |cff808080(%d)|r", g, #list))
+            for _, sp in ipairs(list) do AddAuraButton(sub, sp) end
         end
     end)
     ctx.y = ctx.y - 38

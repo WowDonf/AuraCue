@@ -40,7 +40,7 @@ read_globals = {
     "C_UnitAuras", "AuraUtil", "C_Spell", "C_SpellBook",
     "IsPlayerSpell", "IsSpellKnown",
     -- Instance / unit identity (cue provenance: dungeon + source mob)
-    "IsInInstance", "GetInstanceInfo", "UnitExists", "UnitName",
+    "IsInInstance", "GetInstanceInfo", "UnitExists", "UnitName", "UnitClass",
     -- Character / spec identity (per-character, per-spec profile keys)
     "GetRealmName", "C_SpecializationInfo",
     "GetSpecialization", "GetSpecializationInfo",
