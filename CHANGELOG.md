@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.37.0
+
+- Abilities you cast are now auto-filed under **your class** in the picker
+  (e.g. Earth Shield → "Shaman"). The class is recorded from the character
+  that cast it (the game has no spell→class lookup), so it covers what you
+  cast yourself and fills in as you use abilities; mounts and toys are
+  excluded. Auras you didn't cast still fall into the other buckets.
+
 ## v0.36.0
 
 - Added a **"Find an ID" → Search Wowhead** helper under each picker. Type a

@@ -836,7 +836,9 @@ local function BuildKindPanel(kind)
     local function GroupOf(sp)
         if sp.group and sp.group ~= "" then return sp.group end
         if sp.mount then return "Mounts" end
-        -- Self-applied auras (buff OR debuff) are yours, not dungeon/boss
+        -- A class ability you cast (tagged at cast time) files under that class.
+        if sp.className and sp.className ~= "" then return sp.className end
+        -- Other self-applied auras (buff OR debuff) are yours, not dungeon/boss
         -- content — check this before the debuff dungeon/boss buckets so a
         -- self-debuff cast in a dungeon doesn't get filed under it.
         if sp.mine then return "From you / your pet" end

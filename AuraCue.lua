@@ -1013,6 +1013,7 @@ function ns.GetSeenAuras()
             boss    = info.boss and true or false,
             permanent = info.permanent and true or false,
             roleAura  = info.roleAura and true or false,
+            className = info.className,
             group   = groups[key],
             dungeon = info.dungeon,
             instanceable = instanceable,
@@ -1242,7 +1243,20 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             -- still make it into the picker (when the aura shares the cast id).
             C_Timer.After(0.1, function()
                 local state, data = ReadAura(spellID)
-                if state == "present" and data then RecordSeen(spellID, data) end
+                if state ~= "present" or not data then return end
+                RecordSeen(spellID, data)
+                -- Tag the casting class on an ability you actually cast (a known
+                -- player spell, not a mount), so the picker can file it under
+                -- your class (e.g. Earth Shield -> Shaman). Other classes' auras
+                -- can't be derived — the game has no spell->class lookup — so
+                -- this only covers what you cast yourself.
+                local entry = AuraCueDB and AuraCueDB.seen and AuraCueDB.seen[tostring(spellID)]
+                if entry and not entry.className and SpellKnown(spellID) then
+                    local GM = C_MountJournal and C_MountJournal.GetMountFromSpell
+                    if not (GM and GM(spellID)) then
+                        entry.className = UnitClass("player")
+                    end
+                end
             end)
         end
     end
