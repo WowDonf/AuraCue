@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.34.1
+
+- Fixed the aura search/hide list overlapping the search box (its top row and
+  the ✕ button sat over the search bar). It now opens cleanly below the row.
+
 ## v0.34.0
 
 - Groundwork to **ship a starter aura catalog** with the addon (`Data.lua`).

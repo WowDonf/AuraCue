@@ -571,7 +571,9 @@ local function BuildKindPanel(kind)
     -- group buttons can't run off the right edge of the options panel.
     local resultBtns = {}
     local searchResults = CreateFrame("Frame", nil, content, "BackdropTemplate")
-    searchResults:SetPoint("TOPLEFT", pickLabel, "BOTTOMLEFT", 0, -6)
+    -- Anchor below the whole picker row (the dropdown / search box are taller
+    -- than the label, so anchoring to the label's bottom overlapped them).
+    searchResults:SetPoint("TOPLEFT", content, "TOPLEFT", LEFT, ctx.y - 30)
     searchResults:SetWidth(520)
     searchResults:SetFrameLevel(content:GetFrameLevel() + 20)
     searchResults:SetBackdrop({
