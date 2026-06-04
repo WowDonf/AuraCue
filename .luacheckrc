@@ -21,7 +21,8 @@ globals = {
     "AuraCue_OnCompartmentEnter",
     "AuraCue_OnCompartmentLeave",
     -- Blizzard tables we mutate
-    "SlashCmdList",   -- /cue handler registration
+    "SlashCmdList",         -- /cue handler registration
+    "StaticPopupDialogs",   -- custom-group entry dialog
 }
 
 -- Blizzard / WoW API globals the addon only reads from.
@@ -30,7 +31,9 @@ read_globals = {
     "CreateFrame", "UIParent", "GetScreenHeight", "CreateColor",
     "Settings", "SettingsPanel", "HideUIPanel", "MenuResponse",
     "ColorPickerFrame",
-    "GameTooltip",
+    "GameTooltip", "StaticPopup_Show",
+    -- Mount detection (to keep mounts out of ability groups)
+    "C_MountJournal",
     -- Sound
     "PlaySound", "PlaySoundFile", "SOUNDKIT",
     -- Text-to-speech

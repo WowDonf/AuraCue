@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.29.0
+
+- **Reworked picker grouping.** WoW exposes no spell→class mapping, so the
+  old "group by class" guess mis-sorted (mounts landed under a class, real
+  abilities under "Items & toys"). The picker now groups by what the game
+  can report reliably: buffs into **Cast by me**, **Mounts**, and **World &
+  other**; debuffs by dungeon.
+- **Custom groups.** Click the note icon on any aura (in the Search / hide
+  list) to file it under a group you name — "Druid CDs", "World buffs",
+  whatever — and it shows under that heading in the picker, above the auto
+  buckets. Blank the name to remove it. Groups are saved account-wide.
+
 ## v0.28.0
 
 - **Fixed "Only abilities I know" hiding almost everything.** The known-spell

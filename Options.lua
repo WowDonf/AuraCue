@@ -14,6 +14,35 @@ local HEADER_H = 22
 local MAX_RESULTS = 10
 local RESULT_H = 20
 
+-- Dialog for assigning a catalogued aura to a custom picker group. The opener
+-- passes { sid, current, after } as the data argument.
+StaticPopupDialogs["AURACUE_SET_GROUP"] = {
+    text = "Custom group for %s:\n(leave blank to remove from any custom group)",
+    button1 = "Save",
+    button2 = "Cancel",
+    hasEditBox = true,
+    maxLetters = 40,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    OnShow = function(self, data)
+        local eb = self.EditBox or self.editBox
+        if eb then eb:SetText((data and data.current) or ""); eb:HighlightText() end
+    end,
+    OnAccept = function(self, data)
+        local eb = self.EditBox or self.editBox
+        if data and data.sid then ns.SetAuraGroup(data.sid, eb and eb:GetText() or "") end
+        if data and data.after then data.after() end
+    end,
+    EditBoxOnEnterPressed = function(editBox)
+        local dialog = editBox:GetParent()
+        local data = dialog and dialog.data
+        if data and data.sid then ns.SetAuraGroup(data.sid, editBox:GetText() or "") end
+        if data and data.after then data.after() end
+        if dialog then dialog:Hide() end
+    end,
+}
+
 -- Every panel registers a refresh function here; ns.RefreshOptions runs
 -- them all (used by slash commands and cross-panel updates).
 -- Per-cue "when" condition cycle (compact button on each row).
@@ -537,8 +566,28 @@ local function BuildKindPanel(kind)
         b.icon:SetPoint("LEFT", b, "LEFT", 2, 0)
         b.text = b:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         b.text:SetPoint("LEFT", b.icon, "RIGHT", 6, 0)
-        b.text:SetPoint("RIGHT", b, "RIGHT", -22, 0)
+        b.text:SetPoint("RIGHT", b, "RIGHT", -40, 0)
         b.text:SetJustifyH("LEFT")
+        -- A "set custom group" control (note icon), left of the hide toggle.
+        b.tag = CreateFrame("Button", nil, b)
+        b.tag:SetSize(14, 14)
+        b.tag:SetPoint("RIGHT", b, "RIGHT", -20, 0)
+        b.tag:SetNormalTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up")
+        b.tag:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+        b.tag:SetScript("OnClick", function()
+            if not b.spellID then return end
+            StaticPopup_Show("AURACUE_SET_GROUP", b.auraName or tostring(b.spellID), nil, {
+                sid = b.spellID,
+                current = b.group or "",
+                after = function() addDD:GenerateMenu(); UpdateSearchResults() end,
+            })
+        end)
+        b.tag:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Set a custom group")
+            GameTooltip:Show()
+        end)
+        b.tag:SetScript("OnLeave", function() GameTooltip:Hide() end)
         -- A small toggle that hides this aura from the picker, or restores it
         -- when it's already hidden (so a mis-hidden ability is one click back).
         -- Its icon/state is set per row in UpdateSearchResults via b.hidden.
@@ -598,6 +647,7 @@ local function BuildKindPanel(kind)
                     local b = resultBtns[shown] or MakeResultBtn(shown)
                     b.spellID = sp.spellID
                     b.auraName = nm
+                    b.group = sp.group
                     b.icon:SetTexture(sp.icon or 134400)
                     b.hidden = sp.ignored
                     if sp.ignored then
@@ -608,6 +658,7 @@ local function BuildKindPanel(kind)
                         b.hide:SetHighlightTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Highlight")
                     end
                     local mark = ns.P().cues[tostring(sp.spellID)] and "  |cff808080(watching)|r" or ""
+                    if sp.group and sp.group ~= "" then mark = mark .. "  |cff80c0ff[" .. sp.group .. "]|r" end
                     if sp.ignored then mark = mark .. "  |cffff6060(hidden)|r" end
                     b.text:SetText(nm .. mark)
                     b:Show()
@@ -679,16 +730,19 @@ local function BuildKindPanel(kind)
         end
     end
 
-    -- Which submenu an aura belongs in: buffs group by the class that cast
-    -- them (then generic buckets); debuffs group by the dungeon they're from.
-    local GENERIC = { ["World & other"] = true, ["Items & toys"] = true, ["Other"] = true }
+    -- Which submenu an aura belongs in. A custom group always wins; otherwise
+    -- fall back to reliable auto-buckets (debuffs by dungeon; buffs by mount /
+    -- cast-by-me / world). The auto-buckets have a fixed display order and sit
+    -- below any custom groups.
+    local BUCKET_ORDER = { ["Cast by me"] = 1, ["Mounts"] = 2, ["World & other"] = 3, ["Other"] = 4 }
     local function GroupOf(sp)
+        if sp.group and sp.group ~= "" then return sp.group end
         if kind == "debuff" then
             return (sp.dungeon and sp.dungeon ~= "") and sp.dungeon or "Other"
         end
-        if sp.className and sp.className ~= "" then return sp.className end
-        if not sp.mine then return "World & other" end
-        return "Items & toys"
+        if sp.mount then return "Mounts" end
+        if sp.mine then return "Cast by me" end
+        return "World & other"
     end
 
     addDD:SetupMenu(function(_, root)
@@ -728,10 +782,12 @@ local function BuildKindPanel(kind)
             for _, sp in ipairs(groups[order[1]]) do AddAuraButton(root, sp) end
             return
         end
-        -- Named groups alphabetical; the generic buckets sink to the bottom.
+        -- Custom groups first (alphabetical); the auto-buckets follow in their
+        -- fixed order.
         table.sort(order, function(a, b)
-            local ga, gb = GENERIC[a] and 1 or 0, GENERIC[b] and 1 or 0
-            if ga ~= gb then return ga < gb end
+            local oa, ob = BUCKET_ORDER[a], BUCKET_ORDER[b]
+            if oa and ob then return oa < ob end
+            if oa or ob then return ob ~= nil end
             return a < b
         end)
         for _, g in ipairs(order) do
