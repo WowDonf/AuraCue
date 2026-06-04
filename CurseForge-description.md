@@ -45,11 +45,8 @@ need an ID.
 
 ## Getting started
 
-1. Open options with **/cue** (or the minimap / Addon Compartment button).
+1. Open options with **/cue**.
 2. Open **Buffs** or **Debuffs** in the settings list and add an aura from the
    picker (or by spell ID).
 3. Set its sound / speech / flash and a When condition to taste.
 4. **/cue test** to preview.
-
-Built small and focused, like the rest of the family: OutOfRange,
-DontRelease, MinimapIconBar, CombatReticle.

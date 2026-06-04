@@ -78,9 +78,7 @@ back. The catalog is account-wide (shared across all your characters).
 
 ## Usage
 
-Open options with `/cue`, the minimap button, or the Addon Compartment button
-(left-click for options, right-click to toggle on/off). Hide the minimap button
-from Global Settings if you prefer the compartment.
+Open options with `/cue`.
 
 | Command | Does |
 | --- | --- |
