@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.31.2
+
+- On the Manage Auras page, **"Show hidden auras" is now "Show only hidden
+  auras"** — it filters the list down to exactly your hidden auras instead of
+  mixing them in.
+- **Destructive actions now warn first.** Removing auras from the catalog
+  (single or selected) and clearing the whole hidden-aura list both ask for
+  confirmation. The Manage page's **Clear** button is relabelled **"Clear
+  selection"** to make clear it only un-ticks rows and deletes nothing.
+
 ## v0.31.1
 
 - Renamed the "Cast by me" group (and its filter) to "From you / your pet".

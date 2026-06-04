@@ -51,6 +51,19 @@ StaticPopupDialogs["AURACUE_SET_GROUP"] = {
     end,
 }
 
+-- Generic confirmation for destructive actions. Opener passes the warning as
+-- text_arg1 and { onaccept } as data.
+StaticPopupDialogs["AURACUE_CONFIRM"] = {
+    text = "%s",
+    button1 = "Yes",
+    button2 = "Cancel",
+    showAlert = true,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    OnAccept = function(_, data) if data and data.onaccept then data.onaccept() end end,
+}
+
 -- Every panel registers a refresh function here; ns.RefreshOptions runs
 -- them all (used by slash commands and cross-panel updates).
 -- Per-cue "when" condition cycle (compact button on each row).
@@ -894,10 +907,14 @@ local function BuildKindPanel(kind)
     resetHidden:SetSize(110, 22)
     resetHidden:SetText("Reset hidden")
     resetHidden:SetScript("OnClick", function()
-        ns.ResetIgnored()
-        addStatus:SetText("|cff808080Hidden-aura list cleared.|r")
-        addDD:GenerateMenu()
-        UpdateSearchResults()
+        StaticPopup_Show("AURACUE_CONFIRM",
+            "Un-hide every aura you've hidden? This clears the whole hidden-aura list.", nil,
+            { onaccept = function()
+                ns.ResetIgnored()
+                addStatus:SetText("|cff808080Hidden-aura list cleared.|r")
+                addDD:GenerateMenu()
+                UpdateSearchResults()
+            end })
     end)
     ctx.y = ctx.y - 36
 
@@ -1271,17 +1288,6 @@ end
 -- catalog — set custom groups, hide clutter, or remove entries, one at a
 -- time or in bulk via the row checkboxes.
 -- ---------------------------------------------------------------------
-local MANAGE_CONFIRM = "AURACUE_MANAGE_FORGET"
-StaticPopupDialogs[MANAGE_CONFIRM] = {
-    text = "%s",
-    button1 = "Remove",
-    button2 = "Cancel",
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    OnAccept = function(_, data) if data and data.onaccept then data.onaccept() end end,
-}
-
 local managePanel = NewPanel("Manage Auras")
 do
     local content, LEFT = managePanel.content, managePanel.LEFT
@@ -1312,7 +1318,7 @@ do
     sBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
     managePanel.y = managePanel.y - 30
 
-    managePanel.Check("Show hidden auras",
+    managePanel.Check("Show only hidden auras",
         function() return showHidden end,
         function(v) showHidden = v; Rebuild() end)
 
@@ -1360,13 +1366,16 @@ do
     local bRemove = smallBtn("Remove", 70, function()
         local list = SelectedList()
         if #list == 0 then return end
-        StaticPopup_Show(MANAGE_CONFIRM, "Remove " .. #list .. " selected aura(s) from the catalog?", nil,
-            { onaccept = function()
+        StaticPopup_Show("AURACUE_CONFIRM",
+            "Permanently remove " .. #list .. " selected aura(s) from your saved catalog? " ..
+            "Any custom group and hide settings for them are lost too. They only return if you see them again.",
+            nil, { onaccept = function()
                 for _, sid in ipairs(list) do ns.ForgetAura(sid); selected[tostring(sid)] = nil end
                 RefreshAllPanels()
             end })
     end)
-    local bClear = smallBtn("Clear", 56, function() wipe(selected); RefreshAllPanels() end)
+    -- "Clear selection" only un-ticks the rows; it changes no saved data.
+    local bClear = smallBtn("Clear selection", 110, function() wipe(selected); RefreshAllPanels() end)
     placeBtn(bGroup); placeBtn(bHide); placeBtn(bShow); placeBtn(bRemove); placeBtn(bClear)
     managePanel.y = managePanel.y - 30
 
@@ -1399,8 +1408,10 @@ do
         r.remove:SetScript("OnClick", function()
             if not r.sid then return end
             local nm = r.auraName or tostring(r.sid)
-            StaticPopup_Show(MANAGE_CONFIRM, "Remove " .. nm .. " from the catalog?", nil,
-                { onaccept = function()
+            StaticPopup_Show("AURACUE_CONFIRM",
+                "Permanently remove " .. nm .. " from your saved catalog? " ..
+                "It only returns if you see it again.",
+                nil, { onaccept = function()
                     ns.ForgetAura(r.sid); selected[tostring(r.sid)] = nil; RefreshAllPanels()
                 end })
         end)
@@ -1440,7 +1451,9 @@ do
         UpdateSelFS()
         local shown, total = 0, 0
         for _, sp in ipairs(ns.GetSeenAuras()) do
-            if showHidden or not sp.ignored then
+            -- "Show only hidden" flips the list to exactly the hidden auras;
+            -- otherwise show only the non-hidden ones.
+            if (sp.ignored and true or false) == showHidden then
                 local nm = sp.name or ("Spell " .. sp.spellID)
                 if search == "" or nm:lower():find(search, 1, true) or tostring(sp.spellID):find(search, 1, true) then
                     total = total + 1
