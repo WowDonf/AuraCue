@@ -1160,14 +1160,34 @@ end
 -- Set the extra spell ids that also trigger one cue (so e.g. base and proc
 -- Avenging Wrath are a single alert). Pass a list of numbers/strings.
 function ns.SetCueAlts(spellKey, list)
-    local cue = activeProfile and activeProfile.cues[tostring(spellKey)]
+    local key = tostring(spellKey)
+    local cue = activeProfile and activeProfile.cues[key]
     if not cue then return end
-    local clean, used = {}, { [tostring(spellKey)] = true }
+    local clean, used = {}, { [key] = true }
     for _, v in ipairs(list or {}) do
         local n = tonumber(v)
         if n and not used[tostring(n)] then used[tostring(n)] = true; clean[#clean + 1] = n end
     end
     cue.alts = (#clean > 0) and clean or nil
+    -- A hand-linked trigger id is part of this cue, so catalogue each one too
+    -- (mirroring the primary's kind) — otherwise it would drive the alert but be
+    -- missing from the Manage Auras list. No class is inherited: linked ids are
+    -- usually cross-class equivalents (e.g. Bloodlust / Heroism / Time Warp), so
+    -- each keeps its own class, filled in if it's ever observed. Only real
+    -- spells are added; clearing alts never forgets a catalog entry.
+    if AuraCueDB and AuraCueDB.seen and clean[1] then
+        local primary = AuraCueDB.seen[key]
+        local kind = cue.kind or (primary and primary.kind) or "buff"
+        local changed = false
+        for _, n in ipairs(clean) do
+            local k = tostring(n)
+            if not AuraCueDB.seen[k] and C_Spell.GetSpellName(n) then
+                AuraCueDB.seen[k] = NewSeenEntry(n, kind, false)
+                changed = true
+            end
+        end
+        if changed then MarkSeenDirty() end
+    end
     ApplyCueChange()
 end
 

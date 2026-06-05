@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.57.1
+
+- Spell IDs you hand-link to a cue ("Add other spell IDs by hand") now also get
+  added to the **Manage Auras** catalog, like a by-ID add does — each linked ID
+  takes the cue's buff/debuff kind (but not its class, since linked IDs are
+  usually cross-class equivalents). Clearing linked IDs still leaves their
+  catalog entries in place.
+
 ## v0.57.0
 
 - Gained/faded phrase testers for text-to-speech. The "Set spoken text" dialog
