@@ -2,7 +2,7 @@
 -- AuraCue - Options panels (Settings canvas + subcategories)
 -- =====================================================================
 -- Three registered panels: a main "AuraCue" page (General + Audio) and
--- two subcategories in the left list, "Buffs" and "Debuffs", each holding
+-- two subcategories in the left list, "Buffs/Skills" and "Debuffs", each holding
 -- that kind's window appearance and its watched-aura editor. All tracked-
 -- setting reads go through ns.P() (the active profile); the account-wide
 -- seen catalog is reached via ns.GetSeenAuras().
@@ -821,13 +821,17 @@ end
 -- ---------------------------------------------------------------------
 local function BuildKindPanel(kind)
     local label = (kind == "debuff") and "Debuffs" or "Buffs"
+    -- Page / subcategory title. Buffs also covers castable skills (the spellbook
+    -- seeds the catalog), so that page is named "Buffs/Skills"; the internal
+    -- grammar strings ("Watched buffs", "No buffs match") still use `label`.
+    local pageName = (kind == "debuff") and "Debuffs" or "Buffs/Skills"
     local ctx = NewPanel(label)
     local content, LEFT = ctx.content, ctx.LEFT
 
     -- Title
     local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
     titleFS:SetPoint("TOPLEFT", LEFT, ctx.y)
-    titleFS:SetText(label)
+    titleFS:SetText(pageName)
     ctx.y = ctx.y - 24
 
     -- (Window appearance lives on the separate "Appearance" page now, so this
@@ -2130,7 +2134,7 @@ if Settings and Settings.RegisterCanvasLayoutCategory then
         -- Subcategories listed alphabetically.
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, appearancePanel.panel, "Appearance")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, audioPanel.panel, "Audio")
-        Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs")
+        Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs/Skills")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, debuffPanel.panel, "Debuffs")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, managePanel.panel, "Manage Auras")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, sharePanel.panel, "Sharing")

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.59.2
+
+- Renamed the **Buffs** settings page to **Buffs/Skills**, since it also covers
+  the castable abilities the spellbook seeds into the catalog.
+
 ## v0.59.1
 
 - Fixed the greyed "{name} gained" / "{name} faded" placeholder not appearing in
