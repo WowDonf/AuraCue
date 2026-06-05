@@ -8,16 +8,23 @@ windows, and debuff warnings.
 Each watched aura can cue when it's **gained**, when it **fades**, or both:
 
 - **Sound** — a distinct bundled tone, on the audio channel you pick. Separate
-  sounds for gained and faded (or "None" for silent).
+  sounds for gained and faded (or "None" for silent), including matched
+  open/close pairs where the gained tone rises and the faded one falls
+  (rise/fall, open/close, unfold/fold, bloom/wilt).
 - **Speech** — the aura's name spoken aloud (text-to-speech), with voice /
-  rate / volume controls.
+  rate / volume controls. The spoken phrase is yours to set — a general format
+  like "{name} gained", or a per-aura override (e.g. say "Damage now" the
+  moment Bloodlust lands).
 - **On-screen flash** — center text and/or a screen-edge glow, with separate
   colors for gained vs faded, and adjustable size, on-screen time, and edge
   thickness / intensity.
 
 Buffs and debuffs each get their own on-screen window (size, colors, position,
-duration), and each aura can be limited with a **When** condition — fire
-everywhere, only in combat, only in instances, or only in the open world.
+duration), configured on the **Appearance** page. Every watched row has an
+**Edit** button (or right-click it) for that aura's options: a **When**
+condition — fire everywhere, only in combat, only in instances, or only in the
+open world — its spoken text, whether it's treated as a buff or a debuff, and
+combining (below).
 
 ## Working in instances
 
@@ -34,9 +41,12 @@ of their coverage. AuraCue is built around that wall instead of fighting it:
 
 ## The aura picker
 
-You build your watch list from a catalog AuraCue fills in as you play — every
-aura it sees on you, plus every ability you cast. You never have to hunt for
-spell IDs (though you still can add one by ID).
+You build your watch list from a catalog AuraCue fills in for you. Your class's
+abilities are **pre-loaded from your spellbook** the instant you log in, so the
+picker is useful immediately — and it keeps growing as you play, adding every
+aura it sees on you plus every ability you cast. The catalog is account-wide,
+so logging into each character folds in that class's spells. You rarely have to
+hunt for spell IDs (though you still can add one by ID).
 
 **No hard-coded ability list.** AuraCue has no built-in whitelist or blacklist
 of spells — it learns purely from what it observes you cast and what lands on
@@ -65,15 +75,17 @@ spell and its talented proc version. AuraCue can treat them as one cue:
 
 - **Combine auras with the same name** (a Global Setting) makes every
   same-named aura drive a single alert and merges duplicate rows.
-- Or **right-click a watched row** to combine just that one by name, or to add
-  specific extra spell IDs by hand.
+- Or a watched row's **Edit** menu lets you combine just that one by name, or
+  add specific extra spell IDs by hand.
 
 ## Managing the catalog
 
 The **Manage Auras** page is a full edit view of your account-wide catalog:
-search it, set a custom group, hide or show entries, or remove them — one at a
-time or in bulk by ticking rows. Removing an aura just forgets it until you see
-it again.
+search and filter it (by kind, class, hidden, mounts, or only ungrouped), set a
+custom group, hide or show entries, or remove them — one at a time or in bulk by
+ticking rows. Each row's **Edit** dialog adjusts the finer stored details
+(group, class, dungeon, buff/debuff). Removing an aura just forgets it until you
+see it again.
 
 ## Profiles & sharing
 
@@ -101,8 +113,3 @@ Open options with `/cue`.
 | `/cue forget` | Clear the remembered-aura catalog |
 | `/cue tts` | Diagnose text-to-speech |
 | `/cue status` | Print current settings |
-
-## Roadmap
-
-- Player cast-bar / interrupt-window cues
-- Resource / health threshold cues
