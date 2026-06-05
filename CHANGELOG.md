@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.56.2
+
+- Fixed an "action blocked" error when opening the options panel during combat.
+  Blizzard protects the Settings panel in combat, so AuraCue now declines with a
+  note ("try again afterwards") instead of tripping the error.
+
 ## v0.56.1
 
 - Adding an aura by spell ID now also adds it to the **Manage Auras** catalog,

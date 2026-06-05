@@ -2050,8 +2050,17 @@ function ns.InitOptions() RefreshAllPanels() end
 
 function ns.OpenOptions()
     if not mainCategory then return end
+    -- Opening Blizzard's Settings panel is a protected action during combat;
+    -- an addon-driven open then trips ADDON_ACTION_BLOCKED. Bail with a note
+    -- instead of erroring. (The deferred open re-checks too, in case combat
+    -- starts in the gap.)
+    if InCombatLockdown() then
+        ns.chatPrint("can't open the options panel during combat — try again afterwards.")
+        return
+    end
     RefreshAllPanels()
     C_Timer.After(0, function()
+        if InCombatLockdown() then return end
         Settings.OpenToCategory(mainCategory:GetID())
     end)
 end
