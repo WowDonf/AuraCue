@@ -457,7 +457,10 @@ local function AddShareBox(ctx, height)
     box:SetScript("OnCursorChanged", function(_, _, y, _, h)
         local top, bottom = -y, -y + h
         local view = scroll:GetHeight()
-        local s = scroll:GetVerticalScroll()
+        -- 12.0.7 marks GetVerticalScroll as a possibly-secret return (only in
+        -- restricted aspects, which a config frame never is); Reveal-guard it
+        -- anyway so the arithmetic below can't ever hit a secret value.
+        local s = ns.Reveal(scroll:GetVerticalScroll(), 0)
         if top < s then scroll:SetVerticalScroll(top)
         elseif bottom > s + view then scroll:SetVerticalScroll(bottom - view) end
     end)
@@ -465,7 +468,7 @@ local function AddShareBox(ctx, height)
     scroll:EnableMouseWheel(true)
     scroll:SetScript("OnMouseWheel", function(self, delta)
         local maxScroll = self:GetVerticalScrollRange()
-        local new = math.max(0, math.min(maxScroll, self:GetVerticalScroll() - delta * 24))
+        local new = math.max(0, math.min(maxScroll, ns.Reveal(self:GetVerticalScroll(), 0) - delta * 24))
         self:SetVerticalScroll(new)
     end)
     ctx.y = ctx.y - (height + 8)

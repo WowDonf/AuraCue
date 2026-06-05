@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.55.1
+
+- Updated for WoW 12.0.7 (Interface 120007). Verified the addon's full API
+  surface against the 12.0.7 changes — no removed or signature-broken calls are
+  used. The scroll methods the options panels use (GetVerticalScroll) are now
+  flagged as possibly-secret in restricted contexts, which a config frame never
+  is; guarded them anyway as a precaution.
+
 ## v0.55.0
 
 - Performance: the picker no longer rebuilds and re-sorts the entire catalog
