@@ -70,6 +70,10 @@ local PROFILE_DEFAULTS = {
     ttsRate = 0,                 -- text-to-speech rate (-10..10)
     ttsVolume = 100,             -- text-to-speech volume (0..100)
     ttsVoice = nil,              -- chosen TTS voice id (nil = first available)
+    -- General spoken-cue phrasing; {name} is replaced by the aura's name. A
+    -- cue can override these with its own literal phrase (cue.speakApplied/Faded).
+    speakFormatApplied = "{name} gained",
+    speakFormatFaded   = "{name} faded",
     -- Separate on-screen window per kind, so buffs and debuffs can have
     -- their own size / position / color / duration.
     visual = {
@@ -561,6 +565,18 @@ local function ConditionMet(when)
 end
 ns.ConditionMet = ConditionMet
 
+-- The phrase to speak for a cue/event: the cue's own literal override if set,
+-- else the profile's general format with {name} filled in (e.g. "Bloodlust
+-- gained", or a custom "Damage Now").
+local function SpeakTextFor(cue, eventKind, label)
+    local custom = (eventKind == "applied") and cue.speakApplied or cue.speakFaded
+    if custom and custom ~= "" then return custom end
+    local fmt = (eventKind == "applied") and activeProfile.speakFormatApplied
+        or activeProfile.speakFormatFaded
+    if not fmt or fmt == "" then fmt = (eventKind == "applied") and "{name} gained" or "{name} faded" end
+    return (fmt:gsub("{name}", label or ""))
+end
+
 local function FireCue(cue, spellName, eventKind)
     if not ConditionMet(cue.when) then return end
     -- Respect the per-kind master switches (buffs vs debuffs).
@@ -573,7 +589,7 @@ local function FireCue(cue, spellName, eventKind)
     local label = cue.label or spellName or "Aura"
     local snd = (eventKind == "applied") and cue.soundApplied or cue.soundFaded
     if activeProfile.audioEnabled and snd then
-        PlayOrSpeak(snd, cue.channel or activeProfile.channel, label .. " " .. verb)
+        PlayOrSpeak(snd, cue.channel or activeProfile.channel, SpeakTextFor(cue, eventKind, label))
     end
     local kind = (cue.kind == "debuff") and "debuff" or "buff"
     if cue.visual and VisCfg(kind).enabled and not ns.testMode then
@@ -590,8 +606,8 @@ function ns.PreviewCue(spellKey, eventKind)
     if not cue then return end
     eventKind = (eventKind == "faded") and "faded" or "applied"
     local snd = (eventKind == "applied") and cue.soundApplied or cue.soundFaded
-    local verb = (eventKind == "faded") and "faded" or "gained"
-    PlayOrSpeak(snd, cue.channel or activeProfile.channel, (cue.label or "Aura") .. " " .. verb)
+    PlayOrSpeak(snd, cue.channel or activeProfile.channel,
+        SpeakTextFor(cue, eventKind, cue.label or "Aura"))
     if cue.visual then
         local kind = (cue.kind == "debuff") and "debuff" or "buff"
         ShowVisual(kind, (cue.label or "Aura") .. " " .. (eventKind == "faded" and "faded" or "gained"), eventKind)
@@ -1070,6 +1086,20 @@ function ns.IsNameCombined(name)
         if (global or c.matchName) and c.label == name then return true end
     end
     return false
+end
+
+-- Set a cue's literal spoken phrases (blank clears, so it falls back to the
+-- general format). These are only spoken when the cue's sound is "speak".
+function ns.SetCueSpeak(spellKey, applied, faded)
+    local cue = activeProfile and activeProfile.cues[tostring(spellKey)]
+    if not cue then return end
+    local function norm(s)
+        if type(s) == "string" then s = s:trim() end
+        return (type(s) == "string" and s ~= "" and s) or nil
+    end
+    cue.speakApplied = norm(applied)
+    cue.speakFaded = norm(faded)
+    if ns.RefreshOptions then ns.RefreshOptions() end
 end
 
 -- Flip a watched cue between buff and debuff (so a self-debuff that came in as

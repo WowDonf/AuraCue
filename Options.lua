@@ -312,6 +312,26 @@ local function NewPanel(name)
         return b
     end
 
+    -- A labeled text field bound to a getter/setter (commit on focus loss).
+    function ctx.EditLine(label, getter, setter, width)
+        local lbl = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        lbl:SetPoint("TOPLEFT", LEFT, ctx.y)
+        lbl:SetText(label)
+        ctx.y = ctx.y - 20
+        local eb = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+        eb:SetPoint("TOPLEFT", LEFT + 6, ctx.y)
+        eb:SetSize(width or 240, 22)
+        eb:SetAutoFocus(false)
+        eb:SetFontObject("ChatFontNormal")
+        eb:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+        eb:SetScript("OnEscapePressed", function(self) self:SetText(getter() or ""); self:ClearFocus() end)
+        eb:SetScript("OnEditFocusLost", function(self) setter(self:GetText() or "") end)
+        eb.Refresh = function() eb:SetText(getter() or "") end
+        widgets[#widgets + 1] = eb
+        ctx.y = ctx.y - 30
+        return eb
+    end
+
     function ctx.SideBySide(...)
         local args = {...}
         local x = LEFT + 6
@@ -555,9 +575,71 @@ do
     main.Slider("Speech volume", 0, 100, 5, "%d",
         function() return ns.P().ttsVolume end,
         function(v) ns.P().ttsVolume = v end)
+    main.Desc("What spoken cues say. {name} is replaced by the aura's name. Any cue can override " ..
+        "these with its own phrase (right-click a watched aura → Set spoken text).")
+    main.EditLine("Gained phrase",
+        function() return ns.P().speakFormatApplied end,
+        function(v) ns.P().speakFormatApplied = (v ~= "" and v) or nil end, 300)
+    main.EditLine("Faded phrase",
+        function() return ns.P().speakFormatFaded end,
+        function(v) ns.P().speakFormatFaded = (v ~= "" and v) or nil end, 300)
     main.Button("Test speech", 160, function() ns.Speak("AuraCue speech test") end)
 
     content:SetHeight(-main.y + 20)
+end
+
+-- A dialog to set a cue's literal spoken phrases (gained / faded). Blank means
+-- "use the general phrase". Created lazily; reused.
+local speechDialog
+local function OpenSpeechDialog(sid, name, applied, faded, after)
+    if not speechDialog then
+        local d = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        d:SetSize(380, 240)
+        d:SetPoint("CENTER")
+        d:SetFrameStrata("FULLSCREEN_DIALOG")
+        d:EnableMouse(true)
+        d:SetBackdrop({
+            bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+            tile = true, tileSize = 32, edgeSize = 32,
+            insets = { left = 11, right = 12, top = 12, bottom = 11 },
+        })
+        d.title = d:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        d.title:SetPoint("TOP", 0, -16)
+        local hint = d:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        hint:SetPoint("TOP", 0, -40)
+        hint:SetText("Spoken when this cue's sound is \"Speak the name (TTS)\". Blank = general phrase.")
+        local function field(labelText, yoff)
+            local lbl = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+            lbl:SetPoint("TOPLEFT", 24, yoff); lbl:SetText(labelText)
+            local eb = CreateFrame("EditBox", nil, d, "InputBoxTemplate")
+            eb:SetPoint("TOPLEFT", 28, yoff - 18); eb:SetSize(310, 20)
+            eb:SetAutoFocus(false); eb:SetFontObject("ChatFontNormal")
+            eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+            return eb
+        end
+        d.appliedBox = field("Gained phrase", -70)
+        d.fadedBox = field("Faded phrase", -120)
+        d.save = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
+        d.save:SetSize(100, 24); d.save:SetText("Save")
+        d.save:SetPoint("BOTTOMRIGHT", -20, 16)
+        d.cancel = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
+        d.cancel:SetSize(100, 24); d.cancel:SetText("Cancel")
+        d.cancel:SetPoint("RIGHT", d.save, "LEFT", -8, 0)
+        d.cancel:SetScript("OnClick", function() d:Hide() end)
+        d:Hide()
+        speechDialog = d
+    end
+    local d = speechDialog
+    d.title:SetText(name or ("Spell " .. tostring(sid)))
+    d.appliedBox:SetText(applied or "")
+    d.fadedBox:SetText(faded or "")
+    d.save:SetScript("OnClick", function()
+        ns.SetCueSpeak(sid, d.appliedBox:GetText(), d.fadedBox:GetText())
+        d:Hide()
+        if after then after() end
+    end)
+    d:Show(); d:Raise()
 end
 
 -- ---------------------------------------------------------------------
@@ -1177,6 +1259,10 @@ local function BuildKindPanel(kind)
                     root:CreateButton(
                         cue.kind == "debuff" and "Treat as a buff" or "Treat as a debuff",
                         function() ns.SetCueKind(key, cue.kind == "debuff" and "buff" or "debuff") end)
+                    root:CreateButton("Set spoken text…", function()
+                        OpenSpeechDialog(key, cue.label, cue.speakApplied, cue.speakFaded,
+                            function() RefreshAllPanels() end)
+                    end)
                     root:CreateDivider()
                     root:CreateCheckbox("Auto-combine auras with the same name",
                         function() return cue.matchName end,

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.52.0
+
+- **Custom spoken cues.** When a cue uses "Speak the name (TTS)", you can now
+  choose what it says:
+  - **General** (main Audio settings): "Gained phrase" / "Faded phrase" with a
+    `{name}` placeholder — e.g. change "{name} gained" to "{name} up". Applies
+    to all spoken cues.
+  - **Per ability** (right-click a watched aura → "Set spoken text…"): a literal
+    phrase that overrides the general one — e.g. make Bloodlust say "Damage
+    Now".
+
 ## v0.51.0
 
 - **One group, everywhere.** The watched-row Group box used to set a separate
