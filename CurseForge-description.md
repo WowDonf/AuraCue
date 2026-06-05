@@ -6,6 +6,8 @@ Turn your own buffs and debuffs into sound, speech, or on-screen flashes — pro
 
 **Turn your own buffs and debuffs into a sound, a spoken name, and/or an on-screen flash.**
 
+*See the demo video and screenshots in the gallery above.*
+
 AuraCue watches the auras *you* choose and fires a cue when each one is
 **gained** or **fades** — handy for proc alerts, missing-buff reminders,
 cooldown windows, and debuff warnings. Pick any combination of:
