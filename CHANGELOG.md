@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.48.0
+
+- The Manage Auras **Edit** dialog now also edits an aura's **Name**, **Class**
+  (a dropdown — fix a mis-tag or assign one manually), **Kind** (buff/debuff),
+  and **Boss** flag, alongside Dungeon and Source.
+
 ## v0.47.0
 
 - Watched-aura tooltips are tidier: dropped the "Dungeon:" and "Tracked by:"

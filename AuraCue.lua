@@ -1250,18 +1250,23 @@ function ns.SetAuraGroup(spellID, name)
     AuraCueDB.groups[tostring(spellID)] = name
 end
 
--- Edit a catalogued aura's stored provenance: its dungeon and "discovered by"
--- source. Blank clears the field. (The catalog entry only; a watched cue keeps
--- its own copy made when it was added.)
-function ns.SetAuraDetail(spellID, dungeon, source)
+-- Edit a catalogued aura's stored details. `fields` may carry name, dungeon,
+-- source, className (blank clears any of these), kind ("buff"/"debuff"), and
+-- boss (boolean). Only the keys present are changed. (The catalog entry only;
+-- a watched cue keeps its own copy made when it was added.)
+function ns.SetAuraDetail(spellID, fields)
     local e = AuraCueDB and AuraCueDB.seen and AuraCueDB.seen[tostring(spellID)]
-    if not e then return end
+    if not e or type(fields) ~= "table" then return end
     local function norm(s)
         if type(s) == "string" then s = s:trim() end
         return (type(s) == "string" and s ~= "" and s) or nil
     end
-    e.dungeon = norm(dungeon)
-    e.source = norm(source)
+    if fields.name ~= nil then e.name = norm(fields.name) end
+    if fields.dungeon ~= nil then e.dungeon = norm(fields.dungeon) end
+    if fields.source ~= nil then e.source = norm(fields.source) end
+    if fields.className ~= nil then e.className = norm(fields.className) end
+    if fields.kind ~= nil then e.kind = (fields.kind == "debuff") and "debuff" or "buff" end
+    if fields.boss ~= nil then e.boss = fields.boss and true or nil end
     if ns.RefreshOptions then ns.RefreshOptions() end
 end
 

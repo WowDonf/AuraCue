@@ -1550,13 +1550,31 @@ do
     content:SetHeight(-sharePanel.y + 20)
 end
 
--- A small dialog to edit a catalogued aura's stored provenance (dungeon and
--- who applied it). Created lazily; reused for each row.
+-- Localized class names (built once), for the detail dialog's class dropdown.
+local CLASS_NAMES
+local function getClassNames()
+    if not CLASS_NAMES then
+        CLASS_NAMES = {}
+        local n = (GetNumClasses and GetNumClasses()) or 0
+        for i = 1, n do
+            local nm = GetClassInfo and GetClassInfo(i)
+            if nm then CLASS_NAMES[#CLASS_NAMES + 1] = nm end
+        end
+        table.sort(CLASS_NAMES)
+    end
+    return CLASS_NAMES
+end
+
+-- A dialog to edit a catalogued aura's stored details (name, dungeon, source,
+-- class, kind, boss). Created lazily; reused for each row. `sp` is a GetSeenAuras
+-- entry.
 local detailDialog
-local function OpenDetailDialog(sid, name, dungeon, source, after)
+local function OpenDetailDialog(sp, after)
+    if not sp then return end
+    local sid = sp.spellID
     if not detailDialog then
         local d = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        d:SetSize(380, 200)
+        d:SetSize(380, 360)
         d:SetPoint("CENTER")
         d:SetFrameStrata("FULLSCREEN_DIALOG")
         d:EnableMouse(true)
@@ -1580,8 +1598,37 @@ local function OpenDetailDialog(sid, name, dungeon, source, after)
             eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
             return eb
         end
-        d.dungeonBox = field("Dungeon", -48)
-        d.sourceBox = field("Discovered by (source)", -100)
+        d.nameBox = field("Name", -44)
+        d.dungeonBox = field("Dungeon", -94)
+        d.sourceBox = field("Discovered by (source)", -144)
+
+        local classLbl = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        classLbl:SetPoint("TOPLEFT", 24, -194)
+        classLbl:SetText("Class")
+        d.classDD = CreateFrame("DropdownButton", nil, d, "WowStyle1DropdownTemplate")
+        d.classDD:SetPoint("TOPLEFT", 28, -212)
+        d.classDD:SetSize(180, 26)
+        d.classDD:SetupMenu(function(_, root)
+            root:CreateRadio("(none)",
+                function() return not d.selClass end,
+                function() d.selClass = nil; d.classDD:SetText("(none)"); d.classDD:GenerateMenu() end)
+            for _, cn in ipairs(getClassNames()) do
+                root:CreateRadio(cn,
+                    function() return d.selClass == cn end,
+                    function() d.selClass = cn; d.classDD:SetText(cn); d.classDD:GenerateMenu() end)
+            end
+        end)
+
+        local function check(label, x, y)
+            local cb = CreateFrame("CheckButton", nil, d, "UICheckButtonTemplate")
+            cb:SetPoint("TOPLEFT", x, y); cb:SetSize(24, 24)
+            local fs = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+            fs:SetPoint("LEFT", cb, "RIGHT", 2, 1); fs:SetText(label)
+            return cb
+        end
+        d.kindCheck = check("Treat as a debuff", 24, -250)
+        d.bossCheck = check("Boss aura", 210, -250)
+
         d.save = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
         d.save:SetSize(100, 24); d.save:SetText("Save")
         d.save:SetPoint("BOTTOMRIGHT", -20, 16)
@@ -1593,11 +1640,24 @@ local function OpenDetailDialog(sid, name, dungeon, source, after)
         detailDialog = d
     end
     local d = detailDialog
-    d.title:SetText(name or ("Spell " .. tostring(sid)))
-    d.dungeonBox:SetText(dungeon or "")
-    d.sourceBox:SetText(source or "")
+    d.title:SetText(sp.name or ("Spell " .. tostring(sid)))
+    d.nameBox:SetText(sp.name or "")
+    d.dungeonBox:SetText(sp.dungeon or "")
+    d.sourceBox:SetText(sp.source or "")
+    d.selClass = sp.className
+    d.classDD:SetText(sp.className or "(none)")
+    d.classDD:GenerateMenu()
+    d.kindCheck:SetChecked(sp.kind == "debuff")
+    d.bossCheck:SetChecked(sp.boss and true or false)
     d.save:SetScript("OnClick", function()
-        ns.SetAuraDetail(sid, d.dungeonBox:GetText(), d.sourceBox:GetText())
+        ns.SetAuraDetail(sid, {
+            name      = d.nameBox:GetText(),
+            dungeon   = d.dungeonBox:GetText(),
+            source    = d.sourceBox:GetText(),
+            className = d.selClass or "",
+            kind      = d.kindCheck:GetChecked() and "debuff" or "buff",
+            boss      = d.bossCheck:GetChecked() and true or false,
+        })
         d:Hide()
         if after then after() end
     end)
@@ -1796,8 +1856,8 @@ do
         r.edit:SetSize(44, 20); r.edit:SetText("Edit")
         r.edit:SetPoint("RIGHT", r.group, "LEFT", -6, 0)
         r.edit:SetScript("OnClick", function()
-            if not r.sid then return end
-            OpenDetailDialog(r.sid, r.auraName, r.dungeon, r.source, function() RefreshAllPanels() end)
+            if not r.sp then return end
+            OpenDetailDialog(r.sp, function() RefreshAllPanels() end)
         end)
         r.text = r:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         r.text:SetPoint("LEFT", r.icon, "RIGHT", 6, 0)
@@ -1832,8 +1892,7 @@ do
                         r.auraName = nm
                         r.ignored = sp.ignored
                         r.group_name = sp.group
-                        r.dungeon = sp.dungeon
-                        r.source = sp.source
+                        r.sp = sp
                         r.icon:SetTexture(sp.icon or 134400)
                         r.cb:SetChecked(selected[tostring(sp.spellID)] and true or false)
                         r.hide:SetText(sp.ignored and "Show" or "Hide")
