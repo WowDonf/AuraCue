@@ -679,13 +679,24 @@ local function RecordSeen(sid, data)
     -- Whether the game tags this aura as relevant to a combat role.
     local roleAura = (Reveal(data.isDPSRoleAura) or Reveal(data.isHealerRoleAura)
         or Reveal(data.isTankRoleAura)) and true or false
-    -- Your class, for an aura that's one of your own known spells (not a
-    -- mount). This is what files Avenging Wrath etc. under "Paladin" — and it
-    -- works whether the ability was cast or procced, since it's derived from
-    -- the aura, not from a cast event.
+    -- Class tag (not for mounts). For an aura you applied that's one of your own
+    -- known spells, it's your class (files Avenging Wrath etc. under "Paladin",
+    -- whether cast or procced). Otherwise, if a *player* applied it (e.g. another
+    -- Druid's Mark of the Wild), use that caster's class — when readable; the
+    -- source is a secret value in instances, so it just stays untagged there.
     local GM = C_MountJournal and C_MountJournal.GetMountFromSpell
-    local className = (mine and SpellKnown and SpellKnown(sid) and not (GM and GM(sid)))
-        and (UnitClass("player")) or nil
+    local isMount = GM and GM(sid) and true or false
+    local className
+    if not isMount then
+        if mine and SpellKnown and SpellKnown(sid) then
+            className = UnitClass("player")
+        else
+            local src = Reveal(data.sourceUnit)
+            if src and UnitExists(src) and UnitIsPlayer(src) then
+                className = UnitClass(src)
+            end
+        end
+    end
     local existing = AuraCueDB.seen[key]
     if existing then
         -- Backfill provenance we couldn't capture on first sighting (e.g.
@@ -1215,6 +1226,7 @@ function ns.GetSeenAuras()
             className = info.className,
             group   = groups[key],
             dungeon = info.dungeon,
+            source  = info.source,
             instanceable = instanceable,
         }
     end
@@ -1236,6 +1248,21 @@ function ns.SetAuraGroup(spellID, name)
     if type(name) == "string" then name = name:trim() end
     if not name or name == "" then name = nil end
     AuraCueDB.groups[tostring(spellID)] = name
+end
+
+-- Edit a catalogued aura's stored provenance: its dungeon and "discovered by"
+-- source. Blank clears the field. (The catalog entry only; a watched cue keeps
+-- its own copy made when it was added.)
+function ns.SetAuraDetail(spellID, dungeon, source)
+    local e = AuraCueDB and AuraCueDB.seen and AuraCueDB.seen[tostring(spellID)]
+    if not e then return end
+    local function norm(s)
+        if type(s) == "string" then s = s:trim() end
+        return (type(s) == "string" and s ~= "" and s) or nil
+    end
+    e.dungeon = norm(dungeon)
+    e.source = norm(source)
+    if ns.RefreshOptions then ns.RefreshOptions() end
 end
 
 -- Remove an aura from the catalog entirely (and any group / hidden / cast

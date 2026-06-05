@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.47.0
+
+- Watched-aura tooltips are tidier: dropped the "Dungeon:" and "Tracked by:"
+  lines, and the "Also triggers on:" line now shows names alongside IDs (e.g.
+  "2825 Bloodlust").
+- On the Appearance page, "Also flash the screen edges" is now "Flash the
+  screen edges" and sits next to "Show on-screen flash".
+- Manage Auras: the hidden toggle is relabeled "Show hidden auras", and each
+  row has an **Edit** button to change a catalogued aura's stored details
+  (dungeon, discovered-by source).
+- Auras applied by another player are now tagged with **that caster's class**
+  when it's readable — so e.g. another Druid's Mark of the Wild files under
+  "Druid", not just your own casts.
+
 ## v0.46.3
 
 - Self-applied debuffs are now filed under "Debuffs" in the watched list

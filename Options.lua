@@ -212,9 +212,10 @@ local function NewPanel(name)
         ctx.y = ctx.y - (math.max(measured, approx) + 12)
     end
 
-    function ctx.Check(label, getter, setter)
+    -- A checkbox at a given x on the current row (doesn't advance y).
+    local function checkAt(x, label, getter, setter)
         local cb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
-        cb:SetPoint("TOPLEFT", LEFT, ctx.y)
+        cb:SetPoint("TOPLEFT", x, ctx.y)
         cb:SetSize(26, 26)
         local fs = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         fs:SetPoint("LEFT", cb, "RIGHT", 4, 1)
@@ -222,8 +223,20 @@ local function NewPanel(name)
         cb:SetScript("OnClick", function(self) setter(self:GetChecked() and true or false) end)
         cb.Refresh = function() cb:SetChecked(getter() and true or false) end
         widgets[#widgets + 1] = cb
+        return cb
+    end
+
+    function ctx.Check(label, getter, setter)
+        local cb = checkAt(LEFT, label, getter, setter)
         ctx.y = ctx.y - 30
         return cb
+    end
+
+    -- Two checkboxes side by side on one row.
+    function ctx.CheckRow(l1, g1, s1, l2, g2, s2)
+        checkAt(LEFT, l1, g1, s1)
+        checkAt(LEFT + 210, l2, g2, s2)
+        ctx.y = ctx.y - 30
     end
 
     function ctx.Slider(label, minV, maxV, step, fmt, getter, setter)
@@ -1140,18 +1153,16 @@ local function BuildKindPanel(kind)
             else
                 GameTooltip:SetText(cue.label or "Aura", 1, 1, 1)
             end
-            if cue.source then GameTooltip:AddLine("Source: " .. cue.source, 0.8, 0.8, 0.8) end
-            if cue.dungeon then GameTooltip:AddLine("Dungeon: " .. cue.dungeon, 0.8, 0.8, 0.8) end
-            if cue.castSeen then
-                GameTooltip:AddLine("Tracked by: your cast — works in instances.", 0.5, 0.85, 0.5)
-            else
-                GameTooltip:AddLine("Tracked by: aura read — open world only. Cast it once to switch to cast tracking.", 0.75, 0.72, 0.45)
-            end
             if cue.matchName or ns.P().combineByName then
                 GameTooltip:AddLine("Auto-combining auras named \"" .. (cue.label or "?") .. "\".", 0.6, 0.8, 1)
             end
             if cue.alts and #cue.alts > 0 then
-                GameTooltip:AddLine("Also triggers on: " .. table.concat(cue.alts, ", "), 0.6, 0.8, 1)
+                local parts = {}
+                for _, a in ipairs(cue.alts) do
+                    local an = C_Spell.GetSpellName(a)
+                    parts[#parts + 1] = a .. (an and (" " .. an) or "")
+                end
+                GameTooltip:AddLine("Also triggers on: " .. table.concat(parts, ", "), 0.6, 0.8, 1)
             end
             GameTooltip:AddLine("Right-click for combine options (same name / other IDs).", 0.6, 0.6, 0.6)
             GameTooltip:Show()
@@ -1408,12 +1419,9 @@ local function BuildAppearanceSection(ctx, kind)
     local label = (kind == "debuff") and "Debuffs" or "Buffs"
     local function Vis() return ns.P().visual[kind] end
     ctx.Header(label .. " window")
-    ctx.Check("Show on-screen flash",
-        function() return Vis().enabled end,
-        function(v) Vis().enabled = v end)
-    ctx.Check("Also flash the screen edges",
-        function() return Vis().edgeFlash end,
-        function(v) Vis().edgeFlash = v end)
+    ctx.CheckRow(
+        "Show on-screen flash", function() return Vis().enabled end, function(v) Vis().enabled = v end,
+        "Flash the screen edges", function() return Vis().edgeFlash end, function(v) Vis().edgeFlash = v end)
     ctx.Slider("Edge thickness", 40, 400, 10, "%d",
         function() return Vis().edgeThickness end,
         function(v) Vis().edgeThickness = v end)
@@ -1542,6 +1550,61 @@ do
     content:SetHeight(-sharePanel.y + 20)
 end
 
+-- A small dialog to edit a catalogued aura's stored provenance (dungeon and
+-- who applied it). Created lazily; reused for each row.
+local detailDialog
+local function OpenDetailDialog(sid, name, dungeon, source, after)
+    if not detailDialog then
+        local d = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        d:SetSize(380, 200)
+        d:SetPoint("CENTER")
+        d:SetFrameStrata("FULLSCREEN_DIALOG")
+        d:EnableMouse(true)
+        d:SetBackdrop({
+            bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+            tile = true, tileSize = 32, edgeSize = 32,
+            insets = { left = 11, right = 12, top = 12, bottom = 11 },
+        })
+        d.title = d:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        d.title:SetPoint("TOP", 0, -16)
+        local function field(labelText, yoff)
+            local lbl = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+            lbl:SetPoint("TOPLEFT", 24, yoff)
+            lbl:SetText(labelText)
+            local eb = CreateFrame("EditBox", nil, d, "InputBoxTemplate")
+            eb:SetPoint("TOPLEFT", 28, yoff - 18)
+            eb:SetSize(310, 20)
+            eb:SetAutoFocus(false)
+            eb:SetFontObject("ChatFontNormal")
+            eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+            return eb
+        end
+        d.dungeonBox = field("Dungeon", -48)
+        d.sourceBox = field("Discovered by (source)", -100)
+        d.save = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
+        d.save:SetSize(100, 24); d.save:SetText("Save")
+        d.save:SetPoint("BOTTOMRIGHT", -20, 16)
+        d.cancel = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
+        d.cancel:SetSize(100, 24); d.cancel:SetText("Cancel")
+        d.cancel:SetPoint("RIGHT", d.save, "LEFT", -8, 0)
+        d.cancel:SetScript("OnClick", function() d:Hide() end)
+        d:Hide()
+        detailDialog = d
+    end
+    local d = detailDialog
+    d.title:SetText(name or ("Spell " .. tostring(sid)))
+    d.dungeonBox:SetText(dungeon or "")
+    d.sourceBox:SetText(source or "")
+    d.save:SetScript("OnClick", function()
+        ns.SetAuraDetail(sid, d.dungeonBox:GetText(), d.sourceBox:GetText())
+        d:Hide()
+        if after then after() end
+    end)
+    d:Show()
+    d:Raise()
+end
+
 -- ---------------------------------------------------------------------
 -- "Manage Auras" subcategory: an edit list over the whole account-wide
 -- catalog — set custom groups, hide clutter, or remove entries, one at a
@@ -1577,7 +1640,7 @@ do
     sBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
     managePanel.y = managePanel.y - 30
 
-    managePanel.Check("Show only hidden auras",
+    managePanel.Check("Show hidden auras",
         function() return showHidden end,
         function(v) showHidden = v; Rebuild() end)
 
@@ -1729,9 +1792,16 @@ do
             StaticPopup_Show("AURACUE_SET_GROUP", r.auraName or tostring(r.sid), nil,
                 { sid = r.sid, current = r.group_name or "", after = function() RefreshAllPanels() end })
         end)
+        r.edit = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")
+        r.edit:SetSize(44, 20); r.edit:SetText("Edit")
+        r.edit:SetPoint("RIGHT", r.group, "LEFT", -6, 0)
+        r.edit:SetScript("OnClick", function()
+            if not r.sid then return end
+            OpenDetailDialog(r.sid, r.auraName, r.dungeon, r.source, function() RefreshAllPanels() end)
+        end)
         r.text = r:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         r.text:SetPoint("LEFT", r.icon, "RIGHT", 6, 0)
-        r.text:SetPoint("RIGHT", r.group, "LEFT", -8, 0)
+        r.text:SetPoint("RIGHT", r.edit, "LEFT", -8, 0)
         r.text:SetJustifyH("LEFT")
         r:SetScript("OnEnter", function()
             if r.sid and GameTooltip.SetSpellByID then
@@ -1762,6 +1832,8 @@ do
                         r.auraName = nm
                         r.ignored = sp.ignored
                         r.group_name = sp.group
+                        r.dungeon = sp.dungeon
+                        r.source = sp.source
                         r.icon:SetTexture(sp.icon or 134400)
                         r.cb:SetChecked(selected[tostring(sp.spellID)] and true or false)
                         r.hide:SetText(sp.ignored and "Show" or "Hide")
