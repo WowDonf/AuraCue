@@ -47,7 +47,9 @@ play, adding every aura it sees on you plus every ability you cast (it's
 account-wide, so each character fills in its class). Pick from grouped menus (by
 class, mounts, dungeon, boss, or your own custom groups), filter and search to
 thin a big list, and hide the clutter you don't want. There's a built-in Wowhead
-search link if you ever do need an ID.
+search link if you ever do need an ID. Castable abilities are included too (even
+ones with no aura of their own — they cue when *you* cast them), which is why
+that page is called **Buffs/Skills**.
 
 **No hard-coded ability list.** There's no built-in whitelist or blacklist of
 spells — AuraCue learns purely from what it sees you cast and what lands on
@@ -68,7 +70,7 @@ is your choice** (and always reversible).
 ## Getting started
 
 1. Open options with **/cue**.
-2. Open **Buffs** or **Debuffs** in the settings list and add an aura from the
-   picker (or by spell ID).
+2. Open **Buffs/Skills** or **Debuffs** in the settings list and add an aura
+   from the picker (or by spell ID).
 3. Set its sound / speech / flash and a When condition to taste.
 4. **/cue test** to preview.

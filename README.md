@@ -56,6 +56,10 @@ aura it sees on you plus every ability you cast. The catalog is account-wide,
 so logging into each character folds in that class's spells. You rarely have to
 hunt for spell IDs (though you still can add one by ID).
 
+Castable abilities count too, even ones that apply no aura of their own — they
+cue when *you* cast them (handy for cooldown reminders), which is why that page
+is named **Buffs/Skills**.
+
 **No hard-coded ability list.** AuraCue has no built-in whitelist or blacklist
 of spells — it learns purely from what it observes you cast and what lands on
 you. This is by design: any aura works once it has been seen a single time,
@@ -93,9 +97,10 @@ spell and its talented proc version. AuraCue can treat them as one cue:
 ## Managing the catalog
 
 The **Manage Auras** page is a full edit view of your account-wide catalog:
-search and filter it (by kind, class, hidden, mounts, or only ungrouped), set a
-custom group, hide or show entries, or remove them — one at a time or in bulk by
-ticking rows. Each row's **Edit** dialog adjusts the finer stored details
+search and filter it (by kind, class, custom group, hidden, mounts, or only
+ungrouped), set a custom group, hide or show entries, or remove them — one at a
+time or in bulk by ticking rows. Each row's **Edit** dialog adjusts the finer
+stored details
 (group, class, dungeon, buff/debuff). Removing an aura just forgets it until you
 see it again.
 
@@ -110,7 +115,8 @@ all your characters).
 
 ## Usage
 
-Open options with `/cue`.
+Open options with `/cue` (or `/auracue`), the minimap button, or the addon
+compartment.
 
 | Command | Does |
 | --- | --- |
