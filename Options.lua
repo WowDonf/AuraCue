@@ -665,6 +665,77 @@ local function OpenSpeechDialog(sid, name, applied, faded, after)
 end
 
 -- ---------------------------------------------------------------------
+-- Per-row widget builders for the watched-aura editor. Each takes the pooled
+-- `row` (whose .spellID is set per rebuild) and depends only on it + ns, so
+-- they live at module scope instead of nesting inside MakeRow.
+-- ---------------------------------------------------------------------
+-- A toggle bound to one boolean cue field (applied / faded / visual).
+local function RowCheck(row, xoff, field)
+    local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+    cb:SetSize(24, 24)
+    cb:SetPoint("TOPLEFT", row, "TOPLEFT", xoff, -3)
+    cb:SetScript("OnClick", function(self)
+        local cue = row.spellID and ns.P().cues[row.spellID]
+        if cue then
+            cue[field] = self:GetChecked() and true or false
+            if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end
+        end
+    end)
+    return cb
+end
+
+-- A sound picker bound to one cue sound field (soundApplied / soundFaded);
+-- selecting a tone previews it. "None (silent)" maps to false.
+local function RowSoundDD(row, xoff, yoff, field)
+    local dd = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
+    dd:SetPoint("TOPLEFT", row, "TOPLEFT", xoff, yoff)
+    dd:SetSize(150, 26)
+    dd:SetupMenu(function(_, rootMenu)
+        rootMenu:CreateRadio("None (silent)",
+            function()
+                local c = row.spellID and ns.P().cues[row.spellID]
+                return c and not c[field]
+            end,
+            function()
+                local c = row.spellID and ns.P().cues[row.spellID]
+                if not c then return end
+                c[field] = false
+                if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end
+                C_Timer.After(0, function() dd:GenerateMenu() end)
+            end)
+        for _, item in ipairs(ns.SOUNDS) do
+            local key = item.key
+            rootMenu:CreateRadio(item.label,
+                function()
+                    local c = row.spellID and ns.P().cues[row.spellID]
+                    return c and c[field] == key
+                end,
+                function()
+                    local c = row.spellID and ns.P().cues[row.spellID]
+                    if not c then return end
+                    c[field] = key
+                    if key == "speak" then ns.Speak("AuraCue") else ns.PlaySoundEntry(key, c.channel or ns.P().channel) end
+                    if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end
+                    C_Timer.After(0, function() dd:GenerateMenu() end)
+                end)
+        end
+    end)
+    return dd
+end
+
+-- A ">" button that previews one event (applied / faded) for this row's cue.
+local function RowPreview(row, xoff, yoff, eventKind)
+    local b = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    b:SetSize(24, 22)
+    b:SetPoint("TOPLEFT", row, "TOPLEFT", xoff, yoff)
+    b:SetText(">")
+    b:SetScript("OnClick", function()
+        if row.spellID then ns.PreviewCue(row.spellID, eventKind) end
+    end)
+    return b
+end
+
+-- ---------------------------------------------------------------------
 -- Build one kind's subcategory: window appearance + add UI + editor,
 -- everything filtered to `kind` ("buff" or "debuff").
 -- ---------------------------------------------------------------------
@@ -1318,82 +1389,21 @@ local function BuildKindPanel(kind)
         row.name:SetJustifyH("LEFT")
         row.name:SetWordWrap(false)
 
-        local function MkCheck(xoff, field)
-            local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-            cb:SetSize(24, 24)
-            cb:SetPoint("TOPLEFT", row, "TOPLEFT", xoff, -3)
-            cb:SetScript("OnClick", function(self)
-                local cue = row.spellID and ns.P().cues[row.spellID]
-                if cue then
-                    cue[field] = self:GetChecked() and true or false
-                    if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end
-                end
-            end)
-            return cb
-        end
-        row.applied = MkCheck(244, "applied")
-        row.faded   = MkCheck(274, "faded")
-        row.visual  = MkCheck(304, "visual")
-
-        local function MkSoundDD(xoff, yoff, field)
-            local dd = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
-            dd:SetPoint("TOPLEFT", row, "TOPLEFT", xoff, yoff)
-            dd:SetSize(150, 26)
-            dd:SetupMenu(function(_, rootMenu)
-                rootMenu:CreateRadio("None (silent)",
-                    function()
-                        local c = row.spellID and ns.P().cues[row.spellID]
-                        return c and not c[field]
-                    end,
-                    function()
-                        local c = row.spellID and ns.P().cues[row.spellID]
-                        if not c then return end
-                        c[field] = false
-                        if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end
-                        C_Timer.After(0, function() dd:GenerateMenu() end)
-                    end)
-                for _, item in ipairs(ns.SOUNDS) do
-                    local key = item.key
-                    rootMenu:CreateRadio(item.label,
-                        function()
-                            local c = row.spellID and ns.P().cues[row.spellID]
-                            return c and c[field] == key
-                        end,
-                        function()
-                            local c = row.spellID and ns.P().cues[row.spellID]
-                            if not c then return end
-                            c[field] = key
-                            if key == "speak" then ns.Speak("AuraCue") else ns.PlaySoundEntry(key, c.channel or ns.P().channel) end
-                            if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end
-                            C_Timer.After(0, function() dd:GenerateMenu() end)
-                        end)
-                end
-            end)
-            return dd
-        end
-
-        local function MkPreview(xoff, yoff, eventKind)
-            local b = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-            b:SetSize(24, 22)
-            b:SetPoint("TOPLEFT", row, "TOPLEFT", xoff, yoff)
-            b:SetText(">")
-            b:SetScript("OnClick", function()
-                if row.spellID then ns.PreviewCue(row.spellID, eventKind) end
-            end)
-            return b
-        end
+        row.applied = RowCheck(row, 244, "applied")
+        row.faded   = RowCheck(row, 274, "faded")
+        row.visual  = RowCheck(row, 304, "visual")
 
         local gainLbl = row:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         gainLbl:SetPoint("TOPLEFT", row, "TOPLEFT", 8, -34)
         gainLbl:SetText("Gained")
-        row.soundApplied = MkSoundDD(58, -30, "soundApplied")
-        row.previewA = MkPreview(212, -30, "applied")
+        row.soundApplied = RowSoundDD(row, 58, -30, "soundApplied")
+        row.previewA = RowPreview(row, 212, -30, "applied")
 
         local fadeLbl = row:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         fadeLbl:SetPoint("TOPLEFT", row, "TOPLEFT", 250, -34)
         fadeLbl:SetText("Faded")
-        row.soundFaded = MkSoundDD(296, -30, "soundFaded")
-        row.previewF = MkPreview(450, -30, "faded")
+        row.soundFaded = RowSoundDD(row, 296, -30, "soundFaded")
+        row.previewF = RowPreview(row, 450, -30, "faded")
 
         -- One Edit button opens the per-cue options menu (kind, spoken text,
         -- when to fire, combine, aliases).
