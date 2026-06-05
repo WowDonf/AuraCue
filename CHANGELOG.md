@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.59.3
+
+- Dropped "missing-buff reminders" from the addon's description — AuraCue
+  doesn't remind you about missing buffs, so the wording was misleading.
+
 ## v0.59.2
 
 - Renamed the **Buffs** settings page to **Buffs/Skills**, since it also covers
@@ -523,7 +528,7 @@ Engine consolidation and bug-fix pass (from a code review of the tracking core):
 
 - **Renamed to AuraCue.** The addon is now a general-purpose personal
   aura-alert tool — turn your own buffs and debuffs into sound, speech, or
-  on-screen flashes for proc alerts, missing-buff reminders, and debuff
+  on-screen flashes for proc alerts, cooldown windows, and debuff
   warnings. Your existing settings and aura catalog carry over automatically
   on first login. The `/cue` command still works (with `/auracue` as an
   alias).

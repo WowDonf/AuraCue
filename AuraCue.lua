@@ -3,8 +3,8 @@
 -- =====================================================================
 -- Aura cue layer for World of Warcraft: Midnight (12.x).
 -- Translates the player's OWN auras into configurable cues — a sound,
--- spoken name, and/or an on-screen flash — for proc alerts, missing-buff
--- reminders, and debuff warnings.
+-- spoken name, and/or an on-screen flash — for proc alerts, cooldown
+-- windows, and debuff warnings.
 --
 -- DESIGN CONSTRAINT (Midnight "Secret Values"). Inside raid encounters,
 -- M+, and PvP the client masks combat data from addons: tainted code may

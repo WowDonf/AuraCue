@@ -2,8 +2,8 @@
 
 A personal aura-alert addon for World of Warcraft (Midnight, 12.x). AuraCue
 turns your own buffs and debuffs into a **sound**, a **spoken name**, and/or
-an **on-screen flash** — for proc alerts, missing-buff reminders, cooldown
-windows, and debuff warnings.
+an **on-screen flash** — for proc alerts, cooldown windows, and debuff
+warnings.
 
 Each watched aura can cue when it's **gained**, when it **fades**, or both:
 
