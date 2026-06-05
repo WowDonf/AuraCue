@@ -13,8 +13,8 @@ Each watched aura can cue when it's **gained**, when it **fades**, or both:
   (rise/fall, open/close, unfold/fold, bloom/wilt).
 - **Speech** — the aura's name spoken aloud (text-to-speech), with voice /
   rate / volume controls. The spoken phrase is yours to set — a general format
-  like "{name} gained", or a per-aura override (e.g. say "Damage now" the
-  moment Bloodlust lands).
+  like "{name} gained", or a per-aura override that can also use {name}: say
+  "{name} activated", or a name-free "Damage now" the moment Bloodlust lands.
 - **On-screen flash** — center text and/or a screen-edge glow, with separate
   colors for gained vs faded, and adjustable size, on-screen time, and edge
   thickness / intensity.

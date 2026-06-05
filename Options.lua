@@ -588,7 +588,7 @@ do
         function() return ns.P().ttsVolume end,
         function(v) ns.P().ttsVolume = v end)
     main.Desc("What spoken cues say. {name} is replaced by the aura's name. Any cue can override " ..
-        "these with its own phrase (right-click a watched aura → Set spoken text).")
+        "these with its own phrase — which can also use {name} (Edit a watched aura → Set spoken text).")
     main.EditLine("Gained phrase",
         function() return ns.P().speakFormatApplied end,
         function(v) ns.P().speakFormatApplied = (v ~= "" and v) or nil end, 300)
@@ -650,10 +650,12 @@ end
 local speechDialog
 local function OpenSpeechDialog(sid, name, applied, faded, after)
     if not speechDialog then
-        local d = MakeDialog(380, 240)
+        local d = MakeDialog(380, 270)
         local hint = d:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-        hint:SetPoint("TOP", 0, -40)
-        hint:SetText("Spoken when this cue's sound is \"Speak the name (TTS)\". Blank = general phrase; > to hear it.")
+        hint:SetPoint("TOP", 0, -36)
+        hint:SetWidth(344)
+        hint:SetText("Spoken when this cue's sound is \"Speak the name (TTS)\". Use {name} for the "
+            .. "aura's name (e.g. \"{name} activated\"). Blank = general phrase; > to hear it.")
         -- A ">" button next to a phrase box that speaks exactly what would be
         -- said: the typed phrase, or the general format with {name} filled in.
         local function testBtn(box, eventKind, yoff)
@@ -666,10 +668,10 @@ local function OpenSpeechDialog(sid, name, applied, faded, after)
             end)
             return b
         end
-        d.appliedBox = DialogField(d, "Gained phrase", -70)
-        d.testApplied = testBtn(d.appliedBox, "applied", -88)
-        d.fadedBox = DialogField(d, "Faded phrase", -120)
-        d.testFaded = testBtn(d.fadedBox, "faded", -138)
+        d.appliedBox = DialogField(d, "Gained phrase", -96)
+        d.testApplied = testBtn(d.appliedBox, "applied", -114)
+        d.fadedBox = DialogField(d, "Faded phrase", -146)
+        d.testFaded = testBtn(d.fadedBox, "faded", -164)
         speechDialog = d
     end
     local d = speechDialog

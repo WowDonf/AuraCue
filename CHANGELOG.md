@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.57.2
+
+- Per-cue spoken overrides now honor **{name}** too. Set a gained/faded override
+  to "{name} activated" to hear "Bloodlust activated"; a phrase with no token
+  (like "Damage now") still speaks exactly as typed. The Set-spoken-text dialog
+  notes this and the field hint shows an example.
+
 ## v0.57.1
 
 - Spell IDs you hand-link to a cue ("Add other spell IDs by hand") now also get

@@ -14,8 +14,8 @@ cooldown windows, and debuff warnings. Pick any combination of:
   for gained and faded), including matched open/close pairs where the gained
   tone rises and the faded one falls.
 - **Speech** — the aura's name spoken aloud (text-to-speech). Set your own
-  phrase — a general "{name} gained" format, or a per-aura override like "Damage
-  now" for Bloodlust.
+  phrase — a general "{name} gained" format, or a per-aura override that can
+  also use {name}: "{name} activated", or a name-free "Damage now" for Bloodlust.
 - **On-screen flash** — center text and/or a screen-edge glow, with separate
   colors for gained vs faded.
 

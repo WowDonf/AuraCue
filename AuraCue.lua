@@ -577,9 +577,12 @@ ns.ConditionMet = ConditionMet
 -- profile's general format with {name} filled in (e.g. "Bloodlust gained", or a
 -- custom "Damage Now"). Shared by the live cue path and the options testers.
 function ns.ResolveSpokenPhrase(eventKind, literal, label)
-    if literal and literal ~= "" then return literal end
-    local fmt = (eventKind == "applied") and activeProfile.speakFormatApplied
-        or activeProfile.speakFormatFaded
+    -- A cue's override wins; otherwise the profile's general format. Either way
+    -- {name} is replaced by the aura's name — so an override of "{name}
+    -- activated" says "Bloodlust activated", while "Damage now" (no token) stays
+    -- name-free.
+    local fmt = (literal and literal ~= "") and literal
+        or (eventKind == "applied" and activeProfile.speakFormatApplied or activeProfile.speakFormatFaded)
     if not fmt or fmt == "" then fmt = (eventKind == "applied") and "{name} gained" or "{name} faded" end
     return (fmt:gsub("{name}", label or ""))
 end
