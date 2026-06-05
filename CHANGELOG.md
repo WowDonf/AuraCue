@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.58.2
+
+- The Custom groups dropdown on Manage Auras now **filters the list** to the
+  chosen group, with an **All groups** entry at the top to clear the filter.
+  Picking a group both narrows the list and targets it for Rename / Delete.
+
 ## v0.58.1
 
 - The add-an-aura picker now stays on-screen and scrolls: both the menu and each

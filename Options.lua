@@ -1955,18 +1955,24 @@ do
     local grpDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
     grpDD:SetPoint("LEFT", grpLabel, "RIGHT", 12, 0)
     grpDD:SetSize(180, 26)
-    grpDD:SetDefaultText("Pick a group")
+    grpDD:SetDefaultText("All groups")
     grpDD:SetupMenu(function(_, root)
         local names = ns.GetAuraGroupNames and ns.GetAuraGroupNames() or {}
+        -- "All groups" clears the filter (and the rename/delete selection).
+        root:CreateRadio("All groups",
+            function() return selectedGroup == nil end,
+            function() selectedGroup = nil; grpDD:SetText("All groups"); grpDD:GenerateMenu(); Rebuild() end)
         if #names == 0 then root:CreateButton("|cff808080(no custom groups)|r", function() end); return end
         for _, gnm in ipairs(names) do
             root:CreateRadio(gnm,
                 function() return selectedGroup == gnm end,
-                function() selectedGroup = gnm; grpDD:SetText(gnm); grpDD:GenerateMenu() end)
+                -- Selecting a group filters the list to it AND targets it for
+                -- the Rename… / Delete buttons.
+                function() selectedGroup = gnm; grpDD:SetText(gnm); grpDD:GenerateMenu(); Rebuild() end)
         end
     end)
     local function clearGroupSel()
-        selectedGroup = nil; grpDD:SetText("Pick a group"); grpDD:GenerateMenu()
+        selectedGroup = nil; grpDD:SetText("All groups"); grpDD:GenerateMenu(); Rebuild()
     end
     local grpRename = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
     grpRename:SetPoint("LEFT", grpDD, "RIGHT", 8, 0); grpRename:SetSize(80, 22); grpRename:SetText("Rename…")
@@ -2069,6 +2075,7 @@ do
                 and classOk
                 and not (hideMounts and sp.mount)
                 and not (ungroupedOnly and sp.group and sp.group ~= "")
+                and (not selectedGroup or sp.group == selectedGroup)
             if pass then
                 local nm = AuraName(sp.name, sp.spellID)
                 if search == "" or nm:lower():find(search, 1, true) or tostring(sp.spellID):find(search, 1, true) then
