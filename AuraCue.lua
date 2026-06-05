@@ -291,8 +291,16 @@ ns.ValidateRanges = ValidateRanges
 -- .mp3 under Sounds/.
 ns.SOUNDS = {
     { key = "speak",  label = "Speak the name (TTS)" },   -- special: text-to-speech
+    -- Open/close pairs: an ascending "open" tone for gained, its descending
+    -- mirror for faded. rise/fall, open/close, unfold/fold, bloom/wilt.
     { key = "rise",   label = "Rise (two-tone up)",   file = "Interface\\AddOns\\AuraCue\\Sounds\\rise.mp3" },
     { key = "fall",   label = "Fall (two-tone down)", file = "Interface\\AddOns\\AuraCue\\Sounds\\fall.mp3" },
+    { key = "open",   label = "Open (sweep up)",      file = "Interface\\AddOns\\AuraCue\\Sounds\\open.mp3" },
+    { key = "close",  label = "Close (sweep down)",   file = "Interface\\AddOns\\AuraCue\\Sounds\\close.mp3" },
+    { key = "unfold", label = "Unfold (arpeggio up)", file = "Interface\\AddOns\\AuraCue\\Sounds\\unfold.mp3" },
+    { key = "fold",   label = "Fold (arpeggio down)", file = "Interface\\AddOns\\AuraCue\\Sounds\\fold.mp3" },
+    { key = "bloom",  label = "Bloom (warm up)",      file = "Interface\\AddOns\\AuraCue\\Sounds\\bloom.mp3" },
+    { key = "wilt",   label = "Wilt (warm down)",     file = "Interface\\AddOns\\AuraCue\\Sounds\\wilt.mp3" },
     { key = "ping",   label = "Ping (high)",          file = "Interface\\AddOns\\AuraCue\\Sounds\\ping.mp3" },
     { key = "beep",   label = "Beep (mid)",           file = "Interface\\AddOns\\AuraCue\\Sounds\\beep.mp3" },
     { key = "double", label = "Double beep",          file = "Interface\\AddOns\\AuraCue\\Sounds\\double.mp3" },

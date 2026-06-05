@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.56.0
+
+- Three new open/close sound pairs, so the only ascending-gained /
+  descending-faded set is no longer just rise/fall: **Open/Close** (a smooth
+  pitch sweep), **Unfold/Fold** (a three-note arpeggio), and **Bloom/Wilt** (a
+  warmer, lower two-tone). Pick them per cue in the Gained / Faded dropdowns.
+
 ## v0.55.1
 
 - Updated for WoW 12.0.7 (Interface 120007). Verified the addon's full API

@@ -30,9 +30,24 @@ OUT = os.path.normpath(os.path.join(HERE, "..", "Sounds"))
 
 # Each tone is a list of notes: (frequency_hz, duration_s, gap_after_s).
 # A frequency of 0 means a rest. Two-element notes default the gap to 0.
+#
+# Several tones come as *open/close pairs*: an ascending "open" sound for the
+# gained event and its mirror-image descending "close" sound for the faded
+# event, so a cue's two events feel like the same gesture played forwards then
+# backwards. rise/fall is the original pair; open/close, unfold/fold and
+# bloom/wilt add different characters (sweep, arpeggio, warm wide two-tone).
 TONES = {
     "rise":   [(523.25, 0.10, 0.02), (659.25, 0.14, 0.0)],   # C5 -> E5, ascending
     "fall":   [(659.25, 0.10, 0.02), (523.25, 0.16, 0.0)],   # E5 -> C5, descending
+    # open/close: smooth pitch sweep up / down (a soft "whoosh").
+    "open":   [("sweep", 480.0, 960.0, 0.20)],                # upward glissando
+    "close":  [("sweep", 960.0, 480.0, 0.22)],                # downward glissando
+    # unfold/fold: a three-note arpeggio climbing / descending (music-box-ish).
+    "unfold": [(523.25, 0.07, 0.03), (659.25, 0.07, 0.03), (783.99, 0.11, 0.0)],  # C5 E5 G5 up
+    "fold":   [(783.99, 0.07, 0.03), (659.25, 0.07, 0.03), (523.25, 0.13, 0.0)],  # G5 E5 C5 down
+    # bloom/wilt: a warmer, lower wide two-tone (perfect fourth) up / down.
+    "bloom":  [(392.00, 0.11, 0.02), (523.25, 0.17, 0.0)],    # G4 -> C5, ascending
+    "wilt":   [(523.25, 0.11, 0.02), (392.00, 0.19, 0.0)],    # C5 -> G4, descending
     "ping":   [(880.00, 0.16, 0.0)],                          # single clear high
     "beep":   [(440.00, 0.16, 0.0)],                          # single mid
     "double": [(880.00, 0.07, 0.05), (880.00, 0.07, 0.0)],    # two quick highs
