@@ -546,6 +546,9 @@ do
     main.Check("Show minimap button",
         function() return not ns.IsMinimapShown or ns.IsMinimapShown() end,
         function(v) if ns.SetMinimapShown then ns.SetMinimapShown(v) end end)
+    main.Check("Show login message in chat",
+        function() return AuraCueDB and AuraCueDB.showLoginMessage end,
+        function(v) if AuraCueDB then AuraCueDB.showLoginMessage = v or nil end end)
 
     content:SetHeight(-main.y + 20)
 end

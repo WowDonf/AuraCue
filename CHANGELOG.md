@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.59.0
+
+- The "AuraCue loaded" chat message at login is now **off by default**. Turn it
+  back on with **Show login message in chat** under Global Settings. (The
+  one-time CueSense data-migration notice still shows when it applies.)
+
 ## v0.58.2
 
 - The Custom groups dropdown on Manage Auras now **filters the list** to the

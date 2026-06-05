@@ -127,6 +127,8 @@ local DB_DEFAULTS = {
     groups = {},
     -- LibDBIcon's button state (position + hide); account-wide.
     minimap = { hide = false },
+    -- Print the "loaded" greeting in chat at login. Off by default; account-wide.
+    showLoginMessage = false,
 }
 
 -- The active profile (resolved on login). All tracked-setting reads go
@@ -1707,7 +1709,11 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "PLAYER_LOGIN" then
         InitProfile()
         HarvestSpellbook()   -- seed this character's spells into the catalog
-        chatPrint("loaded. Type |cffffd200/cue|r for commands.")
+        -- The "loaded" greeting is off by default; opt in via Global Settings.
+        if AuraCueDB and AuraCueDB.showLoginMessage then
+            chatPrint("loaded. Type |cffffd200/cue|r for commands.")
+        end
+        -- The one-time data-migration notice always shows (it matters).
         if ns.migratedFromCueSense then
             chatPrint("Imported your previous settings and aura catalog from CueSense.")
         end
