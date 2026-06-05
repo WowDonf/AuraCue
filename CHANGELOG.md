@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.54.0
+
+- **Spellbook pre-loading.** Your character's active spells are now added to
+  the catalog automatically on login, so your class's abilities are pickable
+  right away instead of having to be cast once to "learn" them. The catalog is
+  account-wide, so each character you log into fills in that class's spells.
+  Existing entries are never overwritten (anything we've already learned the
+  real kind/source/group for keeps its detail), and the picker refreshes when
+  you learn or swap spells. Spellbook spells default to "buff" — flip the kind
+  from the Edit menu or Manage Auras if one is actually a debuff.
+
 ## v0.53.0
 
 - Replaced the per-row "When" (Any/Cbt/Inst/Wld) cycle button with an **Edit**

@@ -1378,6 +1378,7 @@ eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")   -- combat ended: re-sync
+eventFrame:RegisterEvent("SPELLS_CHANGED")          -- spellbook changed: re-harvest
 eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
 eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 
@@ -1449,6 +1450,63 @@ end
 ns.SetActiveProfile = SetActiveProfile
 
 -- Full init at PLAYER_LOGIN (player + spec are reliable here).
+-- Pre-load this character's spellbook into the catalog so your class's
+-- abilities are pickable straight away, without having to cast each one once
+-- to "learn" it. Adds only active (non-passive) player spells, tagged with
+-- your class, and NEVER overwrites an aura we've already recorded richer
+-- detail for (kind/dungeon/source/etc.). The catalog is account-wide, so
+-- logging into each character accumulates that class's spells. Returns the
+-- number of new entries added.
+local function HarvestSpellbook()
+    if not AuraCueDB then return 0 end
+    AuraCueDB.seen = AuraCueDB.seen or {}
+    local CB = C_SpellBook
+    if not (CB and CB.GetNumSpellBookSkillLines and CB.GetSpellBookSkillLineInfo
+        and CB.GetSpellBookItemInfo) then return 0 end
+    local bank = (Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player) or 0
+    local SPELL = (Enum and Enum.SpellBookItemType and Enum.SpellBookItemType.Spell) or 1
+    local className = UnitClass("player")
+    local GetTex = C_Spell and C_Spell.GetSpellTexture
+    local GetName = C_Spell and C_Spell.GetSpellName
+    local GM = C_MountJournal and C_MountJournal.GetMountFromSpell
+    local lines = CB.GetNumSpellBookSkillLines() or 0
+    local added = 0
+    for line = 1, lines do
+        local sl = CB.GetSpellBookSkillLineInfo(line)
+        if sl and sl.itemIndexOffset and sl.numSpellBookItems then
+            for i = sl.itemIndexOffset + 1, sl.itemIndexOffset + sl.numSpellBookItems do
+                local item = CB.GetSpellBookItemInfo(i, bank)
+                if item and item.itemType == SPELL and not item.isPassive then
+                    -- spellID is the overriding id when a spell is overridden;
+                    -- actionID is the base id. Prefer spellID, fall back to base.
+                    local sid = item.spellID or item.actionID
+                    local key = sid and tostring(sid)
+                    if key and not AuraCueDB.seen[key] then
+                        local isMount = GM and GM(sid) and true or false
+                        AuraCueDB.seen[key] = {
+                            name      = item.name or (GetName and GetName(sid)),
+                            icon      = item.iconID or (GetTex and GetTex(sid)),
+                            -- We can't know if the spell applies a buff or a
+                            -- debuff from the book alone; default to buff. The
+                            -- Edit menu (or Manage Auras) flips it if wrong.
+                            kind      = "buff",
+                            mine      = true,
+                            className = (not isMount) and className or nil,
+                        }
+                        added = added + 1
+                    end
+                end
+            end
+        end
+    end
+    return added
+end
+
+-- SPELLS_CHANGED can fire many times in quick succession (login, talent
+-- swaps); coalesce them into a single harvest so we don't rescan the book
+-- dozens of times.
+local spellScanPending = false
+
 local function InitProfile()
     -- Migrate a pre-v0.10 flat layout (tracked settings at the DB top level)
     -- into this character's per-character profile; SetActiveProfile then moves
@@ -1501,6 +1559,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
 
     elseif event == "PLAYER_LOGIN" then
         InitProfile()
+        HarvestSpellbook()   -- seed this character's spells into the catalog
         chatPrint("loaded. Type |cffffd200/cue|r for commands.")
         if ns.migratedFromCueSense then
             chatPrint("Imported your previous settings and aura catalog from CueSense.")
@@ -1513,9 +1572,24 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         if unit and unit ~= "player" then return end
         if not activeProfile then return end
         SetActiveProfile()   -- resyncs tracking for the new spec's cues
+        HarvestSpellbook()   -- the new spec may grant different spells
         RestorePosition("buff")
         RestorePosition("debuff")
         if ns.RefreshOptions then ns.RefreshOptions() end
+
+    elseif event == "SPELLS_CHANGED" then
+        -- Spellbook changed (learned/unlearned a spell, talent swap). Debounce
+        -- so a burst of these events triggers just one harvest, then refresh
+        -- the picker so newly-learned spells appear.
+        if not spellScanPending then
+            spellScanPending = true
+            C_Timer.After(1, function()
+                spellScanPending = false
+                if HarvestSpellbook() > 0 and ns.RefreshOptions then
+                    ns.RefreshOptions()
+                end
+            end)
+        end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         SeedPresent()
