@@ -1248,6 +1248,7 @@ function ns.SetAuraGroup(spellID, name)
     if type(name) == "string" then name = name:trim() end
     if not name or name == "" then name = nil end
     AuraCueDB.groups[tostring(spellID)] = name
+    if ns.RefreshOptions then ns.RefreshOptions() end
 end
 
 -- Edit a catalogued aura's stored details. `fields` may carry dungeon, source,

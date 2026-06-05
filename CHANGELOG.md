@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.50.0
+
+- The Manage Auras **Edit** dialog now also sets the aura's **Custom group**.
+- Fixed custom groups looking like they came and went between the options
+  pages: setting a group now refreshes every page, not just the one you set it
+  from. (Groups are stored account-wide and do persist; the inconsistency was a
+  missing refresh.)
+
 ## v0.49.1
 
 - Added a **Class** filter to the Manage Auras page (a class, "(untagged)", or

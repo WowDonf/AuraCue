@@ -1574,7 +1574,7 @@ local function OpenDetailDialog(sp, after)
     local sid = sp.spellID
     if not detailDialog then
         local d = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        d:SetSize(380, 300)
+        d:SetSize(380, 350)
         d:SetPoint("CENTER")
         d:SetFrameStrata("FULLSCREEN_DIALOG")
         d:EnableMouse(true)
@@ -1600,12 +1600,13 @@ local function OpenDetailDialog(sp, after)
         end
         d.dungeonBox = field("Dungeon", -44)
         d.sourceBox = field("Discovered by (source)", -94)
+        d.groupBox = field("Custom group", -144)
 
         local classLbl = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        classLbl:SetPoint("TOPLEFT", 24, -144)
+        classLbl:SetPoint("TOPLEFT", 24, -194)
         classLbl:SetText("Class")
         d.classDD = CreateFrame("DropdownButton", nil, d, "WowStyle1DropdownTemplate")
-        d.classDD:SetPoint("TOPLEFT", 28, -162)
+        d.classDD:SetPoint("TOPLEFT", 28, -212)
         d.classDD:SetSize(180, 26)
         d.classDD:SetupMenu(function(_, root)
             root:CreateRadio("(none)",
@@ -1619,7 +1620,7 @@ local function OpenDetailDialog(sp, after)
         end)
 
         d.kindCheck = CreateFrame("CheckButton", nil, d, "UICheckButtonTemplate")
-        d.kindCheck:SetPoint("TOPLEFT", 24, -200); d.kindCheck:SetSize(24, 24)
+        d.kindCheck:SetPoint("TOPLEFT", 24, -250); d.kindCheck:SetSize(24, 24)
         local kindFS = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         kindFS:SetPoint("LEFT", d.kindCheck, "RIGHT", 2, 1); kindFS:SetText("Treat as a debuff")
 
@@ -1637,11 +1638,13 @@ local function OpenDetailDialog(sp, after)
     d.title:SetText(sp.name or ("Spell " .. tostring(sid)))
     d.dungeonBox:SetText(sp.dungeon or "")
     d.sourceBox:SetText(sp.source or "")
+    d.groupBox:SetText(sp.group or "")
     d.selClass = sp.className
     d.classDD:SetText(sp.className or "(none)")
     d.classDD:GenerateMenu()
     d.kindCheck:SetChecked(sp.kind == "debuff")
     d.save:SetScript("OnClick", function()
+        ns.SetAuraGroup(sid, d.groupBox:GetText())
         ns.SetAuraDetail(sid, {
             dungeon   = d.dungeonBox:GetText(),
             source    = d.sourceBox:GetText(),
