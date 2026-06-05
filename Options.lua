@@ -14,6 +14,14 @@ local HEADER_H = 22
 local MAX_RESULTS = 10
 local RESULT_H = 20
 
+-- StaticPopup dialogs expose their edit box as .EditBox on modern clients and
+-- .editBox on older ones; one accessor so every handler agrees.
+local function DEB(self) return self.EditBox or self.editBox end
+
+-- An aura's display name, with a stable "Spell <id>" fallback for when the
+-- real name isn't cached yet.
+local function AuraName(name, id) return name or ("Spell " .. tostring(id)) end
+
 -- Apply a typed group name to one aura (data.sid) or many (data.sids).
 local function ApplyGroupFromDialog(data, text)
     if not data then return end
@@ -37,11 +45,11 @@ StaticPopupDialogs["AURACUE_SET_GROUP"] = {
     whileDead = true,
     hideOnEscape = true,
     OnShow = function(self, data)
-        local eb = self.EditBox or self.editBox
+        local eb = DEB(self)
         if eb then eb:SetText((data and data.current) or ""); eb:HighlightText() end
     end,
     OnAccept = function(self, data)
-        local eb = self.EditBox or self.editBox
+        local eb = DEB(self)
         ApplyGroupFromDialog(data, eb and eb:GetText() or "")
     end,
     EditBoxOnEnterPressed = function(editBox)
@@ -75,7 +83,7 @@ StaticPopupDialogs["AURACUE_LINK"] = {
     whileDead = true,
     hideOnEscape = true,
     OnShow = function(self, data)
-        local eb = self.EditBox or self.editBox
+        local eb = DEB(self)
         if eb then
             eb:SetText((data and data.url) or "")
             eb:SetCursorPosition(0)
@@ -107,11 +115,11 @@ StaticPopupDialogs["AURACUE_ALTS"] = {
     whileDead = true,
     hideOnEscape = true,
     OnShow = function(self, data)
-        local eb = self.EditBox or self.editBox
+        local eb = DEB(self)
         if eb then eb:SetText((data and data.current) or ""); eb:HighlightText(); eb:SetFocus() end
     end,
     OnAccept = function(self, data)
-        local eb = self.EditBox or self.editBox
+        local eb = DEB(self)
         ApplyAltsFromDialog(data, eb and eb:GetText() or "")
     end,
     EditBoxOnEnterPressed = function(editBox)
@@ -132,11 +140,11 @@ StaticPopupDialogs["AURACUE_RENAME_GROUP"] = {
     whileDead = true,
     hideOnEscape = true,
     OnShow = function(self, data)
-        local eb = self.EditBox or self.editBox
+        local eb = DEB(self)
         if eb then eb:SetText((data and data.old) or ""); eb:HighlightText(); eb:SetFocus() end
     end,
     OnAccept = function(self, data)
-        local eb = self.EditBox or self.editBox
+        local eb = DEB(self)
         if data then ns.RenameAuraGroup(data.old, eb and eb:GetText() or ""); if data.after then data.after() end end
     end,
     EditBoxOnEnterPressed = function(editBox)
@@ -589,50 +597,63 @@ do
     content:SetHeight(-main.y + 20)
 end
 
+-- Shared modal-dialog scaffold for the two custom edit dialogs (spoken phrases,
+-- aura details). One backdrop, one frame factory, one labelled-field builder.
+local DIALOG_BACKDROP = {
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 32, edgeSize = 32,
+    insets = { left = 11, right = 12, top = 12, bottom = 11 },
+}
+
+-- A centered modal frame with a title and Save/Cancel buttons (Cancel hides
+-- it). Callers add their own fields and a Save OnClick handler.
+local function MakeDialog(w, h)
+    local d = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    d:SetSize(w, h)
+    d:SetPoint("CENTER")
+    d:SetFrameStrata("FULLSCREEN_DIALOG")
+    d:EnableMouse(true)
+    d:SetBackdrop(DIALOG_BACKDROP)
+    d.title = d:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    d.title:SetPoint("TOP", 0, -16)
+    d.save = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
+    d.save:SetSize(100, 24); d.save:SetText("Save")
+    d.save:SetPoint("BOTTOMRIGHT", -20, 16)
+    d.cancel = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
+    d.cancel:SetSize(100, 24); d.cancel:SetText("Cancel")
+    d.cancel:SetPoint("RIGHT", d.save, "LEFT", -8, 0)
+    d.cancel:SetScript("OnClick", function() d:Hide() end)
+    d:Hide()
+    return d
+end
+
+-- A labelled single-line edit box inside a dialog, at vertical offset yoff.
+local function DialogField(d, labelText, yoff)
+    local lbl = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    lbl:SetPoint("TOPLEFT", 24, yoff); lbl:SetText(labelText)
+    local eb = CreateFrame("EditBox", nil, d, "InputBoxTemplate")
+    eb:SetPoint("TOPLEFT", 28, yoff - 18); eb:SetSize(310, 20)
+    eb:SetAutoFocus(false); eb:SetFontObject("ChatFontNormal")
+    eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    return eb
+end
+
 -- A dialog to set a cue's literal spoken phrases (gained / faded). Blank means
 -- "use the general phrase". Created lazily; reused.
 local speechDialog
 local function OpenSpeechDialog(sid, name, applied, faded, after)
     if not speechDialog then
-        local d = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        d:SetSize(380, 240)
-        d:SetPoint("CENTER")
-        d:SetFrameStrata("FULLSCREEN_DIALOG")
-        d:EnableMouse(true)
-        d:SetBackdrop({
-            bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-            tile = true, tileSize = 32, edgeSize = 32,
-            insets = { left = 11, right = 12, top = 12, bottom = 11 },
-        })
-        d.title = d:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        d.title:SetPoint("TOP", 0, -16)
+        local d = MakeDialog(380, 240)
         local hint = d:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         hint:SetPoint("TOP", 0, -40)
         hint:SetText("Spoken when this cue's sound is \"Speak the name (TTS)\". Blank = general phrase.")
-        local function field(labelText, yoff)
-            local lbl = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-            lbl:SetPoint("TOPLEFT", 24, yoff); lbl:SetText(labelText)
-            local eb = CreateFrame("EditBox", nil, d, "InputBoxTemplate")
-            eb:SetPoint("TOPLEFT", 28, yoff - 18); eb:SetSize(310, 20)
-            eb:SetAutoFocus(false); eb:SetFontObject("ChatFontNormal")
-            eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-            return eb
-        end
-        d.appliedBox = field("Gained phrase", -70)
-        d.fadedBox = field("Faded phrase", -120)
-        d.save = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
-        d.save:SetSize(100, 24); d.save:SetText("Save")
-        d.save:SetPoint("BOTTOMRIGHT", -20, 16)
-        d.cancel = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
-        d.cancel:SetSize(100, 24); d.cancel:SetText("Cancel")
-        d.cancel:SetPoint("RIGHT", d.save, "LEFT", -8, 0)
-        d.cancel:SetScript("OnClick", function() d:Hide() end)
-        d:Hide()
+        d.appliedBox = DialogField(d, "Gained phrase", -70)
+        d.fadedBox = DialogField(d, "Faded phrase", -120)
         speechDialog = d
     end
     local d = speechDialog
-    d.title:SetText(name or ("Spell " .. tostring(sid)))
+    d.title:SetText(AuraName(name, sid))
     d.appliedBox:SetText(applied or "")
     d.fadedBox:SetText(faded or "")
     d.save:SetScript("OnClick", function()
@@ -852,7 +873,7 @@ local function BuildKindPanel(kind)
         if not ns.P() or (pickerSearch == "" and not searchFocused) then searchResults:Hide(); return end
         local shown, more = 0, 0
         for _, sp in ipairs(ns.GetSeenAuras()) do
-            local nm = sp.name or ("Spell " .. sp.spellID)
+            local nm = AuraName(sp.name, sp.spellID)
             local matchText = nm:lower():find(pickerSearch, 1, true) or tostring(sp.spellID):find(pickerSearch, 1, true)
             if matchText and passes(sp) then
                 if shown < MAX_RESULTS then
@@ -933,7 +954,7 @@ local function BuildKindPanel(kind)
     -- so the same management is reachable from the dropdown, not just search.
     local function AddAuraButton(parent, sp)
         local sid = sp.spellID
-        local nm = sp.name or ("Spell " .. sid)
+        local nm = AuraName(sp.name, sid)
         local txt = string.format("|T%d:16:16:0:0|t %s", sp.icon or 134400, nm)
         if ns.P().cues[tostring(sid)] then txt = txt .. "  |cff808080(watching)|r" end
         if sp.group and sp.group ~= "" then txt = txt .. "  |cff80c0ff[" .. sp.group .. "]|r" end
@@ -983,7 +1004,7 @@ local function BuildKindPanel(kind)
 
         local matches = {}
         for _, sp in ipairs(ns.GetSeenAuras()) do
-            local nm = sp.name or ("Spell " .. sp.spellID)
+            local nm = AuraName(sp.name, sp.spellID)
             local matchText = pickerSearch == ""
                 or nm:lower():find(pickerSearch, 1, true)
                 or tostring(sp.spellID):find(pickerSearch, 1, true)
@@ -1644,34 +1665,10 @@ local function OpenDetailDialog(sp, after)
     if not sp then return end
     local sid = sp.spellID
     if not detailDialog then
-        local d = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        d:SetSize(380, 350)
-        d:SetPoint("CENTER")
-        d:SetFrameStrata("FULLSCREEN_DIALOG")
-        d:EnableMouse(true)
-        d:SetBackdrop({
-            bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-            tile = true, tileSize = 32, edgeSize = 32,
-            insets = { left = 11, right = 12, top = 12, bottom = 11 },
-        })
-        d.title = d:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        d.title:SetPoint("TOP", 0, -16)
-        local function field(labelText, yoff)
-            local lbl = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-            lbl:SetPoint("TOPLEFT", 24, yoff)
-            lbl:SetText(labelText)
-            local eb = CreateFrame("EditBox", nil, d, "InputBoxTemplate")
-            eb:SetPoint("TOPLEFT", 28, yoff - 18)
-            eb:SetSize(310, 20)
-            eb:SetAutoFocus(false)
-            eb:SetFontObject("ChatFontNormal")
-            eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-            return eb
-        end
-        d.dungeonBox = field("Dungeon", -44)
-        d.sourceBox = field("Discovered by (source)", -94)
-        d.groupBox = field("Custom group", -144)
+        local d = MakeDialog(380, 350)
+        d.dungeonBox = DialogField(d, "Dungeon", -44)
+        d.sourceBox = DialogField(d, "Discovered by (source)", -94)
+        d.groupBox = DialogField(d, "Custom group", -144)
 
         local classLbl = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         classLbl:SetPoint("TOPLEFT", 24, -194)
@@ -1694,19 +1691,10 @@ local function OpenDetailDialog(sp, after)
         d.kindCheck:SetPoint("TOPLEFT", 24, -250); d.kindCheck:SetSize(24, 24)
         local kindFS = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         kindFS:SetPoint("LEFT", d.kindCheck, "RIGHT", 2, 1); kindFS:SetText("Treat as a debuff")
-
-        d.save = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
-        d.save:SetSize(100, 24); d.save:SetText("Save")
-        d.save:SetPoint("BOTTOMRIGHT", -20, 16)
-        d.cancel = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
-        d.cancel:SetSize(100, 24); d.cancel:SetText("Cancel")
-        d.cancel:SetPoint("RIGHT", d.save, "LEFT", -8, 0)
-        d.cancel:SetScript("OnClick", function() d:Hide() end)
-        d:Hide()
         detailDialog = d
     end
     local d = detailDialog
-    d.title:SetText(sp.name or ("Spell " .. tostring(sid)))
+    d.title:SetText(AuraName(sp.name, sid))
     d.dungeonBox:SetText(sp.dungeon or "")
     d.sourceBox:SetText(sp.source or "")
     d.groupBox:SetText(sp.group or "")
@@ -1992,7 +1980,7 @@ do
                 and not (hideMounts and sp.mount)
                 and not (ungroupedOnly and sp.group and sp.group ~= "")
             if pass then
-                local nm = sp.name or ("Spell " .. sp.spellID)
+                local nm = AuraName(sp.name, sp.spellID)
                 if search == "" or nm:lower():find(search, 1, true) or tostring(sp.spellID):find(search, 1, true) then
                     total = total + 1
                     if shown < MAX_ROWS then
