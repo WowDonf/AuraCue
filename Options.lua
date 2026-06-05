@@ -322,7 +322,8 @@ local function NewPanel(name)
     end
 
     -- A labeled text field bound to a getter/setter (commit on focus loss).
-    function ctx.EditLine(label, getter, setter, width)
+    -- `placeholder` (optional) shows as greyed text while the box is empty.
+    function ctx.EditLine(label, getter, setter, width, placeholder)
         local lbl = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         lbl:SetPoint("TOPLEFT", LEFT, ctx.y)
         lbl:SetText(label)
@@ -336,6 +337,19 @@ local function NewPanel(name)
         eb:SetScript("OnEscapePressed", function(self) self:SetText(getter() or ""); self:ClearFocus() end)
         eb:SetScript("OnEditFocusLost", function(self) setter(self:GetText() or "") end)
         eb.Refresh = function() eb:SetText(getter() or "") end
+        if placeholder then
+            local ph = eb:CreateFontString(nil, "ARTWORK", "ChatFontNormal")
+            ph:SetPoint("LEFT", eb, "LEFT", 6, 0)
+            ph:SetPoint("RIGHT", eb, "RIGHT", -6, 0)
+            ph:SetJustifyH("LEFT")
+            ph:SetTextColor(0.5, 0.5, 0.5)
+            ph:SetText(placeholder)
+            local function upd() ph:SetShown((eb:GetText() or "") == "") end
+            eb:HookScript("OnTextChanged", upd)
+            local prevRefresh = eb.Refresh
+            eb.Refresh = function() prevRefresh(); upd() end
+            upd()
+        end
         widgets[#widgets + 1] = eb
         ctx.y = ctx.y - 30
         return eb
@@ -591,10 +605,10 @@ do
         "these with its own phrase — which can also use {name} (Edit a watched aura → Set spoken text).")
     main.EditLine("Gained phrase",
         function() return ns.P().speakFormatApplied end,
-        function(v) ns.P().speakFormatApplied = (v ~= "" and v) or nil end, 300)
+        function(v) ns.P().speakFormatApplied = (v ~= "" and v) or nil end, 300, "{name} gained")
     main.EditLine("Faded phrase",
         function() return ns.P().speakFormatFaded end,
-        function(v) ns.P().speakFormatFaded = (v ~= "" and v) or nil end, 300)
+        function(v) ns.P().speakFormatFaded = (v ~= "" and v) or nil end, 300, "{name} faded")
     -- Hear the actual phrases (with {name} shown via a sample aura name).
     main.SideBySide(
         "Test gained phrase", function() ns.Speak(ns.ResolveSpokenPhrase("applied", nil, "Bloodlust")) end,
@@ -668,17 +682,35 @@ local function OpenSpeechDialog(sid, name, applied, faded, after)
             end)
             return b
         end
+        -- Greyed placeholder showing the default (the general format) while the
+        -- override box is empty, so it's clear what plays if you leave it blank.
+        local function attachPlaceholder(box)
+            local ph = box:CreateFontString(nil, "ARTWORK", "ChatFontNormal")
+            ph:SetPoint("LEFT", box, "LEFT", 6, 0)
+            ph:SetPoint("RIGHT", box, "RIGHT", -6, 0)
+            ph:SetJustifyH("LEFT")
+            ph:SetTextColor(0.5, 0.5, 0.5)
+            box.placeholder = ph
+            box:HookScript("OnTextChanged", function(self) ph:SetShown((self:GetText() or "") == "") end)
+        end
         d.appliedBox = DialogField(d, "Gained phrase", -96)
+        attachPlaceholder(d.appliedBox)
         d.testApplied = testBtn(d.appliedBox, "applied", -114)
         d.fadedBox = DialogField(d, "Faded phrase", -146)
+        attachPlaceholder(d.fadedBox)
         d.testFaded = testBtn(d.fadedBox, "faded", -164)
         speechDialog = d
     end
     local d = speechDialog
     d.curName = name or "this aura"
     d.title:SetText(AuraName(name, sid))
+    local P = ns.P()
+    d.appliedBox.placeholder:SetText((P and P.speakFormatApplied) or "{name} gained")
+    d.fadedBox.placeholder:SetText((P and P.speakFormatFaded) or "{name} faded")
     d.appliedBox:SetText(applied or "")
     d.fadedBox:SetText(faded or "")
+    d.appliedBox.placeholder:SetShown((applied or "") == "")
+    d.fadedBox.placeholder:SetShown((faded or "") == "")
     d.save:SetScript("OnClick", function()
         ns.SetCueSpeak(sid, d.appliedBox:GetText(), d.fadedBox:GetText())
         d:Hide()

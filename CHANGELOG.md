@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.57.3
+
+- Gained/faded phrase fields now show their default as greyed placeholder text
+  while empty, so it's clear what plays if you leave them blank: the Audio
+  page's general-phrase fields show "{name} gained" / "{name} faded", and a
+  cue's Set-spoken-text override fields show your general format.
+
 ## v0.57.2
 
 - Per-cue spoken overrides now honor **{name}** too. Set a gained/faded override
