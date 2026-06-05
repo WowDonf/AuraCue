@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.49.0
+
+- Removed the Boss field from the Edit dialog.
+- Added filters to the Manage Auras page: a **Kind** dropdown (All / Buffs /
+  Debuffs), **Hide mounts**, and **Only un-grouped auras**, alongside the
+  existing search and Show-hidden toggle.
+
 ## v0.48.1
 
 - Removed the Name field from the Edit dialog (added by mistake).

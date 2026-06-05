@@ -1251,9 +1251,9 @@ function ns.SetAuraGroup(spellID, name)
 end
 
 -- Edit a catalogued aura's stored details. `fields` may carry dungeon, source,
--- className (blank clears any of these), kind ("buff"/"debuff"), and boss
--- (boolean). Only the keys present are changed. A watched cue for the same aura
--- is kept in sync (kind flips it between Buffs/Debuffs; dungeon/source copy).
+-- className (blank clears any of these) and kind ("buff"/"debuff"). Only the
+-- keys present are changed. A watched cue for the same aura is kept in sync
+-- (kind flips it between Buffs/Debuffs; dungeon/source copy).
 function ns.SetAuraDetail(spellID, fields)
     local key = tostring(spellID)
     local e = AuraCueDB and AuraCueDB.seen and AuraCueDB.seen[key]
@@ -1265,7 +1265,6 @@ function ns.SetAuraDetail(spellID, fields)
     if fields.dungeon ~= nil then e.dungeon = norm(fields.dungeon) end
     if fields.source ~= nil then e.source = norm(fields.source) end
     if fields.className ~= nil then e.className = norm(fields.className) end
-    if fields.boss ~= nil then e.boss = fields.boss and true or nil end
     local cue = activeProfile and activeProfile.cues[key]
     if cue then
         if fields.dungeon ~= nil then cue.dungeon = e.dungeon end

@@ -1618,15 +1618,10 @@ local function OpenDetailDialog(sp, after)
             end
         end)
 
-        local function check(label, x, y)
-            local cb = CreateFrame("CheckButton", nil, d, "UICheckButtonTemplate")
-            cb:SetPoint("TOPLEFT", x, y); cb:SetSize(24, 24)
-            local fs = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-            fs:SetPoint("LEFT", cb, "RIGHT", 2, 1); fs:SetText(label)
-            return cb
-        end
-        d.kindCheck = check("Treat as a debuff", 24, -200)
-        d.bossCheck = check("Boss aura", 210, -200)
+        d.kindCheck = CreateFrame("CheckButton", nil, d, "UICheckButtonTemplate")
+        d.kindCheck:SetPoint("TOPLEFT", 24, -200); d.kindCheck:SetSize(24, 24)
+        local kindFS = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        kindFS:SetPoint("LEFT", d.kindCheck, "RIGHT", 2, 1); kindFS:SetText("Treat as a debuff")
 
         d.save = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
         d.save:SetSize(100, 24); d.save:SetText("Save")
@@ -1646,14 +1641,12 @@ local function OpenDetailDialog(sp, after)
     d.classDD:SetText(sp.className or "(none)")
     d.classDD:GenerateMenu()
     d.kindCheck:SetChecked(sp.kind == "debuff")
-    d.bossCheck:SetChecked(sp.boss and true or false)
     d.save:SetScript("OnClick", function()
         ns.SetAuraDetail(sid, {
             dungeon   = d.dungeonBox:GetText(),
             source    = d.sourceBox:GetText(),
             className = d.selClass or "",
             kind      = d.kindCheck:GetChecked() and "debuff" or "buff",
-            boss      = d.bossCheck:GetChecked() and true or false,
         })
         d:Hide()
         if after then after() end
@@ -1681,6 +1674,7 @@ do
         "it returns to the list if you see it again.")
 
     local search, showHidden = "", false
+    local kindFilter, hideMounts, ungroupedOnly = "all", false, false
     local selected = {}
     local rows, Rebuild = {}, nil
 
@@ -1697,9 +1691,30 @@ do
     sBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
     managePanel.y = managePanel.y - 30
 
-    managePanel.Check("Show hidden auras",
-        function() return showHidden end,
-        function(v) showHidden = v; Rebuild() end)
+    -- Filters.
+    local kindLbl = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    kindLbl:SetPoint("TOPLEFT", LEFT, managePanel.y)
+    kindLbl:SetText("Kind")
+    local KIND_LABEL = { all = "All", buff = "Buffs only", debuff = "Debuffs only" }
+    local kindDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+    kindDD:SetPoint("LEFT", kindLbl, "RIGHT", 12, 0)
+    kindDD:SetSize(140, 26)
+    kindDD:SetupMenu(function(_, root)
+        for _, k in ipairs({ "all", "buff", "debuff" }) do
+            root:CreateRadio(KIND_LABEL[k],
+                function() return kindFilter == k end,
+                function() kindFilter = k; kindDD:SetText(KIND_LABEL[k]); kindDD:GenerateMenu(); Rebuild() end)
+        end
+    end)
+    kindDD:SetText(KIND_LABEL[kindFilter])
+    managePanel.y = managePanel.y - 32
+
+    managePanel.CheckRow(
+        "Show hidden auras", function() return showHidden end, function(v) showHidden = v; Rebuild() end,
+        "Hide mounts", function() return hideMounts end, function(v) hideMounts = v; Rebuild() end)
+    managePanel.Check("Only un-grouped auras",
+        function() return ungroupedOnly end,
+        function(v) ungroupedOnly = v; Rebuild() end)
 
     -- Selection + bulk actions.
     local selFS = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -1876,9 +1891,13 @@ do
         UpdateSelFS()
         local shown, total = 0, 0
         for _, sp in ipairs(ns.GetSeenAuras()) do
-            -- "Show only hidden" flips the list to exactly the hidden auras;
-            -- otherwise show only the non-hidden ones.
-            if (sp.ignored and true or false) == showHidden then
+            -- Checked "Show hidden" lists exactly the hidden auras; otherwise
+            -- the non-hidden ones. Then the kind / mount / group filters.
+            local pass = ((sp.ignored and true or false) == showHidden)
+                and (kindFilter == "all" or sp.kind == kindFilter)
+                and not (hideMounts and sp.mount)
+                and not (ungroupedOnly and sp.group and sp.group ~= "")
+            if pass then
                 local nm = sp.name or ("Spell " .. sp.spellID)
                 if search == "" or nm:lower():find(search, 1, true) or tostring(sp.spellID):find(search, 1, true) then
                     total = total + 1
