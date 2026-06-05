@@ -573,16 +573,22 @@ local function ConditionMet(when)
 end
 ns.ConditionMet = ConditionMet
 
--- The phrase to speak for a cue/event: the cue's own literal override if set,
--- else the profile's general format with {name} filled in (e.g. "Bloodlust
--- gained", or a custom "Damage Now").
-local function SpeakTextFor(cue, eventKind, label)
-    local custom = (eventKind == "applied") and cue.speakApplied or cue.speakFaded
-    if custom and custom ~= "" then return custom end
+-- Resolve the phrase spoken for an event: a literal override if given, else the
+-- profile's general format with {name} filled in (e.g. "Bloodlust gained", or a
+-- custom "Damage Now"). Shared by the live cue path and the options testers.
+function ns.ResolveSpokenPhrase(eventKind, literal, label)
+    if literal and literal ~= "" then return literal end
     local fmt = (eventKind == "applied") and activeProfile.speakFormatApplied
         or activeProfile.speakFormatFaded
     if not fmt or fmt == "" then fmt = (eventKind == "applied") and "{name} gained" or "{name} faded" end
     return (fmt:gsub("{name}", label or ""))
+end
+
+-- The phrase to speak for a cue/event: the cue's own literal override if set,
+-- else the profile's general format with {name} filled in.
+local function SpeakTextFor(cue, eventKind, label)
+    local custom = (eventKind == "applied") and cue.speakApplied or cue.speakFaded
+    return ns.ResolveSpokenPhrase(eventKind, custom, label)
 end
 
 local function FireCue(cue, spellName, eventKind)

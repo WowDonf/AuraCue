@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.57.0
+
+- Gained/faded phrase testers for text-to-speech. The "Set spoken text" dialog
+  now has a **>** button next to each phrase that speaks exactly what you'd
+  hear (your typed phrase, or the general format if left blank). The main page's
+  speech test is now split into **Test gained phrase** / **Test faded phrase**,
+  which read your general formats aloud with a sample aura name.
+
 ## v0.56.2
 
 - Fixed an "action blocked" error when opening the options panel during combat.

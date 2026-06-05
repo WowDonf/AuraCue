@@ -595,7 +595,10 @@ do
     main.EditLine("Faded phrase",
         function() return ns.P().speakFormatFaded end,
         function(v) ns.P().speakFormatFaded = (v ~= "" and v) or nil end, 300)
-    main.Button("Test speech", 160, function() ns.Speak("AuraCue speech test") end)
+    -- Hear the actual phrases (with {name} shown via a sample aura name).
+    main.SideBySide(
+        "Test gained phrase", function() ns.Speak(ns.ResolveSpokenPhrase("applied", nil, "Bloodlust")) end,
+        "Test faded phrase",  function() ns.Speak(ns.ResolveSpokenPhrase("faded", nil, "Bloodlust")) end)
 
     content:SetHeight(-main.y + 20)
 end
@@ -650,12 +653,27 @@ local function OpenSpeechDialog(sid, name, applied, faded, after)
         local d = MakeDialog(380, 240)
         local hint = d:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         hint:SetPoint("TOP", 0, -40)
-        hint:SetText("Spoken when this cue's sound is \"Speak the name (TTS)\". Blank = general phrase.")
+        hint:SetText("Spoken when this cue's sound is \"Speak the name (TTS)\". Blank = general phrase; > to hear it.")
+        -- A ">" button next to a phrase box that speaks exactly what would be
+        -- said: the typed phrase, or the general format with {name} filled in.
+        local function testBtn(box, eventKind, yoff)
+            local b = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
+            b:SetSize(26, 20)
+            b:SetPoint("TOPLEFT", 342, yoff)
+            b:SetText(">")
+            b:SetScript("OnClick", function()
+                ns.Speak(ns.ResolveSpokenPhrase(eventKind, box:GetText(), d.curName))
+            end)
+            return b
+        end
         d.appliedBox = DialogField(d, "Gained phrase", -70)
+        d.testApplied = testBtn(d.appliedBox, "applied", -88)
         d.fadedBox = DialogField(d, "Faded phrase", -120)
+        d.testFaded = testBtn(d.fadedBox, "faded", -138)
         speechDialog = d
     end
     local d = speechDialog
+    d.curName = name or "this aura"
     d.title:SetText(AuraName(name, sid))
     d.appliedBox:SetText(applied or "")
     d.fadedBox:SetText(faded or "")
