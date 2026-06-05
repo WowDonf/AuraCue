@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.60.0
+
+- **On-screen timer bars.** A watched aura can now show a depleting duration
+  bar while it's active — turn it on per aura from its **Edit** menu ("Show a
+  timer bar while active"), or flip on **"Show a bar on every watched aura"** to
+  get one for all of them (it overrides the per-aura toggles without changing
+  them). Bars stack in one movable window (icon + name + countdown), coloured by
+  buff/debuff colour. Configure the window on the **Appearance** page: enable,
+  size, growth direction, max bars, the **bar texture** and **font** (any
+  SharedMedia statusbar / font your other addons provide), buff/debuff bar
+  colours, text outline + shadow, reverse fill, and Move / Lock / Test. Driven
+  by the durations the addon already learns, so cast
+  buffs get an estimated bar even in instances; auras it can't read in instanced
+  combat still won't show there (same limit as the cues).
+
 ## v0.59.3
 
 - Dropped "missing-buff reminders" from the addon's description — AuraCue

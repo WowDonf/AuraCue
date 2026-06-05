@@ -32,6 +32,8 @@ read_globals = {
     "Settings", "SettingsPanel", "HideUIPanel", "MenuResponse", "MenuUtil",
     "ColorPickerFrame",
     "GameTooltip", "StaticPopup_Show",
+    -- Default font object (for the bar text fallback font)
+    "GameFontHighlightSmall",
     -- Mount detection (to keep mounts out of ability groups)
     "C_MountJournal",
     -- Sound

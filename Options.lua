@@ -311,6 +311,24 @@ local function NewPanel(name)
         return dd
     end
 
+    -- Two labelled dropdowns on one row (returns both).
+    function ctx.Dropdown2(labelA, labelB, width)
+        width = width or 200
+        local col2 = LEFT + width + 50
+        local topY = ctx.y
+        local function one(label, x)
+            local lbl = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+            lbl:SetPoint("TOPLEFT", x, topY); lbl:SetText(label)
+            local dd = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+            dd:SetPoint("TOPLEFT", x + 6, topY - 22); dd:SetSize(width, 30)
+            return dd
+        end
+        local a = one(labelA, LEFT)
+        local b = one(labelB, col2)
+        ctx.y = topY - 62
+        return a, b
+    end
+
     function ctx.Button(label, width, onClick)
         local b = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
         b:SetPoint("TOPLEFT", LEFT + 6, ctx.y)
@@ -392,7 +410,7 @@ end
 -- ---------------------------------------------------------------------
 -- Colour-swatch buttons bound to a color table getter.
 -- ---------------------------------------------------------------------
-local function MakeColorButton(parent, getColor, label, width)
+local function MakeColorButton(parent, getColor, label, width, onChange)
     local colorBtn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     colorBtn:SetSize(width or 160, 24)
     colorBtn:SetText(label or "Flash color...")
@@ -417,6 +435,7 @@ local function MakeColorButton(parent, getColor, label, width)
             if not (nr and ng and nb) then return end
             c.r, c.g, c.b = nr, ng, nb
             swatch:SetColorTexture(nr, ng, nb)
+            if onChange then onChange() end
         end
         ColorPickerFrame:SetupColorPickerAndShow({
             r = c.r, g = c.g, b = c.b,
@@ -433,11 +452,11 @@ local function MakeColorButton(parent, getColor, label, width)
 end
 
 -- Two colour-swatch buttons on a single row.
-local function AddColorPair(ctx, getA, labelA, getB, labelB)
+local function AddColorPair(ctx, getA, labelA, getB, labelB, onChange)
     local W = 210
-    local a = MakeColorButton(ctx.content, getA, labelA, W)
+    local a = MakeColorButton(ctx.content, getA, labelA, W, onChange)
     a:SetPoint("TOPLEFT", ctx.LEFT + 6, ctx.y)
-    local b = MakeColorButton(ctx.content, getB, labelB, W)
+    local b = MakeColorButton(ctx.content, getB, labelB, W, onChange)
     b:SetPoint("TOPLEFT", ctx.LEFT + 6 + W + 12, ctx.y)
     ctx.widgets[#ctx.widgets + 1] = a
     ctx.widgets[#ctx.widgets + 1] = b
@@ -1447,6 +1466,12 @@ local function BuildKindPanel(kind)
                     OpenSpeechDialog(key, cue.label, cue.speakApplied, cue.speakFaded,
                         function() RefreshAllPanels() end)
                 end)
+                root:CreateCheckbox("Show a timer bar while active",
+                    function() return cue.bar end,
+                    function()
+                        ns.SetCueBar(key, not cue.bar)
+                        return MenuResponse and MenuResponse.Refresh or nil
+                    end)
                 local whenSub = root:CreateButton("Fire: " .. (WHEN_FULL[cue.when or "always"]))
                 for _, w in ipairs(COND_ORDER) do
                     whenSub:CreateRadio(WHEN_FULL[w],
@@ -1651,6 +1676,159 @@ do
         "window into place and \"Test this window\" to preview it.")
     BuildAppearanceSection(appearancePanel, "buff")
     BuildAppearanceSection(appearancePanel, "debuff")
+
+    -- Timer bars (the depleting on-screen duration bars). Per-aura opt-in lives
+    -- on each watched row's Edit menu ("Show a timer bar"); these are the shared
+    -- bar window's appearance. Bar colour follows each aura's buff/debuff colour.
+    appearancePanel.Header("Timer bars")
+    appearancePanel.Desc("Optional depleting bars for watched auras while they're active. Turn a bar " ..
+        "on per aura from its Edit menu (\"Show a timer bar while active\"); these control the shared bar window.")
+    appearancePanel.Check("Enable timer bars",
+        function() return ns.P().bars and ns.P().bars.enabled end,
+        function(v)
+            if ns.P().bars then ns.P().bars.enabled = v end
+            if not v and ns.BarClearAll then ns.BarClearAll() end
+        end)
+    appearancePanel.Check("Show a bar on every watched aura",
+        function() return ns.P().bars and ns.P().bars.all end,
+        function(v) if ns.SetBarsAll then ns.SetBarsAll(v) end end)
+    appearancePanel.Desc("Overrides the per-aura \"Show a timer bar\" toggles without changing them — " ..
+        "turn it off and each aura goes back to its own setting.")
+    appearancePanel.Slider("Bar width", 120, 400, 5, "%d",
+        function() return (ns.P().bars and ns.P().bars.width) or 220 end,
+        function(v) if ns.P().bars then ns.P().bars.width = v end; if ns.RefreshBars then ns.RefreshBars() end end)
+    appearancePanel.Slider("Bar height", 10, 40, 1, "%d",
+        function() return (ns.P().bars and ns.P().bars.height) or 18 end,
+        function(v) if ns.P().bars then ns.P().bars.height = v end; if ns.RefreshBars then ns.RefreshBars() end end)
+    appearancePanel.Slider("Max bars shown", 1, 20, 1, "%d",
+        function() return (ns.P().bars and ns.P().bars.max) or 8 end,
+        function(v) if ns.P().bars then ns.P().bars.max = v end; if ns.RefreshBars then ns.RefreshBars() end end)
+    -- Grow direction + bar texture, side by side. ns.P() is nil until login and
+    -- SetupMenu runs its callbacks immediately, so each guards the profile.
+    local growDD, texDD = appearancePanel.Dropdown2("Grow direction", "Bar texture", 200)
+    growDD:SetupMenu(function(_, root)
+        for _, opt in ipairs({ { "down", "Downward" }, { "up", "Upward" } }) do
+            local val, label2 = opt[1], opt[2]
+            root:CreateRadio(label2,
+                function() local p = ns.P(); return ((p and p.bars and p.bars.grow) or "down") == val end,
+                function()
+                    local p = ns.P()
+                    if p and p.bars then p.bars.grow = val end
+                    growDD:SetText(label2); growDD:GenerateMenu()
+                    if ns.RefreshBars then ns.RefreshBars() end
+                end)
+        end
+    end)
+    growDD.Refresh = function()
+        local p = ns.P()
+        growDD:SetText(((p and p.bars and p.bars.grow) or "down") == "up" and "Upward" or "Downward")
+    end
+    appearancePanel.widgets[#appearancePanel.widgets + 1] = growDD
+
+    texDD:SetupMenu(function(_, root)
+        if root.SetScrollMode then root:SetScrollMode(GetScreenHeight() * 0.5) end
+        root:CreateRadio("Default (built-in)",
+            function() local p = ns.P(); return not (p and p.bars and p.bars.texture) end,
+            function()
+                local p = ns.P()
+                if p and p.bars then p.bars.texture = nil end
+                texDD:SetText("Default (built-in)"); texDD:GenerateMenu()
+                if ns.ApplyBarStyle then ns.ApplyBarStyle() end
+            end)
+        local list = ns.GetBarTextures and ns.GetBarTextures()
+        if not list then
+            root:CreateButton("|cff808080(install a SharedMedia addon for more)|r", function() end)
+            return
+        end
+        for _, key in ipairs(list) do
+            local k = key
+            root:CreateRadio(k,
+                function() local p = ns.P(); return p and p.bars and p.bars.texture == k end,
+                function()
+                    local p = ns.P()
+                    if p and p.bars then p.bars.texture = k end
+                    texDD:SetText(k); texDD:GenerateMenu()
+                    if ns.ApplyBarStyle then ns.ApplyBarStyle() end
+                end)
+        end
+    end)
+    texDD.Refresh = function()
+        local p = ns.P()
+        texDD:SetText((p and p.bars and p.bars.texture) or "Default (built-in)")
+    end
+    appearancePanel.widgets[#appearancePanel.widgets + 1] = texDD
+
+    appearancePanel.Check("Reverse fill direction",
+        function() return ns.P().bars and ns.P().bars.reverse end,
+        function(v)
+            if ns.P().bars then ns.P().bars.reverse = v end
+            if ns.ApplyBarStyle then ns.ApplyBarStyle() end
+        end)
+
+    AddColorPair(appearancePanel,
+        function() return ns.P().bars.colorBuff end, "Buff bar color",
+        function() return ns.P().bars.colorDebuff end, "Debuff bar color",
+        ns.ApplyBarStyle)
+
+    -- Bar font + text outline, side by side.
+    local fontDD, outlineDD = appearancePanel.Dropdown2("Bar font", "Text outline", 200)
+    fontDD:SetupMenu(function(_, root)
+        if root.SetScrollMode then root:SetScrollMode(GetScreenHeight() * 0.5) end
+        root:CreateRadio("Default",
+            function() local p = ns.P(); return not (p and p.bars and p.bars.font) end,
+            function()
+                local p = ns.P(); if p and p.bars then p.bars.font = nil end
+                fontDD:SetText("Default"); fontDD:GenerateMenu()
+                if ns.RefreshBars then ns.RefreshBars() end
+            end)
+        local list = ns.GetBarFonts and ns.GetBarFonts()
+        if not list then return end
+        for _, key in ipairs(list) do
+            local k = key
+            root:CreateRadio(k,
+                function() local p = ns.P(); return p and p.bars and p.bars.font == k end,
+                function()
+                    local p = ns.P(); if p and p.bars then p.bars.font = k end
+                    fontDD:SetText(k); fontDD:GenerateMenu()
+                    if ns.RefreshBars then ns.RefreshBars() end
+                end)
+        end
+    end)
+    fontDD.Refresh = function() local p = ns.P(); fontDD:SetText((p and p.bars and p.bars.font) or "Default") end
+    appearancePanel.widgets[#appearancePanel.widgets + 1] = fontDD
+
+    local OUTLINE_OPTS = { { "NONE", "None" }, { "OUTLINE", "Outline" }, { "THICKOUTLINE", "Thick outline" } }
+    outlineDD:SetupMenu(function(_, root)
+        for _, o in ipairs(OUTLINE_OPTS) do
+            local val, lbl = o[1], o[2]
+            root:CreateRadio(lbl,
+                function() local p = ns.P(); return ((p and p.bars and p.bars.outline) or "NONE") == val end,
+                function()
+                    local p = ns.P(); if p and p.bars then p.bars.outline = val end
+                    outlineDD:SetText(lbl); outlineDD:GenerateMenu()
+                    if ns.RefreshBars then ns.RefreshBars() end
+                end)
+        end
+    end)
+    outlineDD.Refresh = function()
+        local p = ns.P()
+        local cur = (p and p.bars and p.bars.outline) or "NONE"
+        outlineDD:SetText(cur == "OUTLINE" and "Outline" or (cur == "THICKOUTLINE" and "Thick outline") or "None")
+    end
+    appearancePanel.widgets[#appearancePanel.widgets + 1] = outlineDD
+
+    appearancePanel.Check("Text shadow",
+        function() return ns.P().bars and ns.P().bars.shadow end,
+        function(v)
+            if ns.P().bars then ns.P().bars.shadow = v end
+            if ns.RefreshBars then ns.RefreshBars() end
+        end)
+
+    appearancePanel.SideBySide(
+        "Move bars", function() ns.SetBarsReposition(true) end,
+        "Lock bars", function() ns.SetBarsReposition(false) end,
+        "Test bars", function() if ns.TestBars then ns.TestBars() end end)
+
     content:SetHeight(-appearancePanel.y + 20)
 end
 

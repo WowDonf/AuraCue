@@ -3,15 +3,19 @@
 
 package-as: AuraCue
 
-# Libraries for the minimap button. These are NOT committed to the repo — the
-# packager fetches each fresh at build time into Libs/, so released zips have
-# them while local dev checkouts don't (the minimap button no-ops without them).
+# Libraries (minimap button + shared-media bar textures). These are NOT
+# committed to the repo — the packager fetches each fresh at build time into
+# Libs/, so released zips have them while local dev checkouts don't (those
+# features fall back / no-op without them).
 externals:
   Libs/LibStub:
     url: https://repos.curseforge.com/wow/libstub/trunk
     type: svn
   Libs/CallbackHandler-1.0:
     url: https://repos.wowace.com/wow/callbackhandler/trunk/CallbackHandler-1.0
+    type: svn
+  Libs/LibSharedMedia-3.0:
+    url: https://repos.wowace.com/wow/libsharedmedia-3-0/trunk/LibSharedMedia-3.0
     type: svn
   Libs/LibDataBroker-1.1:
     url: https://github.com/tekkub/libdatabroker-1-1.git

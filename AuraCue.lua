@@ -104,6 +104,26 @@ local PROFILE_DEFAULTS = {
             edgeIntensity = 0.8,
         },
     },
+    -- On-screen duration bars (per-cue opt-in via cue.bar). Master toggle +
+    -- container size / growth / cap / position. The bar colour follows the
+    -- aura's kind (buff/debuff gained colour above).
+    bars = {
+        enabled = true,
+        width   = 220,
+        height  = 18,
+        grow    = "down",   -- "down" or "up"
+        max     = 8,
+        locked  = true,
+        position = nil,     -- { point, relativePoint, x, y }
+        texture  = nil,     -- LibSharedMedia bar-style name; nil = built-in
+        reverse  = false,   -- reverse the fill direction (drain the other way)
+        all      = false,   -- show a bar on every watched aura (overrides cue.bar)
+        colorBuff   = { r = 0.20, g = 0.86, b = 0.75 },  -- buff bar fill colour
+        colorDebuff = { r = 1.00, g = 0.45, b = 0.30 },  -- debuff bar fill colour
+        font     = nil,     -- LibSharedMedia font name; nil = default UI font
+        outline  = "NONE",  -- "NONE" / "OUTLINE" / "THICKOUTLINE"
+        shadow   = false,   -- drop shadow on the bar text
+    },
     -- Watched auras, keyed by spellID-as-string -> cue config.
     cues = {},
 }
@@ -281,6 +301,24 @@ local function ValidateRanges(db)
         if db.channel == ch then validChannel = true; break end
     end
     if not validChannel then db.channel = "Master" end
+
+    if type(db.bars) ~= "table" then db.bars = {} end
+    local bars = db.bars
+    if type(bars.width) ~= "number" then bars.width = 220 end
+    bars.width = math.max(120, math.min(400, bars.width))
+    if type(bars.height) ~= "number" then bars.height = 18 end
+    bars.height = math.max(10, math.min(40, bars.height))
+    if type(bars.max) ~= "number" then bars.max = 8 end
+    bars.max = math.max(1, math.min(20, math.floor(bars.max)))
+    if bars.grow ~= "up" and bars.grow ~= "down" then bars.grow = "down" end
+    if bars.texture ~= nil and type(bars.texture) ~= "string" then bars.texture = nil end
+    bars.reverse = bars.reverse and true or false
+    bars.all = bars.all and true or false
+    HealColor(bars, "colorBuff", DEFAULT_COLORS.buff)
+    HealColor(bars, "colorDebuff", DEFAULT_COLORS.debuff)
+    if bars.font ~= nil and type(bars.font) ~= "string" then bars.font = nil end
+    if bars.outline ~= "OUTLINE" and bars.outline ~= "THICKOUTLINE" then bars.outline = "NONE" end
+    bars.shadow = bars.shadow and true or false
 end
 ns.ValidateRanges = ValidateRanges
 
@@ -898,6 +936,276 @@ local function CueRead(sid, alts)
     return best
 end
 
+-- ---------------------------------------------------------------------
+-- Cooldown / duration bars (non-secure). Per-cue opt-in (cue.bar): a
+-- depleting StatusBar shown while a watched aura is active, stacked in a
+-- movable container. Driven by the same present / cast tracking that fires
+-- the cues, using the duration the engine already learns. A bar's lifetime is
+-- deliberately independent of the gained/faded ALERT toggles.
+-- ---------------------------------------------------------------------
+local BAR_TEX = "Interface\\TargetingFrame\\UI-StatusBar"
+-- LibSharedMedia lets the user pick any "statusbar" texture other addons have
+-- registered. Absent in a lib-less dev checkout -> we just use the built-in one.
+local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+local barPool, activeBars = {}, {}    -- recycled frames; sid(number) -> shown bar
+
+local function BarCfg() return activeProfile and activeProfile.bars end
+
+-- The texture path for the chosen bar style (an LSM key), or the built-in one.
+local function BarTexturePath()
+    local cfg = BarCfg()
+    local key = cfg and cfg.texture
+    if LSM and key then return LSM:Fetch("statusbar", key, true) or BAR_TEX end
+    return BAR_TEX
+end
+
+-- Sorted list of available bar-texture names (nil if LibSharedMedia is absent).
+ns.GetBarTextures = function() return LSM and LSM:List("statusbar") or nil end
+
+-- Whether a cue should show a bar: its own opt-in, OR the global "bars on every
+-- aura" override (which never rewrites the per-cue cue.bar setting).
+local function CueWantsBar(cue)
+    if not cue then return false end
+    if cue.bar then return true end
+    local cfg = BarCfg()
+    return (cfg and cfg.all) and true or false
+end
+
+-- Bar fill colour for a kind (separate from the flash colours).
+local function BarColor(kind)
+    local cfg = BarCfg()
+    local c = cfg and ((kind == "debuff") and cfg.colorDebuff or cfg.colorBuff)
+    return c or { r = 1, g = 1, b = 1 }
+end
+
+-- Text styling: font face (LibSharedMedia), outline flags, drop shadow.
+ns.GetBarFonts = function() return LSM and LSM:List("font") or nil end
+local OUTLINE_FLAGS = { OUTLINE = "OUTLINE", THICKOUTLINE = "THICKOUTLINE" }
+local function DefaultBarFont()
+    local p = GameFontHighlightSmall and select(1, GameFontHighlightSmall:GetFont())
+    return p or "Fonts\\FRIZQT__.TTF"
+end
+local function ResolveBarFont()
+    local cfg = BarCfg()
+    local path = (LSM and cfg and cfg.font and LSM:Fetch("font", cfg.font, true)) or DefaultBarFont()
+    return path, (cfg and OUTLINE_FLAGS[cfg.outline]) or ""
+end
+-- Apply font / outline / shadow to a bar's two text strings, sized to the bar.
+local function ApplyBarFont(b, h)
+    local cfg = BarCfg()
+    local path, flags = ResolveBarFont()
+    local size = math.max(8, math.min(16, math.floor((h or 18) * 0.62)))
+    local shadow = cfg and cfg.shadow
+    for _, fs in ipairs({ b.name, b.time }) do
+        if not fs:SetFont(path, size, flags) then fs:SetFont(DefaultBarFont(), size, flags) end
+        if shadow then
+            fs:SetShadowColor(0, 0, 0, 1); fs:SetShadowOffset(1, -1)
+        else
+            fs:SetShadowColor(0, 0, 0, 0); fs:SetShadowOffset(0, 0)
+        end
+    end
+end
+
+local barContainer = CreateFrame("Frame", "AuraCueBars", UIParent, "BackdropTemplate")
+barContainer:SetSize(220, 18)
+barContainer:SetFrameStrata("HIGH")
+barContainer:SetClampedToScreen(true)
+barContainer:EnableMouse(false)
+barContainer:SetMovable(true)
+barContainer:RegisterForDrag("LeftButton")
+barContainer:SetScript("OnDragStart", function(self)
+    local cfg = BarCfg()
+    if cfg and not cfg.locked then self:StartMoving() end
+end)
+barContainer:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local cfg = BarCfg(); if not cfg then return end
+    local point, _, relativePoint, x, y = self:GetPoint()
+    cfg.position = { point = point, relativePoint = relativePoint, x = x, y = y }
+end)
+
+local function RestoreBarsPosition()
+    barContainer:ClearAllPoints()
+    local p = BarCfg() and BarCfg().position
+    if p and p.point then
+        barContainer:SetPoint(p.point, UIParent, p.relativePoint or p.point, p.x or 0, p.y or 0)
+    else
+        barContainer:SetPoint("CENTER", UIParent, "CENTER", -340, 0)
+    end
+end
+ns.RestoreBarsPosition = RestoreBarsPosition
+
+local BarStop   -- forward (a bar's OnUpdate self-removes through it)
+
+local function MakeBar()
+    local b = table.remove(barPool)
+    if b then return b end
+    b = CreateFrame("StatusBar", nil, barContainer)
+    b:SetStatusBarTexture(BAR_TEX)
+    b.bg = b:CreateTexture(nil, "BACKGROUND")
+    b.bg:SetAllPoints()
+    b.bg:SetColorTexture(0, 0, 0, 0.55)
+    -- OVERLAY so the icon sits above the bar's fill texture (on ARTWORK), not
+    -- hidden under it.
+    b.icon = b:CreateTexture(nil, "OVERLAY")
+    b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    b.name = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    b.time = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    b:SetScript("OnUpdate", function(self)
+        local remain = (self.endTime or 0) - GetTime()
+        if remain <= 0 then BarStop(self.sid); return end
+        self:SetValue(remain)
+        self.time:SetText(remain >= 10 and string.format("%.0f", remain) or string.format("%.1f", remain))
+    end)
+    return b
+end
+
+local function LayoutBars()
+    local cfg = BarCfg(); if not cfg then return end
+    local w, h, grow = cfg.width or 220, cfg.height or 18, cfg.grow or "down"
+    local maxN = cfg.max or 8
+    local list = {}
+    for _, b in pairs(activeBars) do list[#list + 1] = b end
+    table.sort(list, function(a, c) return (a.endTime or 0) < (c.endTime or 0) end)
+    for idx, b in ipairs(list) do
+        if idx <= maxN then
+            b:SetSize(w, h)
+            b:ClearAllPoints()
+            local off = (idx - 1) * (h + 2)
+            if grow == "up" then
+                b:SetPoint("BOTTOMLEFT", barContainer, "BOTTOMLEFT", 0, off)
+            else
+                b:SetPoint("TOPLEFT", barContainer, "TOPLEFT", 0, -off)
+            end
+            -- Icon is a square to the LEFT of the bar; the name + countdown sit
+            -- inside the bar (name at its left, time at its right).
+            b.icon:ClearAllPoints(); b.icon:SetPoint("RIGHT", b, "LEFT", -2, 0); b.icon:SetSize(h, h)
+            b.time:ClearAllPoints(); b.time:SetPoint("RIGHT", b, "RIGHT", -4, 0)
+            b.name:ClearAllPoints()
+            b.name:SetPoint("LEFT", b, "LEFT", 4, 0)
+            b.name:SetPoint("RIGHT", b.time, "LEFT", -4, 0)
+            b.name:SetJustifyH("LEFT")
+            ApplyBarFont(b, h)
+            b:Show()
+        else
+            b:Hide()
+        end
+    end
+end
+ns.RefreshBars = LayoutBars   -- re-apply size/grow/cap to the live bars
+
+-- Start (or restart) a bar for a cue. endTime is absolute (GetTime() basis),
+-- duration the bar's full length. Skips permanent auras and respects the cue's
+-- "when" condition + the per-kind track toggle, like the cues themselves.
+local function BarStart(cue, sid, endTime, duration)
+    local cfg = BarCfg()
+    if not (cfg and cfg.enabled and CueWantsBar(cue)) then return end
+    if not (endTime and duration and duration > 0 and endTime > GetTime()) then return end
+    if not ConditionMet(cue.when) then return end
+    local kind = (cue.kind == "debuff") and "debuff" or "buff"
+    if kind == "debuff" then
+        if not activeProfile.trackDebuffs then return end
+    elseif not activeProfile.trackBuffs then
+        return
+    end
+    sid = tonumber(sid)
+    local b = activeBars[sid]
+    local isNew = not b
+    b = b or MakeBar()
+    activeBars[sid] = b
+    -- A recast/refresh changes the end time, which can change the sort order,
+    -- so re-lay-out then (not just for brand-new bars).
+    local orderChanged = isNew or b.endTime ~= endTime
+    b.sid, b.endTime = sid, endTime
+    b:SetMinMaxValues(0, duration)
+    b:SetValue(endTime - GetTime())
+    if isNew then                          -- static bits only on first show
+        b:SetStatusBarTexture(BarTexturePath())
+        b:SetReverseFill(cfg.reverse and true or false)
+        b.kind = kind
+        local c = BarColor(kind)
+        b:SetStatusBarColor(c.r, c.g, c.b)
+        b.name:SetText(cue.label or C_Spell.GetSpellName(sid) or "")
+        local tex = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)
+        b.icon:SetTexture(tex or 134400)
+    end
+    if orderChanged then LayoutBars() end
+end
+
+-- Re-apply texture / fill direction / colour to every live bar, so a bar-style
+-- change on the Appearance page updates instantly.
+function ns.ApplyBarStyle()
+    local cfg = BarCfg()
+    local tex = BarTexturePath()
+    local rev = (cfg and cfg.reverse) and true or false
+    for _, b in pairs(activeBars) do
+        b:SetStatusBarTexture(tex)
+        b:SetReverseFill(rev)
+        local c = BarColor(b.kind)
+        b:SetStatusBarColor(c.r, c.g, c.b)
+    end
+end
+
+function BarStop(sid)
+    sid = tonumber(sid)
+    local b = sid and activeBars[sid]
+    if not b then return end
+    activeBars[sid] = nil
+    b:Hide()
+    b.endTime, b.sid = nil, nil
+    barPool[#barPool + 1] = b
+    LayoutBars()
+end
+
+local function BarClearAll()
+    for _, b in pairs(activeBars) do
+        b:Hide(); b.endTime, b.sid = nil, nil
+        barPool[#barPool + 1] = b
+    end
+    wipe(activeBars)
+end
+ns.BarClearAll = BarClearAll
+
+-- Sample bars for the Move / preview button on the Appearance page.
+function ns.TestBars()
+    BarClearAll()
+    local now = GetTime()
+    local rev = (BarCfg() and BarCfg().reverse) and true or false
+    for _, s in ipairs({ { 1, "Sample cooldown", 30, "buff" }, { 2, "Sample buff", 12, "buff" }, { 3, "Sample debuff", 6, "debuff" } }) do
+        local b = MakeBar()
+        activeBars[s[1]] = b
+        b.sid, b.endTime, b.kind = s[1], now + s[3], s[4]
+        b:SetMinMaxValues(0, s[3]); b:SetValue(s[3])
+        b:SetStatusBarTexture(BarTexturePath())
+        b:SetReverseFill(rev)
+        local c = BarColor(s[4])
+        b:SetStatusBarColor(c.r, c.g, c.b)
+        b.name:SetText(s[2]); b.icon:SetTexture(134400)
+    end
+    LayoutBars()
+end
+
+-- Move / lock the bar container (Appearance page buttons): pin it open with a
+-- backdrop and sample bars to drag, then re-lock + clear on exit.
+function ns.SetBarsReposition(on)
+    local cfg = BarCfg(); if not cfg then return end
+    if on then
+        cfg.locked = false
+        barContainer:SetSize(cfg.width or 220, (cfg.max or 8) * ((cfg.height or 18) + 2))
+        barContainer:SetBackdrop(REPOSITION_BACKDROP)
+        barContainer:SetBackdropColor(0, 0, 0, 0.5)
+        barContainer:EnableMouse(true)
+        RestoreBarsPosition()
+        ns.TestBars()
+    else
+        cfg.locked = true
+        barContainer:SetBackdrop(nil)
+        barContainer:SetSize(cfg.width or 220, cfg.height or 18)
+        barContainer:EnableMouse(false)
+        BarClearAll()
+    end
+end
+
 local function ScanPlayerAuras()
     if not activeProfile or not activeProfile.enabled then return end
 
@@ -924,11 +1232,14 @@ local function ScanPlayerAuras()
                 if data then
                     local d = Reveal(data.duration)
                     if d and d > 0 then cue.castDuration = d end
+                    -- Refine the cast bar with the exact end time when readable.
+                    if CueWantsBar(cue) then BarStart(cue, sid, Reveal(data.expirationTime), Reveal(data.duration)) end
                 end
             elseif state == "unknown" then
                 newPresent[sid] = present[sid]
-            elseif castConfirmed[sid] and present[sid] and cue.faded then
-                FireCue(cue, C_Spell.GetSpellName(sid), "faded")
+            elseif castConfirmed[sid] and present[sid] and (cue.faded or CueWantsBar(cue)) then
+                if cue.faded then FireCue(cue, C_Spell.GetSpellName(sid), "faded") end
+                if CueWantsBar(cue) then BarStop(sid) end
                 castConfirmed[sid] = nil
                 castFade[sid] = (castFade[sid] or 0) + 1   -- invalidate any pending fade timer
             else
@@ -945,10 +1256,15 @@ local function ScanPlayerAuras()
                 if not present[sid] and cue.applied then
                     FireCue(cue, C_Spell.GetSpellName(sid), "applied")
                 end
+                -- Every present scan, so a refresh updates the bar's end time.
+                if CueWantsBar(cue) and data then
+                    BarStart(cue, sid, Reveal(data.expirationTime), Reveal(data.duration))
+                end
             elseif state == "unknown" then
                 newPresent[sid] = present[sid]   -- secret-masked: hold
-            elseif present[sid] and cue.faded then
-                FireCue(cue, C_Spell.GetSpellName(sid), "faded")
+            elseif present[sid] then
+                if cue.faded then FireCue(cue, C_Spell.GetSpellName(sid), "faded") end
+                if CueWantsBar(cue) then BarStop(sid) end
             end
         end
     end
@@ -965,13 +1281,18 @@ ns.ScanPlayerAuras = ScanPlayerAuras
 -- fire when the aura drops following any silent re-seed.
 local function SeedPresent()
     present = {}
+    BarClearAll()   -- rebuild bars to match what's actually active right now
     local cues = activeProfile and activeProfile.cues
     if not cues then return end
     for key, cue in pairs(cues) do
         local sid = tonumber(key)
-        if CueRead(sid, cueAlts[key]) == "present" then
+        local state, data = CueRead(sid, cueAlts[key])
+        if state == "present" then
             present[sid] = true
             if cue.castSeen then castConfirmed[sid] = true end
+            if CueWantsBar(cue) and data then
+                BarStart(cue, sid, Reveal(data.expirationTime), Reveal(data.duration))
+            end
         end
     end
 end
@@ -993,14 +1314,16 @@ end
 -- call wins (token), so calling it again with a freshly-learned duration just
 -- replaces the earlier estimate.
 local function ScheduleFade(cue, pid, dur)
-    if not (cue.faded and dur and dur > 0) then return end
+    -- Schedule whenever the faded ALERT or the duration BAR needs the end time.
+    if not ((cue.faded or CueWantsBar(cue)) and dur and dur > 0) then return end
     castFade[pid] = (castFade[pid] or 0) + 1
     local token = castFade[pid]
     C_Timer.After(dur + 0.2, function()
-        -- Only fire if this is still the latest cast and the aura isn't
+        -- Only act if this is still the latest cast and the aura isn't
         -- readably still up (a refresh in the open world would show it).
         if castFade[pid] == token and present[pid] and CueRead(pid, cueAlts[tostring(pid)]) ~= "present" then
-            FireCue(cue, C_Spell.GetSpellName(pid), "faded")
+            if cue.faded then FireCue(cue, C_Spell.GetSpellName(pid), "faded") end
+            if CueWantsBar(cue) then BarStop(pid) end
             present[pid] = nil
         end
     end)
@@ -1035,6 +1358,13 @@ local function OnSelfCast(spellID)
     end
     present[pid] = true
 
+    -- Start the duration bar from the learned duration (works in instances
+    -- where reads are blocked); the open-world refine below restarts it with
+    -- the exact end time when available.
+    if CueWantsBar(cue) and cue.castDuration then
+        BarStart(cue, pid, now + cue.castDuration, cue.castDuration)
+    end
+
     -- Schedule the faded timer now using any previously-learned duration (so it
     -- works in instances where reads are blocked), then re-learn the duration
     -- just after the cast and reschedule with the fresh value. The reschedule
@@ -1045,7 +1375,11 @@ local function OnSelfCast(spellID)
         local _, data = CueRead(pid, cueAlts[tostring(pid)])
         if data then
             local d = Reveal(data.duration)
-            if d and d > 0 then cue.castDuration = d; ScheduleFade(cue, pid, d) end
+            if d and d > 0 then
+                cue.castDuration = d
+                ScheduleFade(cue, pid, d)
+                if CueWantsBar(cue) then BarStart(cue, pid, Reveal(data.expirationTime) or (GetTime() + d), d) end
+            end
         end
     end)
 end
@@ -1253,6 +1587,25 @@ function ns.SetCueKind(spellKey, kind)
     ApplyCueChange()
 end
 
+-- Per-cue opt-in for the on-screen duration bar; SeedPresent re-shows / hides
+-- bars to match the effective state (which also respects the global override).
+function ns.SetCueBar(spellKey, on)
+    local cue = activeProfile and activeProfile.cues[tostring(spellKey)]
+    if not cue then return end
+    cue.bar = on and true or nil
+    SeedPresent()
+    if ns.RefreshOptions then ns.RefreshOptions() end
+end
+
+-- Global override: show a bar on every watched aura, regardless of each cue's
+-- own toggle (which is left unchanged, so turning this off restores them).
+function ns.SetBarsAll(on)
+    if not (activeProfile and activeProfile.bars) then return end
+    activeProfile.bars.all = on and true or nil
+    SeedPresent()
+    if ns.RefreshOptions then ns.RefreshOptions() end
+end
+
 -- Global toggle: combine every same-named aura into a single alert. Turning it
 -- ON absorbs duplicate cues (keeps one per name).
 function ns.SetCombineByName(on)
@@ -1320,6 +1673,7 @@ function ns.RemoveCue(spellID)
     castConfirmed[spellID] = nil
     lastGained[spellID] = nil
     castFade[spellID] = (castFade[spellID] or 0) + 1
+    BarStop(spellID)
     RebuildAliases()
     RefreshPrivateAuras()
     return existed
@@ -1676,6 +2030,7 @@ local function InitProfile()
     SetActiveProfile()
     RestorePosition("buff")
     RestorePosition("debuff")
+    RestoreBarsPosition()
     ns.InitOptions()
 end
 
@@ -1728,6 +2083,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         HarvestSpellbook()   -- the new spec may grant different spells
         RestorePosition("buff")
         RestorePosition("debuff")
+        RestoreBarsPosition()
         if ns.RefreshOptions then ns.RefreshOptions() end
 
     elseif event == "SPELLS_CHANGED" then
@@ -1925,6 +2281,7 @@ function ns.ImportShare(str)
         RebuildAliases()
         RestorePosition("buff")
         RestorePosition("debuff")
+        RestoreBarsPosition()
         ResyncTracking()   -- new cue set: full reset, not just a re-seed
         RefreshPrivateAuras()
         if ns.RefreshOptions then ns.RefreshOptions() end
@@ -1986,6 +2343,7 @@ function ns.CopyProfileFrom(sourceKey)
     RebuildAliases()
     RestorePosition("buff")
     RestorePosition("debuff")
+    RestoreBarsPosition()
     ResyncTracking()
     RefreshPrivateAuras()
     if ns.RefreshOptions then ns.RefreshOptions() end
@@ -2102,8 +2460,10 @@ SlashCmdList["AURACUE"] = function(msg)
         elseif cmd == "reset" then
             activeProfile.visual.buff.position = nil
             activeProfile.visual.debuff.position = nil
+            activeProfile.bars.position = nil
             RestorePosition("buff")
             RestorePosition("debuff")
+            RestoreBarsPosition()
             chatPrint("overlay positions reset.")
 
         elseif cmd == "forget" then
