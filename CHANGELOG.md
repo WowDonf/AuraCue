@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.52.1
+
+- The watched-row Group field now shows the aura's effective heading (its
+  custom group, or the auto bucket like a class/dungeon) instead of being blank
+  for auto-grouped auras. Editing it still sets a custom group.
+- Removed the now-redundant Group button on Manage Auras rows (group is set in
+  the Edit dialog).
+
 ## v0.52.0
 
 - **Custom spoken cues.** When a cue uses "Speak the name (TTS)", you can now

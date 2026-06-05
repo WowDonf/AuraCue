@@ -1401,12 +1401,15 @@ local function BuildKindPanel(kind)
         row.cat:SetScript("OnEditFocusLost", function(self)
             if not row.spellID then return end
             local t = (self:GetText() or ""):trim()
-            if t == (ns.GetAuraGroup(row.spellID) or "") then return end
+            -- Field shows the effective heading (custom OR the auto bucket); only
+            -- write a custom group when the text actually changed, so leaving an
+            -- auto bucket (e.g. "Druid") in place doesn't turn it into a custom one.
+            if t == (ns.GroupFor(row.spellID) or "") then return end
             ns.SetAuraGroup(row.spellID, t)   -- refreshes all panels (the unified group)
         end)
         row.cat:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
         row.cat:SetScript("OnEscapePressed", function(self)
-            self:SetText((row.spellID and ns.GetAuraGroup(row.spellID)) or "")
+            self:SetText((row.spellID and ns.GroupFor(row.spellID)) or "")
             self:ClearFocus()
         end)
 
@@ -1458,7 +1461,7 @@ local function BuildKindPanel(kind)
                 row.applied:SetChecked(cue.applied and true or false)
                 row.faded:SetChecked(cue.faded and true or false)
                 row.visual:SetChecked(cue.visual and true or false)
-                row.cat:SetText(ns.GetAuraGroup(sid) or "")
+                row.cat:SetText(ns.GroupFor(sid) or "")
                 row.cond:SetText(COND_LABEL[cue.when or "always"])
                 row.soundApplied:GenerateMenu()
                 row.soundFaded:GenerateMenu()
@@ -1952,17 +1955,10 @@ do
             ns.SetAuraIgnored(r.sid, not r.ignored)
             RefreshAllPanels()
         end)
-        r.group = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")
-        r.group:SetSize(58, 20); r.group:SetText("Group")
-        r.group:SetPoint("RIGHT", r.hide, "LEFT", -6, 0)
-        r.group:SetScript("OnClick", function()
-            if not r.sid then return end
-            StaticPopup_Show("AURACUE_SET_GROUP", r.auraName or tostring(r.sid), nil,
-                { sid = r.sid, current = r.group_name or "", after = function() RefreshAllPanels() end })
-        end)
+        -- (Group is set in the Edit dialog now, so no separate Group button.)
         r.edit = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")
         r.edit:SetSize(44, 20); r.edit:SetText("Edit")
-        r.edit:SetPoint("RIGHT", r.group, "LEFT", -6, 0)
+        r.edit:SetPoint("RIGHT", r.hide, "LEFT", -6, 0)
         r.edit:SetScript("OnClick", function()
             if not r.sp then return end
             OpenDetailDialog(r.sp, function() RefreshAllPanels() end)
@@ -2008,7 +2004,6 @@ do
                         r.sid = sp.spellID
                         r.auraName = nm
                         r.ignored = sp.ignored
-                        r.group_name = sp.group
                         r.sp = sp
                         r.icon:SetTexture(sp.icon or 134400)
                         r.cb:SetChecked(selected[tostring(sp.spellID)] and true or false)
