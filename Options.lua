@@ -338,15 +338,18 @@ local function NewPanel(name)
         eb:SetScript("OnEditFocusLost", function(self) setter(self:GetText() or "") end)
         eb.Refresh = function() eb:SetText(getter() or "") end
         if placeholder then
-            local ph = eb:CreateFontString(nil, "OVERLAY")
-            ph:SetFontObject("ChatFontNormal")
-            ph:SetPoint("LEFT", eb, "LEFT", 6, 0)
-            ph:SetPoint("RIGHT", eb, "RIGHT", -6, 0)
+            -- Set the font via the CreateFontString template (reliable) rather
+            -- than SetFontObject; an unset font renders nothing (invisible).
+            local ph = eb:CreateFontString(nil, "OVERLAY", "ChatFontNormal")
+            ph:SetPoint("LEFT", eb, "LEFT", 5, 0)
+            ph:SetPoint("RIGHT", eb, "RIGHT", -5, 0)
             ph:SetJustifyH("LEFT")
             ph:SetTextColor(0.5, 0.5, 0.5)
             ph:SetText(placeholder)
             local function upd() ph:SetShown((eb:GetText() or "") == "") end
             eb:HookScript("OnTextChanged", upd)
+            eb:HookScript("OnEditFocusGained", upd)
+            eb:HookScript("OnEditFocusLost", upd)
             local prevRefresh = eb.Refresh
             eb.Refresh = function() prevRefresh(); upd() end
             upd()
@@ -707,10 +710,9 @@ local function OpenSpeechDialog(sid, name, applied, faded, after)
         -- Greyed placeholder showing the default (the general format) while the
         -- override box is empty, so it's clear what plays if you leave it blank.
         local function attachPlaceholder(box)
-            local ph = box:CreateFontString(nil, "OVERLAY")
-            ph:SetFontObject("ChatFontNormal")
-            ph:SetPoint("LEFT", box, "LEFT", 6, 0)
-            ph:SetPoint("RIGHT", box, "RIGHT", -6, 0)
+            local ph = box:CreateFontString(nil, "OVERLAY", "ChatFontNormal")
+            ph:SetPoint("LEFT", box, "LEFT", 5, 0)
+            ph:SetPoint("RIGHT", box, "RIGHT", -5, 0)
             ph:SetJustifyH("LEFT")
             ph:SetTextColor(0.5, 0.5, 0.5)
             box.placeholder = ph

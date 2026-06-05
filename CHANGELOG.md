@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.59.1
+
+- Fixed the greyed "{name} gained" / "{name} faded" placeholder not appearing in
+  the Audio phrase fields (and the per-cue spoken-text dialog). The font was set
+  in a way that could leave the text invisible; it's now applied reliably.
+  (Placeholder shows only when the field is empty — clear a phrase to see it.)
+
 ## v0.59.0
 
 - The "AuraCue loaded" chat message at login is now **off by default**. Turn it
