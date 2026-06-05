@@ -1675,6 +1675,7 @@ do
 
     local search, showHidden = "", false
     local kindFilter, hideMounts, ungroupedOnly = "all", false, false
+    local classFilter = "all"
     local selected = {}
     local rows, Rebuild = {}, nil
 
@@ -1707,6 +1708,27 @@ do
         end
     end)
     kindDD:SetText(KIND_LABEL[kindFilter])
+
+    local classLbl = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    classLbl:SetPoint("LEFT", kindDD, "RIGHT", 20, 0)
+    classLbl:SetText("Class")
+    local classDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+    classDD:SetPoint("LEFT", classLbl, "RIGHT", 12, 0)
+    classDD:SetSize(150, 26)
+    classDD:SetupMenu(function(_, root)
+        root:CreateRadio("All classes",
+            function() return classFilter == "all" end,
+            function() classFilter = "all"; classDD:SetText("All classes"); classDD:GenerateMenu(); Rebuild() end)
+        root:CreateRadio("(untagged)",
+            function() return classFilter == "none" end,
+            function() classFilter = "none"; classDD:SetText("(untagged)"); classDD:GenerateMenu(); Rebuild() end)
+        for _, cn in ipairs(getClassNames()) do
+            root:CreateRadio(cn,
+                function() return classFilter == cn end,
+                function() classFilter = cn; classDD:SetText(cn); classDD:GenerateMenu(); Rebuild() end)
+        end
+    end)
+    classDD:SetText("All classes")
     managePanel.y = managePanel.y - 32
 
     managePanel.CheckRow(
@@ -1893,8 +1915,13 @@ do
         for _, sp in ipairs(ns.GetSeenAuras()) do
             -- Checked "Show hidden" lists exactly the hidden auras; otherwise
             -- the non-hidden ones. Then the kind / mount / group filters.
+            local hasClass = sp.className and sp.className ~= ""
+            local classOk = (classFilter == "all")
+                or (classFilter == "none" and not hasClass)
+                or (sp.className == classFilter)
             local pass = ((sp.ignored and true or false) == showHidden)
                 and (kindFilter == "all" or sp.kind == kindFilter)
+                and classOk
                 and not (hideMounts and sp.mount)
                 and not (ungroupedOnly and sp.group and sp.group ~= "")
             if pass then

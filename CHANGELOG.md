@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.49.1
+
+- Added a **Class** filter to the Manage Auras page (a class, "(untagged)", or
+  all).
+
 ## v0.49.0
 
 - Removed the Boss field from the Edit dialog.
