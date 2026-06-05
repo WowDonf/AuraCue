@@ -708,6 +708,38 @@ local function IsRidingSpell(sid, name)
     return false
 end
 
+-- Mount detection: real mounts (the journal knows them) plus riding/skyriding
+-- flight abilities, which group with mounts. One module-level resolver, reused
+-- everywhere instead of re-fetching the API local inside each function.
+local GetMountFromSpell = C_MountJournal and C_MountJournal.GetMountFromSpell
+local function IsMountish(sid, name)
+    return ((GetMountFromSpell and GetMountFromSpell(sid)) or IsRidingSpell(sid, name)) and true or false
+end
+
+-- Build a minimal catalog entry for a spell we know of but have no aura payload
+-- for (spellbook harvest, a cast that applies no readable aura, /cue gather).
+-- RecordSeen builds the richer entry when the aura `data` IS available. One
+-- builder so the name/icon fallback and `mine` normalization don't drift.
+local function NewSeenEntry(sid, kind, mine, className, name, icon)
+    local GT = C_Spell and C_Spell.GetSpellTexture
+    return {
+        name      = name or C_Spell.GetSpellName(sid),
+        icon      = icon or (GT and GT(sid)) or nil,
+        kind      = kind or "buff",
+        mine      = mine and true or false,
+        className = className,
+    }
+end
+
+-- The picker reads the catalog through ns.GetSeenAuras(), which builds and
+-- sorts a list of every catalogued aura — now large, since the spellbook
+-- harvest seeds it. That list is cached and rebuilt only when the catalog
+-- changes; MarkSeenDirty() drops the cache. Every write to seen / groups /
+-- ignored / castable must call it.
+local seenCache
+local function MarkSeenDirty() seenCache = nil end
+ns.MarkSeenDirty = MarkSeenDirty
+
 local function RecordSeen(sid, data)
     if not AuraCueDB.seen then AuraCueDB.seen = {} end
     local key = tostring(sid)
@@ -731,8 +763,7 @@ local function RecordSeen(sid, data)
     -- or procced). Otherwise, if a *player* applied it (e.g. another Druid's
     -- Mark of the Wild), use that caster's class — when readable; the source is
     -- a secret value in instances, so it just stays untagged there.
-    local GM = C_MountJournal and C_MountJournal.GetMountFromSpell
-    local isMount = ((GM and GM(sid)) or IsRidingSpell(sid, Reveal(data.name))) and true or false
+    local isMount = IsMountish(sid, Reveal(data.name))
     local className
     if not isMount then
         if mine and SpellKnown and SpellKnown(sid) then
@@ -748,15 +779,17 @@ local function RecordSeen(sid, data)
     if existing then
         -- Backfill provenance we couldn't capture on first sighting (e.g.
         -- first seen in the open world, later re-seen inside a dungeon).
-        if not existing.dungeon then existing.dungeon = CurrentDungeon() end
-        if not existing.source then existing.source = ResolveSource(data, harmful) end
-        if existing.mine == nil then existing.mine = mine end
-        if boss and not existing.boss then existing.boss = true end
+        local changed = false
+        if not existing.dungeon then existing.dungeon = CurrentDungeon(); changed = true end
+        if not existing.source then existing.source = ResolveSource(data, harmful); changed = true end
+        if existing.mine == nil then existing.mine = mine; changed = true end
+        if boss and not existing.boss then existing.boss = true; changed = true end
         -- Self-heal a wrong boss flag if we now see it's yours or not harmful.
-        if existing.boss and (mine or not harmful) then existing.boss = false end
-        if existing.permanent == nil then existing.permanent = permanent end
-        if roleAura and not existing.roleAura then existing.roleAura = true end
-        if className and not existing.className then existing.className = className end
+        if existing.boss and (mine or not harmful) then existing.boss = false; changed = true end
+        if existing.permanent == nil then existing.permanent = permanent; changed = true end
+        if roleAura and not existing.roleAura then existing.roleAura = true; changed = true end
+        if className and not existing.className then existing.className = className; changed = true end
+        if changed then MarkSeenDirty() end
         return
     end
     AuraCueDB.seen[key] = {
@@ -771,6 +804,7 @@ local function RecordSeen(sid, data)
         roleAura  = roleAura,
         className = className,
     }
+    MarkSeenDirty()
 end
 
 -- Presence test for ONE watched aura, by its known spell ID. We query the
@@ -1173,7 +1207,7 @@ function ns.SetCueKind(spellKey, kind)
     kind = (kind == "debuff") and "debuff" or "buff"
     if cue.kind == kind then return end
     cue.kind = kind
-    if AuraCueDB.seen and AuraCueDB.seen[key] then AuraCueDB.seen[key].kind = kind end
+    if AuraCueDB.seen and AuraCueDB.seen[key] then AuraCueDB.seen[key].kind = kind; MarkSeenDirty() end
     cue.castSeen = nil   -- re-derive tracking mode for the new kind
     ApplyCueChange()
 end
@@ -1270,12 +1304,12 @@ end
 -- (interrupts, direct damage, target debuffs) never show up. Sorted by
 -- name. Returns { spellID, name, icon, secret }.
 function ns.GetSeenAuras()
+    if seenCache then return seenCache end
     local out = {}
     local seen = AuraCueDB and AuraCueDB.seen or {}
     local castable = (AuraCueDB and AuraCueDB.castable) or {}
     local ignored = (AuraCueDB and AuraCueDB.ignored) or {}
     local groups = (AuraCueDB and AuraCueDB.groups) or {}
-    local GetMount = C_MountJournal and C_MountJournal.GetMountFromSpell
     for key, info in pairs(seen) do
         local sid = tonumber(key)
         local kind = info.kind or "buff"
@@ -1299,7 +1333,7 @@ function ns.GetSeenAuras()
             -- a toy / food / world buff (whose aura id isn't a known spell).
             known   = (SpellKnown and SpellKnown(sid)) and true or false,
             ignored = ignored[key] and true or false,
-            mount   = ((GetMount and GetMount(sid)) or IsRidingSpell(sid, info.name)) and true or false,
+            mount   = IsMountish(sid, info.name),
             boss    = info.boss and true or false,
             permanent = info.permanent and true or false,
             roleAura  = info.roleAura and true or false,
@@ -1311,6 +1345,7 @@ function ns.GetSeenAuras()
         }
     end
     table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)
+    seenCache = out
     return out
 end
 
@@ -1319,6 +1354,7 @@ function ns.SetAuraIgnored(spellID, on)
     if not AuraCueDB then return end
     AuraCueDB.ignored = AuraCueDB.ignored or {}
     AuraCueDB.ignored[tostring(spellID)] = on and true or nil
+    MarkSeenDirty()
 end
 
 -- Assign (or clear, with a blank name) a catalogued aura's custom group.
@@ -1328,6 +1364,7 @@ function ns.SetAuraGroup(spellID, name)
     if type(name) == "string" then name = name:trim() end
     if not name or name == "" then name = nil end
     AuraCueDB.groups[tostring(spellID)] = name
+    MarkSeenDirty()
     if ns.RefreshOptions then ns.RefreshOptions() end
 end
 
@@ -1346,8 +1383,7 @@ function ns.GroupFor(spellID)
     if custom then return custom end
     local s = AuraCueDB and AuraCueDB.seen and AuraCueDB.seen[tostring(spellID)]
     if not s then return "Other" end
-    local GM = C_MountJournal and C_MountJournal.GetMountFromSpell
-    if (GM and GM(spellID)) or IsRidingSpell(spellID, s.name) then return "Mounts" end
+    if IsMountish(spellID, s.name) then return "Mounts" end
     if s.className and s.className ~= "" then return s.className end
     if s.mine then return "From you / your pet" end
     if s.kind == "debuff" then
@@ -1385,6 +1421,7 @@ function ns.SetAuraDetail(spellID, fields)
             e.kind = newKind
         end
     end
+    MarkSeenDirty()
     if ns.RefreshOptions then ns.RefreshOptions() end
 end
 
@@ -1397,6 +1434,7 @@ function ns.ForgetAura(spellID)
     if AuraCueDB.groups then AuraCueDB.groups[key] = nil end
     if AuraCueDB.ignored then AuraCueDB.ignored[key] = nil end
     if AuraCueDB.castable then AuraCueDB.castable[key] = nil end
+    MarkSeenDirty()
 end
 
 -- Distinct custom group names currently in use (sorted) — for suggestions.
@@ -1414,6 +1452,7 @@ end
 
 function ns.ResetIgnored()
     if AuraCueDB then AuraCueDB.ignored = {} end
+    MarkSeenDirty()
 end
 
 -- Rename a custom group everywhere (newName blank/nil deletes the group).
@@ -1424,6 +1463,7 @@ function ns.RenameAuraGroup(oldName, newName)
     for k, v in pairs(AuraCueDB.groups) do
         if v == oldName then AuraCueDB.groups[k] = newName end
     end
+    MarkSeenDirty()
     if ns.RefreshOptions then ns.RefreshOptions() end
 end
 
@@ -1460,7 +1500,7 @@ local function BackfillCues(cues)
             local auto = (cue.kind == "debuff") and (cue.dungeon or "Other") or "Buffs"
             if cue.category ~= auto and cue.category ~= "Buffs" and cue.category ~= "Debuffs" then
                 AuraCueDB.groups = AuraCueDB.groups or {}
-                if not AuraCueDB.groups[key] then AuraCueDB.groups[key] = cue.category end
+                if not AuraCueDB.groups[key] then AuraCueDB.groups[key] = cue.category; MarkSeenDirty() end
             end
             cue.category = nil
         end
@@ -1511,14 +1551,14 @@ local function SetActiveProfile()
 end
 ns.SetActiveProfile = SetActiveProfile
 
--- Full init at PLAYER_LOGIN (player + spec are reliable here).
 -- Pre-load this character's spellbook into the catalog so your class's
 -- abilities are pickable straight away, without having to cast each one once
 -- to "learn" it. Adds only active (non-passive) player spells, tagged with
 -- your class, and NEVER overwrites an aura we've already recorded richer
 -- detail for (kind/dungeon/source/etc.). The catalog is account-wide, so
--- logging into each character accumulates that class's spells. Returns the
--- number of new entries added.
+-- logging into each character accumulates that class's spells. Kind defaults
+-- to buff (the book can't tell us); the Edit menu / Manage Auras flips it.
+-- Returns the number of new entries added.
 local function HarvestSpellbook()
     if not AuraCueDB then return 0 end
     AuraCueDB.seen = AuraCueDB.seen or {}
@@ -1528,9 +1568,6 @@ local function HarvestSpellbook()
     local bank = (Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player) or 0
     local SPELL = (Enum and Enum.SpellBookItemType and Enum.SpellBookItemType.Spell) or 1
     local className = UnitClass("player")
-    local GetTex = C_Spell and C_Spell.GetSpellTexture
-    local GetName = C_Spell and C_Spell.GetSpellName
-    local GM = C_MountJournal and C_MountJournal.GetMountFromSpell
     local lines = CB.GetNumSpellBookSkillLines() or 0
     local added = 0
     for line = 1, lines do
@@ -1544,23 +1581,15 @@ local function HarvestSpellbook()
                     local sid = item.spellID or item.actionID
                     local key = sid and tostring(sid)
                     if key and not AuraCueDB.seen[key] then
-                        local isMount = ((GM and GM(sid)) or IsRidingSpell(sid, item.name)) and true or false
-                        AuraCueDB.seen[key] = {
-                            name      = item.name or (GetName and GetName(sid)),
-                            icon      = item.iconID or (GetTex and GetTex(sid)),
-                            -- We can't know if the spell applies a buff or a
-                            -- debuff from the book alone; default to buff. The
-                            -- Edit menu (or Manage Auras) flips it if wrong.
-                            kind      = "buff",
-                            mine      = true,
-                            className = (not isMount) and className or nil,
-                        }
+                        local cls = (not IsMountish(sid, item.name)) and className or nil
+                        AuraCueDB.seen[key] = NewSeenEntry(sid, "buff", true, cls, item.name, item.iconID)
                         added = added + 1
                     end
                 end
             end
         end
     end
+    if added > 0 then MarkSeenDirty() end
     return added
 end
 
@@ -1669,7 +1698,10 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         if unit == "player" and spellID then
             if AuraCueDB then
                 AuraCueDB.castable = AuraCueDB.castable or {}
-                AuraCueDB.castable[tostring(spellID)] = true
+                if not AuraCueDB.castable[tostring(spellID)] then
+                    AuraCueDB.castable[tostring(spellID)] = true
+                    MarkSeenDirty()   -- newly cast-trackable: affects instanceable
+                end
             end
             OnSelfCast(spellID)
             -- Catalog the aura this cast applies. The aura list can't be read
@@ -1681,8 +1713,10 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                 if not seen then return end
                 local key = tostring(spellID)
                 local known = SpellKnown(spellID) and true or false
-                local GM = C_MountJournal and C_MountJournal.GetMountFromSpell
-                local isMount = (GM and GM(spellID)) and true or false
+                -- Real mounts only here (riding abilities SHOULD be catalogued
+                -- via the cast path and grouped under Mounts), so don't fold
+                -- riding into isMount; track it separately for the class tag.
+                local isMount = GetMountFromSpell and GetMountFromSpell(spellID) and true or false
                 local riding = IsRidingSpell(spellID, C_Spell.GetSpellName(spellID))
                 local state, data = ReadAura(spellID)
                 if state == "present" and data then
@@ -1694,21 +1728,17 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                     -- aura (no aura, or a proc with a different id). Offer it
                     -- anyway so castable abilities aren't missing from the picker;
                     -- it'll be cast-tracked. Kind is a best guess (buff).
-                    local GT = C_Spell.GetSpellTexture
-                    seen[key] = {
-                        name = C_Spell.GetSpellName(spellID),
-                        icon = (GT and GT(spellID)) or nil,
-                        kind = "buff",
-                        mine = true,
-                    }
+                    seen[key] = NewSeenEntry(spellID, "buff", true)
+                    MarkSeenDirty()
                 end
                 -- Tag the casting class on an ability you cast (known player
-                -- spell, not a mount), so the picker files it under your class
-                -- (e.g. Earth Shield -> Shaman). Other classes' auras can't be
-                -- derived — the game has no spell->class lookup.
+                -- spell, not a mount/riding ability), so the picker files it
+                -- under your class (e.g. Earth Shield -> Shaman). Other classes'
+                -- auras can't be derived — the game has no spell->class lookup.
                 local entry = seen[key]
                 if entry and not entry.className and known and not isMount and not riding then
                     entry.className = UnitClass("player")
+                    MarkSeenDirty()
                 end
             end)
         end
@@ -1848,6 +1878,7 @@ function ns.ImportShare(str)
                 added = added + 1
             end
         end
+        if added > 0 then MarkSeenDirty() end
         if ns.RefreshOptions then ns.RefreshOptions() end
         return true, "Merged " .. added .. " new aura(s) into the catalog."
     end
@@ -1920,26 +1951,26 @@ function ns.GatherAuras()
         if not data then return false end
         local sid = Reveal(data.spellId)
         if sid and not AuraCueDB.seen[tostring(sid)] then
-            AuraCueDB.seen[tostring(sid)] = {
-                name = Reveal(data.name) or C_Spell.GetSpellName(sid),
-                icon = Reveal(data.icon),
-                kind = harmful and "debuff" or "buff",
-                mine = Reveal(data.isFromPlayerOrPlayerPet) and true or false,
-            }
+            AuraCueDB.seen[tostring(sid)] = NewSeenEntry(sid, harmful and "debuff" or "buff",
+                Reveal(data.isFromPlayerOrPlayerPet), nil, Reveal(data.name), Reveal(data.icon))
         end
         return false
     end
+    local recHelpful = function(d) return rec(d, false) end
+    local recHarmful = function(d) return rec(d, true) end
     local units = { "player", "pet", "target", "targettarget", "focus", "mouseover" }
     for i = 1, 40 do units[#units + 1] = "nameplate" .. i end
     for i = 1, 4 do units[#units + 1] = "party" .. i end
     for i = 1, 40 do units[#units + 1] = "raid" .. i end
     for _, u in ipairs(units) do
         if UnitExists(u) then
-            AuraUtil.ForEachAura(u, "HELPFUL", nil, function(d) return rec(d, false) end, true)
-            AuraUtil.ForEachAura(u, "HARMFUL", nil, function(d) return rec(d, true) end, true)
+            AuraUtil.ForEachAura(u, "HELPFUL", nil, recHelpful, true)
+            AuraUtil.ForEachAura(u, "HARMFUL", nil, recHarmful, true)
         end
     end
-    return ns.SeenCount() - before
+    local diff = ns.SeenCount() - before
+    if diff > 0 then MarkSeenDirty() end
+    return diff
 end
 
 -- ---------------------------------------------------------------------
@@ -2015,6 +2046,7 @@ SlashCmdList["AURACUE"] = function(msg)
 
         elseif cmd == "forget" then
             AuraCueDB.seen = {}
+            MarkSeenDirty()
             chatPrint("cleared the remembered-aura list (it refills as auras appear on you).")
             ns.RefreshOptions()
 
@@ -2058,12 +2090,10 @@ SlashCmdList["AURACUE"] = function(msg)
             end
 
         elseif cmd == "status" then
-            local seenN = 0
-            for _ in pairs(AuraCueDB.seen) do seenN = seenN + 1 end
             chatPrint("status:")
             print("  enabled:        " .. tostring(activeProfile.enabled))
             print("  watched auras:  " .. ns.CueCount())
-            print("  auras seen:     " .. seenN)
+            print("  auras seen:     " .. ns.SeenCount())
             local vb, vd = activeProfile.visual.buff, activeProfile.visual.debuff
             print("  buff window:    " .. tostring(vb.enabled)
                   .. " (scale " .. vb.scale .. ", " .. vb.duration .. "s)")
