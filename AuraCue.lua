@@ -1237,17 +1237,28 @@ function ns.SetCombineByName(on)
     ApplyCueChange()
 end
 
-function ns.AddCue(spellID)
+-- Watch an aura. `kindHint` ("buff"/"debuff") applies only when the spell isn't
+-- already in the catalog (e.g. an add-by-ID from the Buffs or Debuffs page); a
+-- catalogued aura keeps its stored kind.
+function ns.AddCue(spellID, kindHint)
     spellID = tonumber(spellID)
     if not spellID then return false end
+    local key = tostring(spellID)
     local name = C_Spell.GetSpellName(spellID)
-    local seen = AuraCueDB.seen[tostring(spellID)]
-    local kind = (seen and seen.kind) or "buff"
+    local seen = AuraCueDB.seen[key]
+    local kind = (seen and seen.kind) or (kindHint == "debuff" and "debuff") or "buff"
     local dungeon = seen and seen.dungeon
     local source = seen and seen.source
+    -- Add-by-ID can name a spell that isn't catalogued yet. Record it in the
+    -- account-wide catalog so it also shows up on the Manage Auras page, not
+    -- just in the watched list. (Picker adds are already catalogued.)
+    if not seen then
+        AuraCueDB.seen[key] = NewSeenEntry(spellID, kind, false)
+        MarkSeenDirty()
+    end
     -- Grouping in the watched list uses the single account-wide custom group
     -- (ns.GetAuraGroup); cues without one default to their kind's heading.
-    activeProfile.cues[tostring(spellID)] = {
+    activeProfile.cues[key] = {
         applied      = true,
         faded        = true,
         soundApplied = "rise",   -- played when the aura is gained

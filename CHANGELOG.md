@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.56.1
+
+- Adding an aura by spell ID now also adds it to the **Manage Auras** catalog,
+  not just the watched list — so you can group, edit, or hide it there like any
+  other aura. An ID added from the Debuffs page is also filed as a debuff (it
+  used to default to a buff).
+
 ## v0.56.0
 
 - Three new open/close sound pairs, so the only ascending-gained /

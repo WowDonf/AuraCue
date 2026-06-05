@@ -1217,7 +1217,7 @@ local function BuildKindPanel(kind)
         if ns.P().cues[tostring(id)] then addStatus:SetText("|cffffd200Already watching that.|r"); return end
         local nm = C_Spell.GetSpellName(id)
         if not nm then addStatus:SetText("|cffff6060Unknown spell ID " .. id .. ".|r"); return end
-        ns.AddCue(id)
+        ns.AddCue(id, kind)
         addBox:SetText("")
         local note = ns.IsSpellAuraSecret(id) and "  |cffff6060(may be hidden in instances)|r" or ""
         addStatus:SetText("|cff60ff60Added " .. nm .. ".|r" .. note)
