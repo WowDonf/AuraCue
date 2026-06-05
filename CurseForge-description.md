@@ -32,6 +32,13 @@ auras and casts, tracks cast abilities from the cast event so their cues fire
 in instances, and surfaces instanced debuffs through the game's private-aura
 sound. Nothing it does is combat-locked.
 
+**⚠️ Not every ability is trackable in combat.** Inside raids, Mythic+, delves,
+and PvP the game hides auras addons aren't allowed to read. AuraCue still cues
+the buffs *you* cast and plays a sound for debuffs that land on you — but an aura
+that simply appears on you **without a cast you made** (a proc, or a buff someone
+else puts on you) can't be tracked in that combat and will only cue out in the
+open world. Out of instances, everything works.
+
 ## No spell-ID hunting
 
 Your class's abilities are **pre-loaded from your spellbook** the moment you log
@@ -46,7 +53,8 @@ search link if you ever do need an ID.
 spells — AuraCue learns purely from what it sees you cast and what lands on
 you. That's by design: any aura works once it's been seen a single time,
 including brand-new or reworked abilities from a patch, with nothing on the
-addon's side to update.
+addon's side to update. It never hides anything on its own either — **any hiding
+is your choice** (and always reversible).
 
 ## More
 

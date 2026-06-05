@@ -20,7 +20,8 @@ Each watched aura can cue when it's **gained**, when it **fades**, or both:
   thickness / intensity.
 
 Buffs and debuffs each get their own on-screen window (size, colors, position,
-duration), configured on the **Appearance** page. Every watched row has an
+duration), configured on the **Appearance** page; sound and speech options live
+on the **Audio** page. Every watched row has an
 **Edit** button (or right-click it) for that aura's options: a **When**
 condition — fire everywhere, only in combat, only in instances, or only in the
 open world — its spoken text, whether it's treated as a buff or a debuff, and
@@ -39,6 +40,13 @@ of their coverage. AuraCue is built around that wall instead of fighting it:
   **private-aura applied sound**, so a debuff's Gained sound still plays.
 - Every value it reads is guarded, so it never errors on a masked one.
 
+> **⚠️ Not every ability is trackable in combat.** Inside raids, Mythic+,
+> delves, and PvP the game hides auras addons aren't allowed to read. AuraCue
+> still cues the buffs *you* cast and plays a sound for debuffs that land on
+> you — but an aura that simply appears on you **without a cast you made** (a
+> proc, or a buff someone else puts on you) can't be tracked in that combat and
+> will only cue out in the open world. Out of instances, everything works.
+
 ## The aura picker
 
 You build your watch list from a catalog AuraCue fills in for you. Your class's
@@ -53,6 +61,10 @@ of spells — it learns purely from what it observes you cast and what lands on
 you. This is by design: any aura works once it has been seen a single time,
 including brand-new or reworked abilities from a patch, with nothing on the
 addon's side to update or wait for.
+
+It also never hides or filters abilities on its own — everything it has seen
+stays in the catalog. **Any hiding is your choice** (the ✕ on a picker entry, or
+Manage Auras), and anything you hide can be restored at any time.
 
 - **Grouped submenus.** Buffs group under **your class** (e.g. abilities your
   Shaman casts → "Shaman"), **Mounts**, **From you / your pet**, and **World &
