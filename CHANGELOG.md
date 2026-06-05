@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.51.0
+
+- **One group, everywhere.** The watched-row Group box used to set a separate
+  per-spec "category" that only affected the watched list. It now sets the same
+  single, account-wide custom group used by the picker, Manage Auras, and the
+  Edit dialog — so a group set in any place shows everywhere. Ungrouped auras
+  auto-group by class / mount / dungeon (the same logic as the picker), and any
+  custom watched-list headings you'd set are migrated into custom groups on
+  login.
+
 ## v0.50.0
 
 - The Manage Auras **Edit** dialog now also sets the aura's **Custom group**.

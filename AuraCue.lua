@@ -1081,10 +1081,6 @@ function ns.SetCueKind(spellKey, kind)
     kind = (kind == "debuff") and "debuff" or "buff"
     if cue.kind == kind then return end
     cue.kind = kind
-    -- Move it out of the old kind's default category heading.
-    if cue.category == "Buffs" or cue.category == "Debuffs" then
-        cue.category = (kind == "debuff") and "Debuffs" or "Buffs"
-    end
     if AuraCueDB.seen and AuraCueDB.seen[key] then AuraCueDB.seen[key].kind = kind end
     cue.castSeen = nil   -- re-derive tracking mode for the new kind
     ApplyCueChange()
@@ -1115,15 +1111,8 @@ function ns.AddCue(spellID)
     local kind = (seen and seen.kind) or "buff"
     local dungeon = seen and seen.dungeon
     local source = seen and seen.source
-    -- Debuffs from mobs file under the dungeon they came from (the useful
-    -- grouping); a debuff you applied to yourself is just a "Debuffs" entry,
-    -- not dungeon content. Buffs default to "Buffs". Either can be retyped.
-    local category
-    if kind == "debuff" then
-        category = (seen and seen.mine and "Debuffs") or dungeon or "Other"
-    else
-        category = "Buffs"
-    end
+    -- Grouping in the watched list uses the single account-wide custom group
+    -- (ns.GetAuraGroup); cues without one default to their kind's heading.
     activeProfile.cues[tostring(spellID)] = {
         applied      = true,
         faded        = true,
@@ -1133,7 +1122,6 @@ function ns.AddCue(spellID)
         visual       = true,
         label    = name,
         kind     = kind,
-        category = category,
         dungeon  = dungeon,
         source   = source,
     }
@@ -1251,6 +1239,32 @@ function ns.SetAuraGroup(spellID, name)
     if ns.RefreshOptions then ns.RefreshOptions() end
 end
 
+-- The single (account-wide) custom group for an aura, or nil. Used everywhere:
+-- the picker submenus, Manage, and the watched-list headings.
+function ns.GetAuraGroup(spellID)
+    local g = AuraCueDB and AuraCueDB.groups and AuraCueDB.groups[tostring(spellID)]
+    return (g ~= "" and g) or nil
+end
+
+-- The heading an aura groups under: its custom group if set, else an automatic
+-- bucket (class / mount / self / dungeon / kind). One function so the picker
+-- submenus and the watched-list headers always agree.
+function ns.GroupFor(spellID)
+    local custom = ns.GetAuraGroup(spellID)
+    if custom then return custom end
+    local s = AuraCueDB and AuraCueDB.seen and AuraCueDB.seen[tostring(spellID)]
+    if not s then return "Other" end
+    local GM = C_MountJournal and C_MountJournal.GetMountFromSpell
+    if GM and GM(spellID) then return "Mounts" end
+    if s.className and s.className ~= "" then return s.className end
+    if s.mine then return "From you / your pet" end
+    if s.kind == "debuff" then
+        if s.boss then return "Boss" end
+        return (s.dungeon and s.dungeon ~= "") and s.dungeon or "Other"
+    end
+    return "World & other"
+end
+
 -- Edit a catalogued aura's stored details. `fields` may carry dungeon, source,
 -- className (blank clears any of these) and kind ("buff"/"debuff"). Only the
 -- keys present are changed. A watched cue for the same aura is kept in sync
@@ -1340,20 +1354,22 @@ eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 local SETTING_KEYS = { "enabled", "channel", "audioEnabled",
     "trackBuffs", "trackDebuffs", "visual", "cues" }
 
--- Heal a cue table: backfill kind/category, split the old single sound into
--- gained/faded, and remap any unknown sound key onto a bundled tone (`false`
--- = None / silent is preserved). Shared by login and profile import.
+-- Heal a cue table: backfill kind, split the old single sound into gained/
+-- faded, and remap any unknown sound key onto a bundled tone (`false` = None /
+-- silent is preserved). Shared by login and profile import.
 local function BackfillCues(cues)
     for key, cue in pairs(cues) do
         if not cue.kind then cue.kind = "buff" end
-        if not cue.category then
-            cue.category = (cue.kind == "debuff") and "Debuffs" or "Buffs"
-        end
-        -- Re-file a self-applied debuff that was auto-filed under its dungeon
-        -- (back when those weren't separated) into the plain "Debuffs" group.
-        if cue.kind == "debuff" and cue.dungeon and cue.category == cue.dungeon then
-            local s = AuraCueDB.seen and AuraCueDB.seen[key]
-            if s and s.mine then cue.category = "Debuffs" end
+        -- One-time: the watched list used to have its own per-cue heading
+        -- (cue.category). Promote a user-chosen heading (not an auto default)
+        -- into the single account-wide custom group, then drop the old field.
+        if cue.category then
+            local auto = (cue.kind == "debuff") and (cue.dungeon or "Other") or "Buffs"
+            if cue.category ~= auto and cue.category ~= "Buffs" and cue.category ~= "Debuffs" then
+                AuraCueDB.groups = AuraCueDB.groups or {}
+                if not AuraCueDB.groups[key] then AuraCueDB.groups[key] = cue.category end
+            end
+            cue.category = nil
         end
         if cue.sound ~= nil and cue.soundApplied == nil and cue.soundFaded == nil then
             cue.soundApplied = cue.sound

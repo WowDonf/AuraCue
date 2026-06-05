@@ -158,6 +158,19 @@ end
 local COND_ORDER = { "always", "combat", "instance", "world" }
 local COND_LABEL = { always = "Any", combat = "Cbt", instance = "Inst", world = "Wld" }
 
+-- Display order for the automatic group buckets; custom/class/dungeon groups
+-- sort above these. Shared by the picker submenus and the watched list so they
+-- always group the same way.
+local BUCKET_ORDER = { ["Boss"] = 0, ["From you / your pet"] = 1, ["Mounts"] = 2, ["World & other"] = 3, ["Other"] = 4 }
+local function sortGroupKeys(keys)
+    table.sort(keys, function(a, b)
+        local oa, ob = BUCKET_ORDER[a], BUCKET_ORDER[b]
+        if oa and ob then return oa < ob end
+        if oa or ob then return ob ~= nil end   -- custom/class/dungeon first
+        return a < b
+    end)
+end
+
 local refreshers = {}
 local function RefreshAllPanels()
     if not ns.P() then return end
@@ -879,22 +892,7 @@ local function BuildKindPanel(kind)
     -- fall back to reliable auto-buckets (debuffs by dungeon; buffs by mount /
     -- cast-by-me / world). The auto-buckets have a fixed display order and sit
     -- below any custom groups.
-    local BUCKET_ORDER = { ["Boss"] = 0, ["From you / your pet"] = 1, ["Mounts"] = 2, ["World & other"] = 3, ["Other"] = 4 }
-    local function GroupOf(sp)
-        if sp.group and sp.group ~= "" then return sp.group end
-        if sp.mount then return "Mounts" end
-        -- A class ability you cast (tagged at cast time) files under that class.
-        if sp.className and sp.className ~= "" then return sp.className end
-        -- Other self-applied auras (buff OR debuff) are yours, not dungeon/boss
-        -- content — check this before the debuff dungeon/boss buckets so a
-        -- self-debuff cast in a dungeon doesn't get filed under it.
-        if sp.mine then return "From you / your pet" end
-        if kind == "debuff" then
-            if sp.boss then return "Boss" end
-            return (sp.dungeon and sp.dungeon ~= "") and sp.dungeon or "Other"
-        end
-        return "World & other"
-    end
+    local function GroupOf(sp) return ns.GroupFor(sp.spellID) end
 
     addDD:SetupMenu(function(_, root)
         if not ns.P() then return end
@@ -935,12 +933,7 @@ local function BuildKindPanel(kind)
         end
         -- Custom groups first (alphabetical); the auto-buckets follow in their
         -- fixed order.
-        table.sort(order, function(a, b)
-            local oa, ob = BUCKET_ORDER[a], BUCKET_ORDER[b]
-            if oa and ob then return oa < ob end
-            if oa or ob then return ob ~= nil end
-            return a < b
-        end)
+        sortGroupKeys(order)
         for _, g in ipairs(order) do
             local list = groups[g]
             local sub = root:CreateButton(string.format("%s  |cff808080(%d)|r", g, #list))
@@ -1320,18 +1313,14 @@ local function BuildKindPanel(kind)
         row.cat:SetAutoFocus(false)
         row.cat:SetFontObject("ChatFontNormal")
         row.cat:SetScript("OnEditFocusLost", function(self)
-            local cue = row.spellID and ns.P().cues[row.spellID]
-            if not cue then return end
+            if not row.spellID then return end
             local t = (self:GetText() or ""):trim()
-            local newCat = (t ~= "" and t) or ((cue.kind == "debuff") and "Debuffs" or "Buffs")
-            if newCat == cue.category then return end
-            cue.category = newCat
-            RebuildList()
+            if t == (ns.GetAuraGroup(row.spellID) or "") then return end
+            ns.SetAuraGroup(row.spellID, t)   -- refreshes all panels (the unified group)
         end)
         row.cat:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
         row.cat:SetScript("OnEscapePressed", function(self)
-            local cue = row.spellID and ns.P().cues[row.spellID]
-            self:SetText(cue and cue.category or "")
+            self:SetText((row.spellID and ns.GetAuraGroup(row.spellID)) or "")
             self:ClearFocus()
         end)
 
@@ -1345,7 +1334,7 @@ local function BuildKindPanel(kind)
         for sid, cue in pairs(ns.P().cues) do
             local k = (cue.kind == "debuff") and "debuff" or "buff"
             if k == kind then
-                local cat = cue.category or label
+                local cat = ns.GroupFor(sid)
                 groups[cat] = groups[cat] or {}
                 local g = groups[cat]
                 g[#g + 1] = sid
@@ -1354,11 +1343,7 @@ local function BuildKindPanel(kind)
         end
         local cats = {}
         for cat in pairs(groups) do cats[#cats + 1] = cat end
-        table.sort(cats, function(a, b)
-            local ra, rb = (a == label) and 0 or 1, (b == label) and 0 or 1
-            if ra ~= rb then return ra < rb end
-            return a < b
-        end)
+        sortGroupKeys(cats)
 
         local yOff, rowIdx, hdrIdx = 0, 0, 0
         for _, cat in ipairs(cats) do
@@ -1387,7 +1372,7 @@ local function BuildKindPanel(kind)
                 row.applied:SetChecked(cue.applied and true or false)
                 row.faded:SetChecked(cue.faded and true or false)
                 row.visual:SetChecked(cue.visual and true or false)
-                row.cat:SetText(cue.category or "")
+                row.cat:SetText(ns.GetAuraGroup(sid) or "")
                 row.cond:SetText(COND_LABEL[cue.when or "always"])
                 row.soundApplied:GenerateMenu()
                 row.soundFaded:GenerateMenu()
