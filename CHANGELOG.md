@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.58.0
+
+- **Audio** is now its own page in the settings list (moved off the main page),
+  with a dedicated **Text-to-speech** section heading for the voice and
+  spoken-phrase settings. The main page keeps the global toggles. The
+  subcategories are now ordered alphabetically.
+
 ## v0.57.3
 
 - Gained/faded phrase fields now show their default as greyed placeholder text

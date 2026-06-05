@@ -546,14 +546,30 @@ do
         function() return not ns.IsMinimapShown or ns.IsMinimapShown() end,
         function(v) if ns.SetMinimapShown then ns.SetMinimapShown(v) end end)
 
-    main.Header("Audio cue")
-    main.Check("Play sound cues",
+    content:SetHeight(-main.y + 20)
+end
+
+-- ---------------------------------------------------------------------
+-- Audio subcategory: the sound master switch + channel, and the TTS voice
+-- and spoken-phrase settings.
+-- ---------------------------------------------------------------------
+local audioPanel = NewPanel("Audio")
+do
+    local content, LEFT = audioPanel.content, audioPanel.LEFT
+
+    local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
+    titleFS:SetPoint("TOPLEFT", LEFT, audioPanel.y)
+    titleFS:SetText("Audio")
+    audioPanel.y = audioPanel.y - 24
+
+    audioPanel.Header("Sound cues")
+    audioPanel.Check("Play sound cues",
         function() return ns.P().audioEnabled end,
         function(v) ns.P().audioEnabled = v end)
-    main.Desc("Master switch for all cue sounds. Each aura's gained / faded sound is set in " ..
+    audioPanel.Desc("Master switch for all cue sounds. Each aura's gained / faded sound is set in " ..
         "its section; this is the audio channel they route through, so you can balance cue " ..
         "volume against game audio.")
-    local channelDropdown = main.Dropdown("Audio channel", 200)
+    local channelDropdown = audioPanel.Dropdown("Audio channel", 200)
     channelDropdown:SetDefaultText("Choose a channel")
     channelDropdown:SetupMenu(function(_, root)
         for _, c in ipairs(ns.CHANNELS) do
@@ -568,12 +584,14 @@ do
         end
     end)
     channelDropdown.Refresh = function() channelDropdown:GenerateMenu() end
-    main.widgets[#main.widgets + 1] = channelDropdown
-    main.Button("Play test cue", 160, function() ns.PlayTestCue() end)
+    audioPanel.widgets[#audioPanel.widgets + 1] = channelDropdown
+    audioPanel.Button("Play test cue", 160, function() ns.PlayTestCue() end)
 
-    main.Desc("Spoken cues: pick \"Speak the name (TTS)\" as a buff's or debuff's sound to have " ..
+    -- Text-to-speech subsection.
+    audioPanel.Header("Text-to-speech")
+    audioPanel.Desc("Spoken cues: pick \"Speak the name (TTS)\" as a buff's or debuff's sound to have " ..
         "AuraCue say its name aloud. These settings control the voice.")
-    local voiceDD = main.Dropdown("Speech voice", 240)
+    local voiceDD = audioPanel.Dropdown("Speech voice", 240)
     voiceDD:SetDefaultText("Default voice")
     voiceDD:SetupMenu(function(_, root)
         if not ns.P() then return end
@@ -594,27 +612,27 @@ do
         end
     end)
     voiceDD.Refresh = function() voiceDD:GenerateMenu() end
-    main.widgets[#main.widgets + 1] = voiceDD
-    main.Slider("Speech rate", -10, 10, 1, "%d",
+    audioPanel.widgets[#audioPanel.widgets + 1] = voiceDD
+    audioPanel.Slider("Speech rate", -10, 10, 1, "%d",
         function() return ns.P().ttsRate end,
         function(v) ns.P().ttsRate = v end)
-    main.Slider("Speech volume", 0, 100, 5, "%d",
+    audioPanel.Slider("Speech volume", 0, 100, 5, "%d",
         function() return ns.P().ttsVolume end,
         function(v) ns.P().ttsVolume = v end)
-    main.Desc("What spoken cues say. {name} is replaced by the aura's name. Any cue can override " ..
+    audioPanel.Desc("What spoken cues say. {name} is replaced by the aura's name. Any cue can override " ..
         "these with its own phrase — which can also use {name} (Edit a watched aura → Set spoken text).")
-    main.EditLine("Gained phrase",
+    audioPanel.EditLine("Gained phrase",
         function() return ns.P().speakFormatApplied end,
         function(v) ns.P().speakFormatApplied = (v ~= "" and v) or nil end, 300, "{name} gained")
-    main.EditLine("Faded phrase",
+    audioPanel.EditLine("Faded phrase",
         function() return ns.P().speakFormatFaded end,
         function(v) ns.P().speakFormatFaded = (v ~= "" and v) or nil end, 300, "{name} faded")
     -- Hear the actual phrases (with {name} shown via a sample aura name).
-    main.SideBySide(
+    audioPanel.SideBySide(
         "Test gained phrase", function() ns.Speak(ns.ResolveSpokenPhrase("applied", nil, "Bloodlust")) end,
         "Test faded phrase",  function() ns.Speak(ns.ResolveSpokenPhrase("faded", nil, "Bloodlust")) end)
 
-    content:SetHeight(-main.y + 20)
+    content:SetHeight(-audioPanel.y + 20)
 end
 
 -- Shared modal-dialog scaffold for the two custom edit dialogs (spoken phrases,
@@ -2090,7 +2108,9 @@ if Settings and Settings.RegisterCanvasLayoutCategory then
     mainCategory = Settings.RegisterCanvasLayoutCategory(main.panel, "AuraCue")
     Settings.RegisterAddOnCategory(mainCategory)
     if Settings.RegisterCanvasLayoutSubcategory then
+        -- Subcategories listed alphabetically.
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, appearancePanel.panel, "Appearance")
+        Settings.RegisterCanvasLayoutSubcategory(mainCategory, audioPanel.panel, "Audio")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, debuffPanel.panel, "Debuffs")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, managePanel.panel, "Manage Auras")
