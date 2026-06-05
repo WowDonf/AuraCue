@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.48.1
+
+- Removed the Name field from the Edit dialog (added by mistake).
+- Editing an aura's Kind in the Edit dialog now also moves a watched cue for it
+  between the Buffs and Debuffs pages automatically (dungeon/source edits sync
+  to the cue too).
+
 ## v0.48.0
 
 - The Manage Auras **Edit** dialog now also edits an aura's **Name**, **Class**

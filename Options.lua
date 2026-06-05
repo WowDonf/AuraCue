@@ -1574,7 +1574,7 @@ local function OpenDetailDialog(sp, after)
     local sid = sp.spellID
     if not detailDialog then
         local d = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        d:SetSize(380, 360)
+        d:SetSize(380, 300)
         d:SetPoint("CENTER")
         d:SetFrameStrata("FULLSCREEN_DIALOG")
         d:EnableMouse(true)
@@ -1598,15 +1598,14 @@ local function OpenDetailDialog(sp, after)
             eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
             return eb
         end
-        d.nameBox = field("Name", -44)
-        d.dungeonBox = field("Dungeon", -94)
-        d.sourceBox = field("Discovered by (source)", -144)
+        d.dungeonBox = field("Dungeon", -44)
+        d.sourceBox = field("Discovered by (source)", -94)
 
         local classLbl = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        classLbl:SetPoint("TOPLEFT", 24, -194)
+        classLbl:SetPoint("TOPLEFT", 24, -144)
         classLbl:SetText("Class")
         d.classDD = CreateFrame("DropdownButton", nil, d, "WowStyle1DropdownTemplate")
-        d.classDD:SetPoint("TOPLEFT", 28, -212)
+        d.classDD:SetPoint("TOPLEFT", 28, -162)
         d.classDD:SetSize(180, 26)
         d.classDD:SetupMenu(function(_, root)
             root:CreateRadio("(none)",
@@ -1626,8 +1625,8 @@ local function OpenDetailDialog(sp, after)
             fs:SetPoint("LEFT", cb, "RIGHT", 2, 1); fs:SetText(label)
             return cb
         end
-        d.kindCheck = check("Treat as a debuff", 24, -250)
-        d.bossCheck = check("Boss aura", 210, -250)
+        d.kindCheck = check("Treat as a debuff", 24, -200)
+        d.bossCheck = check("Boss aura", 210, -200)
 
         d.save = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
         d.save:SetSize(100, 24); d.save:SetText("Save")
@@ -1641,7 +1640,6 @@ local function OpenDetailDialog(sp, after)
     end
     local d = detailDialog
     d.title:SetText(sp.name or ("Spell " .. tostring(sid)))
-    d.nameBox:SetText(sp.name or "")
     d.dungeonBox:SetText(sp.dungeon or "")
     d.sourceBox:SetText(sp.source or "")
     d.selClass = sp.className
@@ -1651,7 +1649,6 @@ local function OpenDetailDialog(sp, after)
     d.bossCheck:SetChecked(sp.boss and true or false)
     d.save:SetScript("OnClick", function()
         ns.SetAuraDetail(sid, {
-            name      = d.nameBox:GetText(),
             dungeon   = d.dungeonBox:GetText(),
             source    = d.sourceBox:GetText(),
             className = d.selClass or "",
