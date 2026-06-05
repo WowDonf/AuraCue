@@ -678,8 +678,54 @@ local function ResolveSource(data, harmful)
     return nil
 end
 
+-- Riding / skyriding flight abilities (Skyward Ascent, Surge Forward, Whirling
+-- Surge, etc.) are active spells, so they'd otherwise be pulled into the
+-- catalog by the spellbook harvest and the cast cataloguer — but they're never
+-- useful as aura cues, so we keep them out entirely. Matched by name (enUS)
+-- with a few known spell IDs as a backstop. We only ever catalogue
+-- non-passive spells, so a name collision with a passive class ability (e.g. a
+-- Warrior's Second Wind) can't sneak a real ability into this filter.
+local RIDING_NAMES = {
+    ["Skyriding"] = true, ["Skyriding Basics"] = true, ["Dragonriding"] = true,
+    ["Dragonriding Basics"] = true, ["Soar"] = true, ["Lift Off"] = true,
+    ["Surge Forward"] = true, ["Skyward Ascent"] = true, ["Whirling Surge"] = true,
+    ["Aerial Halt"] = true, ["Second Wind"] = true, ["Lightning Rush"] = true,
+    ["Bronze Timelock"] = true, ["Bronze Rewind"] = true, ["Switchback"] = true,
+    ["Switch Flight Style"] = true, ["Flight Style: Skyriding"] = true,
+    ["Flight Style: Steady"] = true, ["Thrill of the Skies"] = true,
+    ["Winds of the Isles"] = true, ["Endless Possibility"] = true,
+    ["Ground Skimming"] = true, ["Airborne Tumbling"] = true,
+}
+local RIDING_IDS = {
+    [372608] = true, [372610] = true, [376744] = true, [361584] = true,
+    [403092] = true, [374990] = true, [375585] = true, [376777] = true,
+    [459188] = true,
+}
+local function IsRidingSpell(sid, name)
+    if sid and RIDING_IDS[sid] then return true end
+    if name and RIDING_NAMES[name] then return true end
+    return false
+end
+
+-- Strip riding/skyriding abilities (and any leftovers from before this filter
+-- existed) out of the account-wide catalog. Run on login so they never stick.
+local function PurgeRidingSpells()
+    local seen = AuraCueDB and AuraCueDB.seen
+    if not seen then return end
+    local castable, groups, ignored = AuraCueDB.castable, AuraCueDB.groups, AuraCueDB.ignored
+    for key, info in pairs(seen) do
+        if IsRidingSpell(tonumber(key), info and info.name) then
+            seen[key] = nil
+            if castable then castable[key] = nil end
+            if groups then groups[key] = nil end
+            if ignored then ignored[key] = nil end
+        end
+    end
+end
+
 local function RecordSeen(sid, data)
     if not AuraCueDB.seen then AuraCueDB.seen = {} end
+    if IsRidingSpell(sid, Reveal(data and data.name)) then return end
     local key = tostring(sid)
     local harmful = Reveal(data.isHarmful) and true or false
     -- isFromPlayerOrPlayerPet is a never-secret field: it tells us the aura
@@ -1481,7 +1527,7 @@ local function HarvestSpellbook()
                     -- actionID is the base id. Prefer spellID, fall back to base.
                     local sid = item.spellID or item.actionID
                     local key = sid and tostring(sid)
-                    if key and not AuraCueDB.seen[key] then
+                    if key and not AuraCueDB.seen[key] and not IsRidingSpell(sid, item.name) then
                         local isMount = GM and GM(sid) and true or false
                         AuraCueDB.seen[key] = {
                             name      = item.name or (GetName and GetName(sid)),
@@ -1559,6 +1605,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
 
     elseif event == "PLAYER_LOGIN" then
         InitProfile()
+        PurgeRidingSpells()  -- drop riding/skyriding abilities from the catalog
         HarvestSpellbook()   -- seed this character's spells into the catalog
         chatPrint("loaded. Type |cffffd200/cue|r for commands.")
         if ns.migratedFromCueSense then
@@ -1626,7 +1673,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                     -- The cast applied a same-id aura we can read: record it with
                     -- its real kind / fields.
                     RecordSeen(spellID, data)
-                elseif not seen[key] and known and not isMount then
+                elseif not seen[key] and known and not isMount
+                    and not IsRidingSpell(spellID, C_Spell.GetSpellName(spellID)) then
                     -- A known ability you cast that applies no readable same-id
                     -- aura (no aura, or a proc with a different id). Offer it
                     -- anyway so castable abilities aren't missing from the picker;

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.54.1
+
+- Riding / skyriding flight abilities (Skyward Ascent, Surge Forward, Whirling
+  Surge, Aerial Halt, etc.) are no longer added to the catalog — they were
+  getting pulled in by the spellbook pre-load and by casting them, but never
+  make useful aura cues. Any that were already in your catalog are removed on
+  login.
+
 ## v0.54.0
 
 - **Spellbook pre-loading.** Your character's active spells are now added to
