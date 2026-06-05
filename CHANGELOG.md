@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.58.1
+
+- The add-an-aura picker now stays on-screen and scrolls: both the menu and each
+  group submenu are capped to ~55% of screen height instead of overflowing off
+  the bottom (a class group can hold a lot of spells now the spellbook seeds the
+  catalog).
+- The Audio page's Gained/Faded phrase fields now actually show "{name} gained"
+  / "{name} faded" as greyed placeholder text. They were pre-filled with the
+  literal default, so the placeholder never appeared; the default is now blank
+  (same spoken result) and existing profiles holding only the old default are
+  cleared so the placeholder shows.
+
 ## v0.58.0
 
 - **Audio** is now its own page in the settings list (moved off the main page),

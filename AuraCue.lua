@@ -70,10 +70,12 @@ local PROFILE_DEFAULTS = {
     ttsRate = 0,                 -- text-to-speech rate (-10..10)
     ttsVolume = 100,             -- text-to-speech volume (0..100)
     ttsVoice = nil,              -- chosen TTS voice id (nil = first available)
-    -- General spoken-cue phrasing; {name} is replaced by the aura's name. A
-    -- cue can override these with its own literal phrase (cue.speakApplied/Faded).
-    speakFormatApplied = "{name} gained",
-    speakFormatFaded   = "{name} faded",
+    -- General spoken-cue phrasing; {name} is replaced by the aura's name. Left
+    -- blank by default so the options field shows "{name} gained" /
+    -- "{name} faded" as greyed placeholder; ns.ResolveSpokenPhrase falls back to
+    -- exactly those when blank. A cue can override per-event (cue.speakApplied).
+    speakFormatApplied = nil,
+    speakFormatFaded   = nil,
     -- Separate on-screen window per kind, so buffs and debuffs can have
     -- their own size / position / color / duration.
     visual = {
@@ -1592,6 +1594,12 @@ local function SetActiveProfile()
     MigrateVisual(activeProfile)
     MergeDefaults(activeProfile, PROFILE_DEFAULTS)
     ValidateRanges(activeProfile)
+    -- The general spoken formats used to default to the literal "{name} gained"
+    -- / "{name} faded". They're blank-by-default now (shown as placeholder, same
+    -- spoken result). Clear a stored value that only matches the old default so
+    -- the placeholder shows instead of pre-filled text.
+    if activeProfile.speakFormatApplied == "{name} gained" then activeProfile.speakFormatApplied = nil end
+    if activeProfile.speakFormatFaded == "{name} faded" then activeProfile.speakFormatFaded = nil end
     BackfillCues(activeProfile.cues)
     RebuildAliases()
     ResyncTracking()   -- fresh tracking state for the (possibly different) cue set

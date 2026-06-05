@@ -338,7 +338,8 @@ local function NewPanel(name)
         eb:SetScript("OnEditFocusLost", function(self) setter(self:GetText() or "") end)
         eb.Refresh = function() eb:SetText(getter() or "") end
         if placeholder then
-            local ph = eb:CreateFontString(nil, "ARTWORK", "ChatFontNormal")
+            local ph = eb:CreateFontString(nil, "OVERLAY")
+            ph:SetFontObject("ChatFontNormal")
             ph:SetPoint("LEFT", eb, "LEFT", 6, 0)
             ph:SetPoint("RIGHT", eb, "RIGHT", -6, 0)
             ph:SetJustifyH("LEFT")
@@ -703,7 +704,8 @@ local function OpenSpeechDialog(sid, name, applied, faded, after)
         -- Greyed placeholder showing the default (the general format) while the
         -- override box is empty, so it's clear what plays if you leave it blank.
         local function attachPlaceholder(box)
-            local ph = box:CreateFontString(nil, "ARTWORK", "ChatFontNormal")
+            local ph = box:CreateFontString(nil, "OVERLAY")
+            ph:SetFontObject("ChatFontNormal")
             ph:SetPoint("LEFT", box, "LEFT", 6, 0)
             ph:SetPoint("RIGHT", box, "RIGHT", -6, 0)
             ph:SetJustifyH("LEFT")
@@ -1144,7 +1146,11 @@ local function BuildKindPanel(kind)
 
     addDD:SetupMenu(function(_, root)
         if not ns.P() then return end
-        if root.SetScrollMode then root:SetScrollMode(GetScreenHeight() * 0.6) end
+        -- Cap menu height so it stays on-screen and scrolls instead of being
+        -- clipped. Applied to the root AND each group submenu (a class bucket
+        -- can hold dozens of spells now the spellbook seeds the catalog).
+        local maxH = GetScreenHeight() * 0.55
+        if root.SetScrollMode then root:SetScrollMode(maxH) end
 
         local matches = {}
         for _, sp in ipairs(ns.GetSeenAuras()) do
@@ -1185,6 +1191,7 @@ local function BuildKindPanel(kind)
         for _, g in ipairs(order) do
             local list = groups[g]
             local sub = root:CreateButton(string.format("%s  |cff808080(%d)|r", g, #list))
+            if sub.SetScrollMode then sub:SetScrollMode(maxH) end
             for _, sp in ipairs(list) do AddAuraButton(sub, sp) end
         end
     end)
