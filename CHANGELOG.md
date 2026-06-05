@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.55.0
+
+- Performance: the picker no longer rebuilds and re-sorts the entire catalog
+  every time you type in its search box — the list is cached and rebuilt only
+  when the catalog actually changes. This matters now the catalog is seeded
+  from your spellbook and can be large.
+- Internal cleanup (no behavior change): shared a mount/riding resolver and a
+  catalog-entry builder across the core; consolidated the two custom edit
+  dialogs behind one factory; lifted the watched-row widget builders out of the
+  panel builder; assorted small de-duplication.
+
 ## v0.54.3
 
 - Performance: the background catalog scan (which fills the picker) no longer
