@@ -805,16 +805,25 @@ ns.ReadAura = ReadAura
 
 -- Catalogue auras currently readable on the player (for the picker). This
 -- still reads spellIds, so it's best-effort and mostly fills out of combat;
--- it does NOT drive cues.
+-- it does NOT drive cues. It runs from ScanPlayerAuras on every UNIT_AURA, so
+-- it's throttled to at most once per interval — cataloguing is a background
+-- nicety, not time-critical, and a full double aura sweep on every combat aura
+-- tick is pure waste. The handler is hoisted to module scope so we don't
+-- allocate a fresh closure each call.
+local CATALOG_INTERVAL = 1.0
+local lastCatalog = 0
+local function catalogHandler(data)
+    if not data then return false end
+    local sid = Reveal(data.spellId)
+    if sid then RecordSeen(sid, data) end
+    return false
+end
 local function CatalogVisibleAuras()
-    local function handle(data)
-        if not data then return false end
-        local sid = Reveal(data.spellId)
-        if sid then RecordSeen(sid, data) end
-        return false
-    end
-    AuraUtil.ForEachAura("player", "HELPFUL", nil, handle, true)
-    AuraUtil.ForEachAura("player", "HARMFUL", nil, handle, true)
+    local now = GetTime()
+    if now - lastCatalog < CATALOG_INTERVAL then return end
+    lastCatalog = now
+    AuraUtil.ForEachAura("player", "HELPFUL", nil, catalogHandler, true)
+    AuraUtil.ForEachAura("player", "HARMFUL", nil, catalogHandler, true)
 end
 
 -- Combined read across a primary id and a list of alias ids: "present" if any
@@ -1045,7 +1054,32 @@ local function RebuildAliases()
     wipe(cueAlts)
     if not activeProfile or not activeProfile.cues then return end
     local seen = AuraCueDB and AuraCueDB.seen or {}
-    for key, cue in pairs(activeProfile.cues) do
+    local cues = activeProfile.cues
+
+    -- Auto-combine pulls in every catalogued aura sharing a cue's name. If any
+    -- name-combine is active, build a name -> {sidStr,...} index once so each
+    -- cue is an O(1) lookup, rather than re-scanning the whole (now large,
+    -- spellbook-seeded) catalog per cue.
+    local wantName = activeProfile.combineByName
+    if not wantName then
+        for _, cue in pairs(cues) do
+            if cue.matchName then wantName = true; break end
+        end
+    end
+    local byName
+    if wantName then
+        byName = {}
+        for sidStr, info in pairs(seen) do
+            local nm = info.name
+            if nm then
+                local list = byName[nm]
+                if not list then list = {}; byName[nm] = list end
+                list[#list + 1] = sidStr
+            end
+        end
+    end
+
+    for key, cue in pairs(cues) do
         local merged, used = {}, { [key] = true }
         local function add(v)
             local n = tonumber(v)
@@ -1056,12 +1090,9 @@ local function RebuildAliases()
             end
         end
         if cue.alts then for _, a in ipairs(cue.alts) do add(a) end end
-        -- Auto-combine: every catalogued aura sharing this cue's name (when the
-        -- global setting is on, or this cue opted in).
-        if (activeProfile.combineByName or cue.matchName) and cue.label then
-            for sidStr, info in pairs(seen) do
-                if info.name == cue.label then add(sidStr) end
-            end
+        if byName and (activeProfile.combineByName or cue.matchName) and cue.label then
+            local list = byName[cue.label]
+            if list then for _, sidStr in ipairs(list) do add(sidStr) end end
         end
         cueAlts[key] = (#merged > 0) and merged or nil
     end

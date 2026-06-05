@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.54.3
+
+- Performance: the background catalog scan (which fills the picker) no longer
+  runs a full double aura sweep on every aura change during combat — it's
+  throttled to at most once a second, since it's only a convenience, not
+  something cues depend on. The alias/auto-combine rebuild also now indexes the
+  catalog by name once instead of re-scanning the whole (much larger, now
+  spellbook-seeded) catalog for every watched aura. No behavior change.
+
 ## v0.54.2
 
 - Riding / skyriding flight abilities (Skyward Ascent, Surge Forward, Whirling
