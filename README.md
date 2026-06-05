@@ -27,6 +27,37 @@ condition — fire everywhere, only in combat, only in instances, or only in the
 open world — its spoken text, whether it's treated as a buff or a debuff, and
 combining (below).
 
+## Screenshots
+
+**Buffs / Skills — the watched list.** Each aura has gained/faded sound
+dropdowns and a per-row **Edit** menu:
+
+![The Buffs / Skills page with watched auras](assets/screenshots/buffs-skills.png)
+
+**One alert, many spell IDs.** Heroism auto-combined with its cross-class
+equivalents — Bloodlust, Time Warp, Primal Rage, and Fury of the Aspects:
+
+![Watched-aura tooltip showing the combined spell IDs](assets/screenshots/combine-tooltip.png)
+
+**Manage Auras — filter and bulk-edit the whole catalog:**
+
+![The Manage Auras page](assets/screenshots/manage-auras.png)
+
+**Audio — channel plus text-to-speech voice and phrases:**
+
+![The Audio settings page](assets/screenshots/audio.png)
+
+<details>
+<summary>More pages — Global Settings, Appearance, Sharing</summary>
+
+![Global Settings page](assets/screenshots/global-settings.png)
+
+![Appearance page](assets/screenshots/appearance.png)
+
+![Sharing page](assets/screenshots/sharing.png)
+
+</details>
+
 ## Working in instances
 
 Midnight (patch 12.0) hides combat data from addons behind "secret values"
