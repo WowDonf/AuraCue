@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.54.2
+
+- Riding / skyriding flight abilities (Skyward Ascent, Surge Forward, Whirling
+  Surge, etc.) are now catalogued and filed under the **Mounts** group instead
+  of being dropped, so they sit with your mounts and are covered by the "Hide
+  mounts" filter. (Reverses the removal from v0.54.1.)
+
 ## v0.54.1
 
 - Riding / skyriding flight abilities (Skyward Ascent, Surge Forward, Whirling
