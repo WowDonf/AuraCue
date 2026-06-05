@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.53.0
+
+- Replaced the per-row "When" (Any/Cbt/Inst/Wld) cycle button with an **Edit**
+  button that opens all the per-cue options in one menu: when to fire, spoken
+  text, treat-as buff/debuff, and the combine/alias options. (Right-click still
+  works too.)
+
 ## v0.52.1
 
 - The watched-row Group field now shows the aura's effective heading (its

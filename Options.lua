@@ -156,7 +156,8 @@ end
 -- them all (used by slash commands and cross-panel updates).
 -- Per-cue "when" condition cycle (compact button on each row).
 local COND_ORDER = { "always", "combat", "instance", "world" }
-local COND_LABEL = { always = "Any", combat = "Cbt", instance = "Inst", world = "Wld" }
+local WHEN_FULL = { always = "Everywhere", combat = "Only in combat",
+    instance = "Only in instances", world = "Only in the open world" }
 
 -- Display order for the automatic group buckets; custom/class/dungeon groups
 -- sort above these. Shared by the picker submenus and the watched list so they
@@ -1239,42 +1240,55 @@ local function BuildKindPanel(kind)
                 end
                 GameTooltip:AddLine("Also triggers on: " .. table.concat(parts, ", "), 0.6, 0.8, 1)
             end
-            GameTooltip:AddLine("Right-click for combine options (same name / other IDs).", 0.6, 0.6, 0.6)
+            GameTooltip:AddLine("Edit (or right-click) for options: when to fire, spoken text, combine, kind.", 0.6, 0.6, 0.6)
             GameTooltip:Show()
         end)
         row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        row:SetScript("OnMouseUp", function(self, button)
-            if button ~= "RightButton" or not self.spellID then return end
-            local key = self.spellID
+        -- All the per-cue options (kind, spoken text, when, combine, aliases)
+        -- live in one menu, opened by the row's Edit button or a right-click.
+        local function openRowMenu(anchor)
+            if not row.spellID then return end
+            local key = row.spellID
             local cue = ns.P().cues[key]
             if not cue then return end
-            local function openDialog()
+            local function openAltsDialog()
                 local cur = cue.alts and table.concat(cue.alts, ", ") or ""
                 StaticPopup_Show("AURACUE_ALTS", cue.label or key, nil,
                     { key = key, current = cur, after = function() RefreshAllPanels() end })
             end
-            if MenuUtil and MenuUtil.CreateContextMenu then
-                MenuUtil.CreateContextMenu(self, function(_, root)
-                    root:CreateTitle(cue.label or "Aura")
-                    root:CreateButton(
-                        cue.kind == "debuff" and "Treat as a buff" or "Treat as a debuff",
-                        function() ns.SetCueKind(key, cue.kind == "debuff" and "buff" or "debuff") end)
-                    root:CreateButton("Set spoken text…", function()
-                        OpenSpeechDialog(key, cue.label, cue.speakApplied, cue.speakFaded,
-                            function() RefreshAllPanels() end)
-                    end)
-                    root:CreateDivider()
-                    root:CreateCheckbox("Auto-combine auras with the same name",
-                        function() return cue.matchName end,
-                        function() ns.SetMatchName(key, not cue.matchName) end)
-                    root:CreateButton("Add other spell IDs by hand…", openDialog)
-                    if cue.alts and #cue.alts > 0 then
-                        root:CreateButton("Clear hand-added IDs", function() ns.SetCueAlts(key, {}) end)
-                    end
+            if not (MenuUtil and MenuUtil.CreateContextMenu) then openAltsDialog(); return end
+            MenuUtil.CreateContextMenu(anchor, function(_, root)
+                root:CreateTitle(cue.label or "Aura")
+                root:CreateButton(
+                    cue.kind == "debuff" and "Treat as a buff" or "Treat as a debuff",
+                    function() ns.SetCueKind(key, cue.kind == "debuff" and "buff" or "debuff") end)
+                root:CreateButton("Set spoken text…", function()
+                    OpenSpeechDialog(key, cue.label, cue.speakApplied, cue.speakFaded,
+                        function() RefreshAllPanels() end)
                 end)
-            else
-                openDialog()
-            end
+                local whenSub = root:CreateButton("Fire: " .. (WHEN_FULL[cue.when or "always"]))
+                for _, w in ipairs(COND_ORDER) do
+                    whenSub:CreateRadio(WHEN_FULL[w],
+                        function() return (cue.when or "always") == w end,
+                        function()
+                            cue.when = w
+                            if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end
+                            return MenuResponse and MenuResponse.Refresh or nil
+                        end)
+                end
+                root:CreateDivider()
+                root:CreateCheckbox("Auto-combine auras with the same name",
+                    function() return cue.matchName end,
+                    function() ns.SetMatchName(key, not cue.matchName) end)
+                root:CreateButton("Add other spell IDs by hand…", openAltsDialog)
+                if cue.alts and #cue.alts > 0 then
+                    root:CreateButton("Clear hand-added IDs", function() ns.SetCueAlts(key, {}) end)
+                end
+            end)
+        end
+        row.openMenu = openRowMenu
+        row:SetScript("OnMouseUp", function(self, button)
+            if button == "RightButton" then openRowMenu(self) end
         end)
 
         row.name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -1360,29 +1374,13 @@ local function BuildKindPanel(kind)
         row.soundFaded = MkSoundDD(296, -30, "soundFaded")
         row.previewF = MkPreview(450, -30, "faded")
 
-        -- "When" cycle: Any -> Combat -> Instance -> World.
-        row.cond = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-        row.cond:SetSize(56, 22)
-        row.cond:SetPoint("TOPLEFT", row, "TOPLEFT", 480, -30)
-        row.cond:SetScript("OnClick", function()
-            local cue = row.spellID and ns.P().cues[row.spellID]
-            if not cue then return end
-            local cur, idx = cue.when or "always", 1
-            for ci, v in ipairs(COND_ORDER) do if v == cur then idx = ci break end end
-            cue.when = COND_ORDER[(idx % #COND_ORDER) + 1]
-            row.cond:SetText(COND_LABEL[cue.when])
-        end)
-        row.cond:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText("Fire this cue:", 1, 1, 1)
-            GameTooltip:AddLine("Any — everywhere", 0.8, 0.8, 0.8)
-            GameTooltip:AddLine("Cbt — only while in combat", 0.8, 0.8, 0.8)
-            GameTooltip:AddLine("Inst — only in instances", 0.8, 0.8, 0.8)
-            GameTooltip:AddLine("Wld — only in the open world", 0.8, 0.8, 0.8)
-            GameTooltip:AddLine("Click to cycle.", 0.6, 0.6, 0.6)
-            GameTooltip:Show()
-        end)
-        row.cond:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        -- One Edit button opens the per-cue options menu (kind, spoken text,
+        -- when to fire, combine, aliases).
+        row.edit = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+        row.edit:SetSize(56, 22)
+        row.edit:SetPoint("TOPLEFT", row, "TOPLEFT", 480, -30)
+        row.edit:SetText("Edit")
+        row.edit:SetScript("OnClick", function() row.openMenu(row.edit) end)
 
         row.remove = CreateFrame("Button", nil, row, "UIPanelCloseButton")
         row.remove:SetSize(24, 24)
@@ -1462,7 +1460,6 @@ local function BuildKindPanel(kind)
                 row.faded:SetChecked(cue.faded and true or false)
                 row.visual:SetChecked(cue.visual and true or false)
                 row.cat:SetText(ns.GroupFor(sid) or "")
-                row.cond:SetText(COND_LABEL[cue.when or "always"])
                 row.soundApplied:GenerateMenu()
                 row.soundFaded:GenerateMenu()
                 row:Show()
