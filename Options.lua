@@ -1656,6 +1656,8 @@ local function BuildAppearanceSection(ctx, kind)
     ctx.CheckRow(
         "Show on-screen flash", function() return Vis().enabled end, function(v) Vis().enabled = v end,
         "Flash the screen edges", function() return Vis().edgeFlash end, function(v) Vis().edgeFlash = v end)
+    ctx.Check("Show the spell icon in the flash",
+        function() return Vis().showIcon end, function(v) Vis().showIcon = v end)
     ctx.Slider("Edge thickness", 40, 400, 10, "%d",
         function() return Vis().edgeThickness end,
         function(v) Vis().edgeThickness = v end)

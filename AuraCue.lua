@@ -87,6 +87,7 @@ local PROFILE_DEFAULTS = {
             duration  = 1.5,
             locked    = true,
             position  = nil,      -- { point, relativePoint, x, y }
+            showIcon  = false,    -- show the spell icon above the flash text
             edgeFlash = false,    -- also flash the screen edges
             edgeThickness = 160,  -- how far the glow reaches inward (px)
             edgeIntensity = 0.7,  -- peak opacity of the glow (0..1)
@@ -99,6 +100,7 @@ local PROFILE_DEFAULTS = {
             duration  = 2.0,
             locked    = true,
             position  = nil,
+            showIcon  = false,
             edgeFlash = false,
             edgeThickness = 200,
             edgeIntensity = 0.8,
@@ -294,6 +296,8 @@ local function ValidateRanges(db)
         if type(v.edgeIntensity) ~= "number" then v.edgeIntensity = 0.7 end
         v.edgeIntensity = math.max(0.1, math.min(1.0, v.edgeIntensity))
 
+        v.showIcon = v.showIcon and true or false
+
         HealColor(v, "color", DEFAULT_COLORS[key])
         HealColor(v, "colorFaded", DEFAULT_COLORS_FADED[key])
     end
@@ -421,6 +425,12 @@ local function MakeOverlay(kind)
     f:Hide()
     f.fadeElapsed, f.fadeDuration = 0, 0
 
+    f.icon = f:CreateTexture(nil, "OVERLAY")
+    f.icon:SetSize(40, 40)
+    f.icon:SetPoint("TOP", f, "TOP", 0, -2)
+    f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    f.icon:Hide()
+
     f.text = f:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
     f.text:SetAllPoints()
     f.text:SetJustifyH("CENTER")
@@ -529,12 +539,23 @@ local function VisColor(v, eventKind)
     return v.color
 end
 
-local function ShowVisual(kind, message, eventKind)
+local function ShowVisual(kind, message, eventKind, icon)
     local f = overlays[kind]
     local v = VisCfg(kind)
     local c = VisColor(v, eventKind)
     f.text:SetText(message)
     f.text:SetTextColor(c.r, c.g, c.b)
+    -- Optional spell icon above the text; otherwise the text fills the frame.
+    f.text:ClearAllPoints()
+    if v.showIcon and icon then
+        f.icon:SetTexture(icon)
+        f.icon:Show()
+        f.text:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -44)
+        f.text:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
+    else
+        f.icon:Hide()
+        f.text:SetAllPoints(f)
+    end
     f:SetScale(v.scale or 1.0)
     f:SetAlpha(1)
     f.fadeElapsed, f.fadeDuration = 0, (v.duration or 1.5)
@@ -556,6 +577,8 @@ function ns.SetRepositionMode(kind, on)
         f:SetBackdropColor(0, 0, 0, 0.6)
         f:SetBackdropBorderColor(v.color.r, v.color.g, v.color.b, 1)
         f:EnableMouse(true)
+        f.icon:Hide()
+        f.text:ClearAllPoints(); f.text:SetAllPoints(f)
         f.text:SetText("AuraCue " .. (kind == "debuff" and "debuffs" or "buffs") .. " — drag to move, X to close")
         f.text:SetTextColor(v.color.r, v.color.g, v.color.b)
         f:SetScale(v.scale or 1.0)
@@ -674,7 +697,7 @@ local function FireCue(cue, spellName, eventKind)
     end
     local kind = (cue.kind == "debuff") and "debuff" or "buff"
     if cue.visual and VisCfg(kind).enabled and not ns.testMode then
-        ShowVisual(kind, label .. " " .. verb, eventKind)
+        ShowVisual(kind, label .. " " .. verb, eventKind, cue.icon or nil)
     end
 end
 
@@ -694,7 +717,8 @@ function ns.PreviewCue(spellKey, eventKind)
     end
     if cue.visual then
         local kind = (cue.kind == "debuff") and "debuff" or "buff"
-        ShowVisual(kind, (cue.label or "Aura") .. " " .. (eventKind == "faded" and "lost" or "gained"), eventKind)
+        ShowVisual(kind, (cue.label or "Aura") .. " " .. (eventKind == "faded" and "lost" or "gained"),
+            eventKind, cue.icon or nil)
     end
 end
 
@@ -1705,6 +1729,8 @@ function ns.AddCue(spellID, kindHint)
         kind     = kind,
         dungeon  = dungeon,
         source   = source,
+        icon     = (seen and seen.icon)
+                   or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(spellID)) or nil,
     }
     RebuildAliases()
     SeedPresent()
@@ -1949,6 +1975,11 @@ local SETTING_KEYS = { "enabled", "channel", "audioEnabled",
 local function BackfillCues(cues)
     for key, cue in pairs(cues) do
         if not cue.kind then cue.kind = "buff" end
+        if cue.icon == nil then
+            local s = AuraCueDB.seen and AuraCueDB.seen[key]
+            cue.icon = (s and s.icon)
+                or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(tonumber(key))) or false
+        end
         -- One-time: the watched list used to have its own per-cue heading
         -- (cue.category). Promote a user-chosen heading (not an auto default)
         -- into the single account-wide custom group, then drop the old field.

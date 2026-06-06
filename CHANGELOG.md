@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.61.0
+
+- The on-screen flash can now show the **spell icon** above the text. Turn it on
+  per window (buffs / debuffs) with "Show the spell icon in the flash" on the
+  Appearance page.
+
 ## v0.60.15
 
 - Further fix for phrase text scrolled off the left edge: the cursor reset now
