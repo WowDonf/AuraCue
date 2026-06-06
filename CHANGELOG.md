@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.72.1
+
+- Fixed a regression where the checklist stopped tracking auras **out of combat
+  in dungeons**. Your auras are readable there (only instanced *combat* masks
+  them), so it now trusts those reads again and only holds state in instanced
+  combat (or for a combat-masked permanent aura).
+- The checklist now catches an **aura/stance swap mid-combat** (e.g. switching
+  out of Devotion Aura): your casts aren't masked, so casting a learned
+  replacement marks the old aura missing even when it can't be read.
+
 ## v0.72.0
 
 - The checklist now tracks buffs by your **casts** too (not just by reading the

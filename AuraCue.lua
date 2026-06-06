@@ -1550,16 +1550,16 @@ local function ChecklistBuffPresent(sid, name)
         if name and clNameSet[name] then
             res = true
         else
-            -- Absent by id AND name. Reads of your OWN auras work in open-world
-            -- combat (just like the buff/debuff cues), so trust "absent = missing"
-            -- there — that's what lets the checklist update mid-fight. Only hold
-            -- the last-known state (kept current by reads AND your own casts —
-            -- ns.NoteChecklistCast) where the read is genuinely unreliable: inside
-            -- an instance (auras are hidden the whole time), or a permanent aura
-            -- that masks in open-world combat (e.g. Devotion Aura).
+            -- Absent by id AND name. Your own auras read fine in the open world
+            -- AND out of combat in instances (that's why the cues only freeze in
+            -- instanced *combat*), so trust "absent = missing" there. Only hold
+            -- the last-known state (kept current by reads, your casts via
+            -- ns.NoteChecklistCast, and aura swaps via ns.NoteChecklistReplaced)
+            -- where the read is unreliable: in INSTANCED combat, or a permanent
+            -- aura that masks in open-world combat (e.g. Devotion Aura).
             local inCombat = InCombatLockdown() or UnitAffectingCombat("player")
             local s = AuraCueDB.seen and AuraCueDB.seen[tostring(sid)]
-            if IsInInstance() or (inCombat and s and s.permanent) then
+            if inCombat and (IsInInstance() or (s and s.permanent)) then
                 res = checklistPresent[sid]               -- can't read reliably: last known
             else
                 res = false                               -- confirmed missing
@@ -1883,6 +1883,14 @@ function ns.NoteChecklistCast(spellID)
     if cfg.ids[tostring(spellID)] then checklistPresent[tonumber(spellID)] = true end
 end
 
+-- An aura you watch was just REPLACED by a cast (a learned aura/stance swap, e.g.
+-- Devotion -> Concentration). Casts aren't masked, so this is how the checklist
+-- catches a swap mid-combat even though the dropped aura can't be read.
+function ns.NoteChecklistReplaced(spellID)
+    local cfg = ChecklistCfg(); if not cfg or not cfg.ids then return end
+    if cfg.ids[tostring(spellID)] then checklistPresent[tonumber(spellID)] = false end
+end
+
 -- Per-item opt-in: show this item's icon in the on-screen box while missing.
 function ns.SetChecklistBox(sid, on)
     local cfg = ChecklistCfg(); if not cfg then return end
@@ -2144,6 +2152,7 @@ local function ApplyReplace(castSid)
     for removedStr in pairs(rep) do
         local rid = tonumber(removedStr)
         gateState[rid] = false
+        if ns.NoteChecklistReplaced then ns.NoteChecklistReplaced(rid) end   -- checklist sees the swap too
         if present[rid] then
             local rcue = activeProfile and activeProfile.cues[removedStr]
             if rcue then
