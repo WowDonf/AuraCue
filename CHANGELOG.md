@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.68.1
+
+- The **weapon enchant** now appears as a row in the checklist (when watched), so
+  it gets the same **Flash** and **Ticker** ticks as your buffs.
+
 ## v0.68.0
 
 - Checklist gets a **scrolling ticker** — a marquee of selected missing buffs

@@ -2054,7 +2054,7 @@ do
     -- added from the catalog — watch them with this instead (both weapons).
     checklistPanel.Check("Warn if a weapon enchant (oil / sharpening stone) is missing",
         function() return ns.P().checklist and ns.P().checklist.weaponEnchant end,
-        function(v) if ns.P().checklist then ns.P().checklist.weaponEnchant = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
+        function(v) if ns.SetChecklistWeaponEnchant then ns.SetChecklistWeaponEnchant(v) end; RefreshAllPanels() end)
 
     -- Add a buff: the same grouped picker as Buffs/Debuffs, plus a search box
     -- with a live autocomplete popup.
@@ -2343,7 +2343,11 @@ do
             r.flash:SetScript("OnClick", function(self) ns.SetChecklistFlash(sid, self:GetChecked() and true or false) end)
             r.ticker:SetChecked(e.ticker and true or false)
             r.ticker:SetScript("OnClick", function(self) ns.SetChecklistTicker(sid, self:GetChecked() and true or false) end)
-            r.del:SetScript("OnClick", function() ns.SetChecklistAura(sid, false); RefreshAllPanels() end)
+            if e.isWeapon then
+                r.del:SetScript("OnClick", function() ns.SetChecklistWeaponEnchant(false); RefreshAllPanels() end)
+            else
+                r.del:SetScript("OnClick", function() ns.SetChecklistAura(sid, false); RefreshAllPanels() end)
+            end
             r:Show()
             y = y - 26
         end

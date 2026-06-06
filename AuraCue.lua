@@ -1432,6 +1432,7 @@ end
 -- up. An icon shows only while that buff is MISSING, so an empty box = all good.
 -- ---------------------------------------------------------------------
 local function ChecklistCfg() return activeProfile and activeProfile.checklist end
+local WEAPON_KEY = "weapon"   -- sentinel id for the weapon-enchant checklist row
 
 local checklistContainer = CreateFrame("Frame", "AuraCueChecklist", UIParent, "BackdropTemplate")
 checklistContainer:SetSize(40, 40)
@@ -1638,8 +1639,10 @@ local function UpdateChecklist()
     -- the weapon's own icon when the slot has a weapon but no temporary enchant.
     if GetWeaponEnchantInfo and cfg.weaponEnchant then
         local hasMH, _, _, _, hasOH = GetWeaponEnchantInfo()
+        local missingEnchant = false
         local function EnchantIcon(slot, has)
             local itemTex = GetInventoryItemTexture and GetInventoryItemTexture("player", slot)
+            if itemTex and not has then missingEnchant = true end
             if itemTex and (showAll or not has) then
                 idx = idx + 1
                 local f = checklistIcons[idx] or MakeChecklistIcon()
@@ -1653,6 +1656,12 @@ local function UpdateChecklist()
         end
         EnchantIcon(16, hasMH)   -- main-hand slot
         EnchantIcon(17, hasOH)   -- off-hand slot
+        if missingEnchant then
+            if flagged[WEAPON_KEY] then anyFlash = true end
+            if (cfg.ticker and cfg.ticker.ids and cfg.ticker.ids[WEAPON_KEY]) then
+                missingNames[#missingNames + 1] = "Weapon enchant"
+            end
+        end
     end
     -- Test with nothing added yet: show sample icons so the box can be placed.
     if showAll and idx == 0 then
@@ -1786,12 +1795,26 @@ function ns.SetChecklistTicker(sid, on)
     UpdateChecklist()
 end
 
--- List of checklist buffs for the options page: { spellID, name, icon }.
+-- Add / remove the weapon-enchant row (a list entry like a buff, so it gets the
+-- same Flash / Ticker ticks). Clears its flags when removed.
+function ns.SetChecklistWeaponEnchant(on)
+    local cfg = ChecklistCfg(); if not cfg then return end
+    cfg.weaponEnchant = on and true or false
+    if not on then
+        if cfg.flash then cfg.flash[WEAPON_KEY] = nil end
+        if cfg.ticker and cfg.ticker.ids then cfg.ticker.ids[WEAPON_KEY] = nil end
+    end
+    UpdateChecklist()
+end
+
+-- List of checklist entries for the options page. Buffs (by spell id) plus a
+-- synthetic "Weapon enchant" entry when weapon-enchant watching is on, all with
+-- their flash / ticker flags.
 function ns.GetChecklist()
     local cfg = ChecklistCfg()
     local out = {}
-    if not cfg or not cfg.ids then return out end
-    for sidStr in pairs(cfg.ids) do
+    if not cfg then return out end
+    for sidStr in pairs(cfg.ids or {}) do
         local sid = tonumber(sidStr)
         local seen = AuraCueDB.seen and AuraCueDB.seen[sidStr]
         out[#out + 1] = {
@@ -1801,6 +1824,16 @@ function ns.GetChecklist()
                 or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 134400,
             flash = (cfg.flash and cfg.flash[sidStr]) and true or false,
             ticker = (cfg.ticker and cfg.ticker.ids and cfg.ticker.ids[sidStr]) and true or false,
+        }
+    end
+    if cfg.weaponEnchant then
+        out[#out + 1] = {
+            spellID = WEAPON_KEY,
+            isWeapon = true,
+            name = "Weapon enchant (oil / stone)",
+            icon = (GetInventoryItemTexture and GetInventoryItemTexture("player", 16)) or 134400,
+            flash = (cfg.flash and cfg.flash[WEAPON_KEY]) and true or false,
+            ticker = (cfg.ticker and cfg.ticker.ids and cfg.ticker.ids[WEAPON_KEY]) and true or false,
         }
     end
     table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)
