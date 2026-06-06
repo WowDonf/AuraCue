@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.71.1
+
+- The missing-buff checklist now updates **in combat** (open world), matching how
+  the buff/debuff cues read your own auras. It only freezes where reads are truly
+  unreadable — instanced combat, or a permanent aura that combat masks (Devotion
+  Aura) — instead of holding the pre-combat state for everything.
+
 ## v0.71.0
 
 - The missing-buff icon box is now **per buff**: each row in the checklist has a

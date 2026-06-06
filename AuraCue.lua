@@ -1538,10 +1538,20 @@ local function ChecklistBuffPresent(sid, name)
         EnsurePlayerNameSet()
         if name and clNameSet[name] then
             res = true
-        elseif InCombatLockdown() or UnitAffectingCombat("player") then
-            res = checklistPresent[sid]                   -- masked-to-nil in combat
         else
-            res = false                                   -- out of combat: confirmed gone
+            -- Absent by id AND name. Reads of your OWN auras work in open-world
+            -- combat (just like the buff/debuff cues), so trust "absent = missing"
+            -- there — that's what lets the checklist update mid-fight. Only hold
+            -- the last-known state where the read is genuinely unreliable:
+            -- fully-masked instanced combat, or a permanent aura that masks in
+            -- combat (e.g. Devotion Aura).
+            local inCombat = InCombatLockdown() or UnitAffectingCombat("player")
+            local s = AuraCueDB.seen and AuraCueDB.seen[tostring(sid)]
+            if inCombat and (IsInInstance() or (s and s.permanent)) then
+                res = checklistPresent[sid]               -- can't read reliably: last known
+            else
+                res = false                               -- confirmed missing
+            end
         end
     end
     checklistPresent[sid] = res
