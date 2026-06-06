@@ -671,16 +671,41 @@ local function AuraNamePresent(name)
     return found
 end
 
--- Is the gating aura on the player? Returns true / false / nil (nil = the read
--- was masked, so we can't tell). Tries the exact id first; if that misses, falls
--- back to a name scan, because the id a user types is often the *cast* id while
--- the aura on them carries a different id with the same name.
+-- Last reliable (out-of-combat) read of each gating aura, so a cue gated on an
+-- aura whose id is masked in combat (e.g. Devotion Aura) still evaluates against
+-- what was true going into combat instead of a bogus "absent".
+local gateState = {}
+
+-- Is the gating aura on the player? Returns true / false / nil (nil = unknown).
+-- Exact id first; then a name scan (the id might be the cast id, not the aura
+-- id); then, if combat is masking the read, the last reliable state.
 local function GateAuraPresent(cue)
-    local state = ReadAura(cue.requireAura)
-    if state == "present" then return true end
-    if state == "unknown" then return nil end
-    if AuraNamePresent(cue.requireName) then return true end
+    local sid = cue.requireAura
+    local state = ReadAura(sid)
+    if state == "present" then gateState[sid] = true; return true end
+    if state == "unknown" then return gateState[sid] end
+    if AuraNamePresent(cue.requireName) then gateState[sid] = true; return true end
+    -- Absent by id and name. In combat the id can be masked-to-nil and the name
+    -- unreadable, so trust the last reliable read rather than a bogus "absent".
+    if InCombatLockdown() or UnitAffectingCombat("player") then return gateState[sid] end
+    gateState[sid] = false
     return false
+end
+
+-- Refresh the gate cache from reliable reads while out of combat (called from
+-- the scan), so entering combat the gate reflects what was actually up.
+local function RefreshGateStates(cues)
+    if InCombatLockdown() or UnitAffectingCombat("player") then return end
+    for _, cue in pairs(cues) do
+        if cue.requireAura then
+            local st = ReadAura(cue.requireAura)
+            if st == "present" then
+                gateState[cue.requireAura] = true
+            elseif st == "absent" then
+                gateState[cue.requireAura] = AuraNamePresent(cue.requireName) and true or false
+            end
+        end
+    end
 end
 
 local function RequireMet(cue)
@@ -1437,6 +1462,7 @@ local function ScanPlayerAuras()
     end
     present = newPresent
 
+    RefreshGateStates(cues)   -- cache gating-aura states for conditional cues
     CatalogVisibleAuras()
 end
 ns.ScanPlayerAuras = ScanPlayerAuras

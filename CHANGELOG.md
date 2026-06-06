@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.63.7
+
+- Conditional cues gated on an aura that combat masks (e.g. **"only while
+  Devotion Aura is active"**) now evaluate correctly in combat: the gate
+  remembers the aura's last reliable out-of-combat reading and uses that while
+  the live read is masked, instead of treating it as absent.
+
 ## v0.63.6
 
 - Permanent auras (Devotion Aura, stances, toggles) no longer fire a false
