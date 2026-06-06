@@ -1,6 +1,11 @@
 # Changelog
 
-## v0.70.2
+## v0.70.3
+
+- Fixed the missing-buff checklist churning memory: it scanned your auras by
+  name for *every missing buff, every update*. Now it builds the name list at
+  most once per update — and not at all when nothing's missing — and updates a
+  little less often.
 
 - Cut idle memory churn from on-screen timers: duration **bars** only re-format
   their countdown text when the shown value changes (not every frame), and the

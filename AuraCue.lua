@@ -1491,6 +1491,28 @@ local function MakeChecklistIcon()
     return f
 end
 
+-- The player's current aura NAMES, gathered at most once per checklist update
+-- (and only if some item read absent by id), so we don't re-scan every aura for
+-- every missing item every tick — that was a big memory churn source. The set
+-- table and handler are reused; clNameSetReady is reset per update.
+local clNameSet, clNameSetReady = {}, false
+local function _clNameCollect(data)
+    if data then
+        local n = Reveal(data.name)
+        if n and n ~= "" then clNameSet[n] = true end
+    end
+    return false
+end
+local function EnsurePlayerNameSet()
+    if clNameSetReady then return end
+    clNameSetReady = true
+    wipe(clNameSet)
+    if AuraUtil and AuraUtil.ForEachAura then
+        AuraUtil.ForEachAura("player", "HELPFUL", nil, _clNameCollect, true)
+        AuraUtil.ForEachAura("player", "HARMFUL", nil, _clNameCollect, true)
+    end
+end
+
 -- Best-effort present check for a checklist buff, reusing the combat-masking
 -- handling: returns true (up), false (confirmed missing), or nil (can't tell).
 local checklistPresent = {}
@@ -1501,12 +1523,17 @@ local function ChecklistBuffPresent(sid, name)
         res = true
     elseif state == "unknown" then
         res = checklistPresent[sid]                       -- masked: last known
-    elseif AuraNamePresent(name) then
-        res = true
-    elseif InCombatLockdown() or UnitAffectingCombat("player") then
-        res = checklistPresent[sid]                       -- masked-to-nil in combat
     else
-        res = false                                       -- out of combat: confirmed gone
+        -- Absent by id. Check by name (same-named different ranks) against the
+        -- once-per-update name set instead of scanning auras per item.
+        EnsurePlayerNameSet()
+        if name and clNameSet[name] then
+            res = true
+        elseif InCombatLockdown() or UnitAffectingCombat("player") then
+            res = checklistPresent[sid]                   -- masked-to-nil in combat
+        else
+            res = false                                   -- out of combat: confirmed gone
+        end
     end
     checklistPresent[sid] = res
     return res
@@ -1620,6 +1647,7 @@ local function UpdateChecklist()
     if not cfg or (not cfg.enabled and not ns.checklistTest) then
         checklistContainer:Hide(); SetChecklistFlashActive(false); return
     end
+    clNameSetReady = false   -- rebuild the aura-name set at most once this pass
     local showAll = ns.checklistTest and true or false   -- test: show every entry
     local size, perRow = cfg.size or 40, cfg.perRow or 8
     local flagged = cfg.flash or {}
@@ -1727,7 +1755,7 @@ local clPending = false
 local function ScheduleChecklistUpdate()
     if clPending or not C_Timer then return end
     clPending = true
-    C_Timer.After(0.15, function() clPending = false; UpdateChecklist() end)
+    C_Timer.After(0.35, function() clPending = false; UpdateChecklist() end)
 end
 ns.ScheduleChecklistUpdate = ScheduleChecklistUpdate
 
