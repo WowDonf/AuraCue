@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.60.2
+
+- Timer bar countdowns now read in minutes / hours once over a minute, rounded
+  up — 90s shows "2m", 60 min "1h", 120 min "2h". Under a minute still counts
+  seconds (with tenths in the last 10s).
+
 ## v0.60.1
 
 - Renamed the "Faded" event to **"Lost"** everywhere it's shown — the

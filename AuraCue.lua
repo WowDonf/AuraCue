@@ -1037,6 +1037,15 @@ ns.RestoreBarsPosition = RestoreBarsPosition
 
 local BarStop   -- forward (a bar's OnUpdate self-removes through it)
 
+-- Countdown text: seconds under a minute, then whole minutes / hours rounded UP
+-- (61s -> 2m, 3600s -> 1h, 7200s -> 2h).
+local function FormatBarTime(t)
+    if t >= 3600 then return string.format("%dh", math.ceil(t / 3600)) end
+    if t >= 60 then return string.format("%dm", math.ceil(t / 60)) end
+    if t >= 10 then return string.format("%d", math.floor(t)) end
+    return string.format("%.1f", t)
+end
+
 local function MakeBar()
     local b = table.remove(barPool)
     if b then return b end
@@ -1055,7 +1064,7 @@ local function MakeBar()
         local remain = (self.endTime or 0) - GetTime()
         if remain <= 0 then BarStop(self.sid); return end
         self:SetValue(remain)
-        self.time:SetText(remain >= 10 and string.format("%.0f", remain) or string.format("%.1f", remain))
+        self.time:SetText(FormatBarTime(remain))
     end)
     return b
 end
