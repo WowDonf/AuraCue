@@ -633,8 +633,14 @@ function ns.ResolveSpokenPhrase(eventKind, literal, label)
     -- {name} is replaced by the aura's name — so an override of "{name}
     -- activated" says "Bloodlust activated", while "Damage now" (no token) stays
     -- name-free.
-    local fmt = (literal and literal ~= "") and literal
-        or (eventKind == "applied" and activeProfile.speakFormatApplied or activeProfile.speakFormatFaded)
+    local fmt
+    if literal and literal ~= "" then
+        fmt = literal
+    elseif eventKind == "applied" then
+        fmt = activeProfile.speakFormatApplied
+    else
+        fmt = activeProfile.speakFormatFaded
+    end
     if not fmt or fmt == "" then fmt = (eventKind == "applied") and "{name} gained" or "{name} lost" end
     return (fmt:gsub("{name}", label or ""))
 end

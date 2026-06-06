@@ -372,6 +372,10 @@ local function NewPanel(name)
             eb.Refresh = function() prevRefresh(); upd() end
             upd()
         end
+        -- SetText on an editbox that has never been shown can fail to stick, so
+        -- the field looked blank after a reload until something re-refreshed it.
+        -- Re-read the stored value whenever the box becomes visible.
+        eb:HookScript("OnShow", function() eb.Refresh() end)
         widgets[#widgets + 1] = eb
         ctx.y = ctx.y - 30
         return eb
@@ -396,7 +400,7 @@ local function NewPanel(name)
     function ctx.Refresh()
         if not ns.P() then return end
         for _, w in ipairs(widgets) do
-            if w.Refresh then w.Refresh() end
+            if w.Refresh then pcall(w.Refresh) end
         end
         if ctx.rebuild then ctx.rebuild() end
         if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end

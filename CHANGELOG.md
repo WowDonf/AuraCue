@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.60.12
+
+- Fixed the Audio **Gained / Lost phrase** fields showing blank after a reload
+  even though the phrase was still stored and working. The field now re-reads
+  its value whenever it becomes visible, so what you entered shows again.
+
 ## v0.60.11
 
 - Fixed a sound set to **None (silent)** still firing — a gained event with no
