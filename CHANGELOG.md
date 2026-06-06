@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.68.2
+
+- The checklist ticker no longer has a trailing dot after the last item.
+
 ## v0.68.1
 
 - The **weapon enchant** now appears as a row in the checklist (when watched), so

@@ -1691,7 +1691,9 @@ local function UpdateChecklist()
     if not ns.checklistTickerMoving then
         if cfg.ticker and not showAll and #missingNames > 0 then
             checklistTicker:SetWidth(cfg.ticker.width or 320)
-            SetTickerText(table.concat(missingNames, "      •      ") .. "      •      ")
+            -- No trailing separator after the last item; the loop gap (the text
+            -- scrolls fully off before repeating) provides the spacing.
+            SetTickerText(table.concat(missingNames, "      •      "))
             checklistTicker:Show()
         else
             checklistTicker.content = nil
