@@ -1526,6 +1526,15 @@ end
 -- handling: returns true (up), false (confirmed missing), or nil (can't tell).
 local checklistPresent = {}
 local function ChecklistBuffPresent(sid, name)
+    -- If you ALSO watch this aura as a cue, reuse the cue engine's `present`
+    -- state — it's the same tracking the buff/debuff pages use, kept correct by
+    -- cast events as well as reads, so it works in instances where a raw read
+    -- can't. (Buffs that aren't watched fall through to reading them directly.)
+    if activeProfile and activeProfile.cues[tostring(sid)] then
+        local p = present[sid] and true or false
+        checklistPresent[sid] = p
+        return p
+    end
     local state = ReadAura(sid)
     local res
     if state == "present" then

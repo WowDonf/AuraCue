@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.71.3
+
+- The checklist now reuses the buff/debuff cue engine's tracking for any buff you
+  also watch as a cue — so those benefit from the cues' cast-event detection and
+  work in instances too, not just open-world combat.
+
 ## v0.71.2
 
 - More checklist combat fixes: a present buff whose data is secret in combat is
