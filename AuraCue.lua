@@ -1050,7 +1050,8 @@ local function RestoreBarsPosition()
 end
 ns.RestoreBarsPosition = RestoreBarsPosition
 
-local BarStop   -- forward (a bar's OnUpdate self-removes through it)
+local BarStop      -- forward (a bar's OnUpdate self-removes through it)
+local SeedPresent  -- forward (lock-exit re-seeds the live bars)
 
 -- Countdown text: seconds under a minute, then whole minutes / hours rounded UP
 -- (61s -> 2m, 3600s -> 1h, 7200s -> 2h).
@@ -1232,7 +1233,9 @@ function ns.SetBarsReposition(on)
         barContainer:SetBackdrop(nil)
         barContainer:SetSize(cfg.width or 220, cfg.height or 18)
         barContainer:EnableMouse(false)
-        BarClearAll()
+        -- Drop the sample bars from move mode, then restore the real ones for
+        -- whatever's actually active right now (don't leave the window blank).
+        SeedPresent()
     end
 end
 
@@ -1309,7 +1312,7 @@ ns.ScanPlayerAuras = ScanPlayerAuras
 -- currently reads present, also mark it confirmed — otherwise the cast-tracked
 -- "faded" path (which only trusts an absent read after a confirm) would never
 -- fire when the aura drops following any silent re-seed.
-local function SeedPresent()
+function SeedPresent()
     present = {}
     BarClearAll()   -- rebuild bars to match what's actually active right now
     local cues = activeProfile and activeProfile.cues

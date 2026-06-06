@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.60.10
+
+- Fixed the timer-bar window going blank after **Lock bars**, even when auras
+  were actively tracking. Locking now drops only the move-mode sample bars and
+  restores the real bars for whatever's currently active.
+
 ## v0.60.9
 
 - Fixed the **Bar font** dropdown erroring on open (the menu's label is a
