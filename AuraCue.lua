@@ -138,6 +138,7 @@ local PROFILE_DEFAULTS = {
         size     = 40,      -- icon size (px)
         perRow   = 8,       -- icons per row before wrapping
         weaponEnchant = false,  -- warn when a weapon has no temporary enchant (oil/stone)
+        flash    = {},      -- { [spellID-as-string] = true } items that trigger the edge flash
     },
     -- Watched auras, keyed by spellID-as-string -> cue config.
     cues = {},
@@ -348,6 +349,7 @@ local function ValidateRanges(db)
     if type(db.checklist) ~= "table" then db.checklist = {} end
     local cl = db.checklist
     if type(cl.ids) ~= "table" then cl.ids = {} end
+    if type(cl.flash) ~= "table" then cl.flash = {} end
     cl.enabled = cl.enabled ~= false
     cl.locked = cl.locked ~= false
     if type(cl.size) ~= "number" then cl.size = 40 end
@@ -1480,20 +1482,61 @@ local function ChecklistBuffPresent(sid, name)
     return res
 end
 
+-- A constant pulsing screen-edge glow, on while any "flash when missing"
+-- checklist item is missing. Separate from the cue flash (which is a one-shot).
+local checklistFlash = CreateFrame("Frame", "AuraCueChecklistFlash", UIParent)
+checklistFlash:SetAllPoints(UIParent)
+checklistFlash:SetFrameStrata("BACKGROUND")
+checklistFlash:EnableMouse(false)
+checklistFlash:Hide()
+do
+    local function MkFlashStrip() local t = checklistFlash:CreateTexture(nil, "ARTWORK"); t:SetColorTexture(1, 1, 1, 1); return t end
+    local sL, sR, sT, sB = MkFlashStrip(), MkFlashStrip(), MkFlashStrip(), MkFlashStrip()
+    sL:SetPoint("TOPLEFT");    sL:SetPoint("BOTTOMLEFT");    sL:SetWidth(150)
+    sR:SetPoint("TOPRIGHT");   sR:SetPoint("BOTTOMRIGHT");   sR:SetWidth(150)
+    sT:SetPoint("TOPLEFT");    sT:SetPoint("TOPRIGHT");      sT:SetHeight(120)
+    sB:SetPoint("BOTTOMLEFT"); sB:SetPoint("BOTTOMRIGHT");   sB:SetHeight(120)
+    local r, g, b = 1.0, 0.25, 0.2   -- warning red-orange
+    local solid, clear = CreateColor(r, g, b, 1), CreateColor(r, g, b, 0)
+    sL:SetGradient("HORIZONTAL", solid, clear)
+    sR:SetGradient("HORIZONTAL", clear, solid)
+    sT:SetGradient("VERTICAL", clear, solid)
+    sB:SetGradient("VERTICAL", solid, clear)
+end
+checklistFlash:SetScript("OnUpdate", function(self, dt)
+    self.t = (self.t or 0) + dt
+    self:SetAlpha(0.30 + 0.30 * (math.sin(self.t * 3.5) * 0.5 + 0.5))   -- pulse 0.30..0.60
+end)
+local function SetChecklistFlashActive(on)
+    if on then
+        if not checklistFlash:IsShown() then checklistFlash.t = 0; checklistFlash:Show() end
+    else
+        checklistFlash:Hide()
+    end
+end
+
 local function UpdateChecklist()
     for _, f in ipairs(checklistIcons) do f:Hide() end
     local cfg = ChecklistCfg()
-    if ns.checklistMoving then return end
-    if not cfg or (not cfg.enabled and not ns.checklistTest) then checklistContainer:Hide(); return end
+    if ns.checklistMoving then SetChecklistFlashActive(false); return end
+    if not cfg or (not cfg.enabled and not ns.checklistTest) then
+        checklistContainer:Hide(); SetChecklistFlashActive(false); return
+    end
     local showAll = ns.checklistTest and true or false   -- test: show every entry
     local size, perRow = cfg.size or 40, cfg.perRow or 8
-    local idx = 0
+    local flagged = cfg.flash or {}
+    local idx, anyFlash = 0, false
     for sidStr in pairs(cfg.ids or {}) do
         local sid = tonumber(sidStr)
         if sid then
             local seen = AuraCueDB.seen and AuraCueDB.seen[sidStr]
-            local name = (seen and seen.name) or C_Spell.GetSpellName(sid)
-            if showAll or ChecklistBuffPresent(sid, name) == false then
+            -- Use the canonical spell name so the name match (which lets a
+            -- same-named different-rank flask satisfy this one) lines up with
+            -- the live aura's name.
+            local name = C_Spell.GetSpellName(sid) or (seen and seen.name)
+            local missing = ChecklistBuffPresent(sid, name) == false
+            if missing and flagged[sidStr] then anyFlash = true end
+            if showAll or missing then
                 idx = idx + 1
                 local f = checklistIcons[idx] or MakeChecklistIcon()
                 checklistIcons[idx] = f
@@ -1547,6 +1590,9 @@ local function UpdateChecklist()
     else
         checklistContainer:Hide()
     end
+    -- Constant screen-edge flash while any "flash when missing" item is missing
+    -- (not during the test / move preview, where the flash would just distract).
+    SetChecklistFlashActive(anyFlash and not showAll)
 end
 ns.UpdateChecklist = UpdateChecklist
 
@@ -1596,7 +1642,18 @@ function ns.SetChecklistAura(sid, on)
     local cfg = ChecklistCfg(); if not cfg then return end
     cfg.ids = cfg.ids or {}
     cfg.ids[tostring(sid)] = on and true or nil
-    if not on then checklistPresent[tonumber(sid)] = nil end
+    if not on then
+        checklistPresent[tonumber(sid)] = nil
+        if cfg.flash then cfg.flash[tostring(sid)] = nil end   -- drop its flash flag too
+    end
+    UpdateChecklist()
+end
+
+-- Per-item opt-in: trigger the constant edge flash while this item is missing.
+function ns.SetChecklistFlash(sid, on)
+    local cfg = ChecklistCfg(); if not cfg then return end
+    cfg.flash = cfg.flash or {}
+    cfg.flash[tostring(sid)] = on and true or nil
     UpdateChecklist()
 end
 
@@ -1613,6 +1670,7 @@ function ns.GetChecklist()
             name = (seen and seen.name) or C_Spell.GetSpellName(sid) or ("Spell " .. sidStr),
             icon = (seen and seen.icon)
                 or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 134400,
+            flash = (cfg.flash and cfg.flash[sidStr]) and true or false,
         }
     end
     table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)

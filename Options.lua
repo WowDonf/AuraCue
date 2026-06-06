@@ -2273,7 +2273,11 @@ do
     listHeader:SetPoint("TOPLEFT", LEFT, checklistPanel.y)
     listHeader:SetText("Buffs in your checklist")
     listHeader:SetTextColor(1, 0.82, 0)
-    checklistPanel.y = checklistPanel.y - 26
+    checklistPanel.y = checklistPanel.y - 22
+    local listHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    listHint:SetPoint("TOPLEFT", LEFT, checklistPanel.y)
+    listHint:SetText("Tick |cffffd200Flash|r to pulse a red screen edge while that buff is missing.")
+    checklistPanel.y = checklistPanel.y - 18
     local listTop = checklistPanel.y
     local emptyNote = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     emptyNote:SetPoint("TOPLEFT", LEFT + 4, listTop)
@@ -2282,15 +2286,19 @@ do
     local clRows = {}
     local function MakeClRow(i)
         local r = CreateFrame("Frame", nil, content)
-        r:SetSize(380, 26)
+        r:SetSize(400, 26)
         r.icon = r:CreateTexture(nil, "ARTWORK")
         r.icon:SetSize(20, 20); r.icon:SetPoint("LEFT", 0, 0)
         r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         r.name = r:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         r.name:SetPoint("LEFT", r.icon, "RIGHT", 8, 0)
-        r.name:SetWidth(300); r.name:SetJustifyH("LEFT"); r.name:SetWordWrap(false)
+        r.name:SetWidth(228); r.name:SetJustifyH("LEFT"); r.name:SetWordWrap(false)
+        r.flash = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
+        r.flash:SetSize(24, 24); r.flash:SetPoint("LEFT", r, "LEFT", 286, -1)
+        r.flashLabel = r:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        r.flashLabel:SetPoint("LEFT", r.flash, "RIGHT", 1, 0); r.flashLabel:SetText("Flash")
         r.del = CreateFrame("Button", nil, r, "UIPanelCloseButton")
-        r.del:SetSize(24, 24); r.del:SetPoint("LEFT", r, "LEFT", 336, 0)
+        r.del:SetSize(24, 24); r.del:SetPoint("LEFT", r, "LEFT", 360, 0)
         clRows[i] = r
         return r
     end
@@ -2305,6 +2313,8 @@ do
             r.icon:SetTexture(e.icon)
             r.name:SetText(e.name)
             local sid = e.spellID
+            r.flash:SetChecked(e.flash and true or false)
+            r.flash:SetScript("OnClick", function(self) ns.SetChecklistFlash(sid, self:GetChecked() and true or false) end)
             r.del:SetScript("OnClick", function() ns.SetChecklistAura(sid, false); RefreshAllPanels() end)
             r:Show()
             y = y - 26

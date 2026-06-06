@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.67.0
+
+- Checklist buffs now match by **name**, so a same-named different rank (e.g.
+  a 1-star vs 2-star flask) counts as present.
+- Each checklist buff has a **Flash** tick — while any flash-tagged buff is
+  missing, a red screen-edge glow pulses to grab your attention.
+
 ## v0.66.2
 
 - Checklist can now warn about a missing **weapon enchant** (oil / sharpening
