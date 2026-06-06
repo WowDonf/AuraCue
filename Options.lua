@@ -129,6 +129,41 @@ StaticPopupDialogs["AURACUE_ALTS"] = {
     end,
 }
 
+-- Apply the "require another aura" spell id from the dialog (blank = clear).
+-- The mode (present/absent) is carried on the dialog data, chosen in the menu.
+local function ApplyRequireFromDialog(data, text)
+    if not data or not data.key then return end
+    local sid = tonumber((text or ""):match("%d+"))
+    ns.SetCueRequire(data.key, sid, data.mode or "present")
+    if data.after then data.after() end
+end
+
+-- Set the gating aura (a spell id) for one cue: it then fires only when that
+-- aura is present or missing (per the chosen mode).
+StaticPopupDialogs["AURACUE_REQAURA"] = {
+    text = "Spell ID of the aura that gates %s\n(leave blank to clear the requirement):",
+    button1 = "Save",
+    button2 = "Cancel",
+    hasEditBox = true,
+    editBoxWidth = 160,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    OnShow = function(self, data)
+        local eb = DEB(self)
+        if eb then eb:SetText((data and data.current) or ""); eb:HighlightText(); eb:SetFocus() end
+    end,
+    OnAccept = function(self, data)
+        local eb = DEB(self)
+        ApplyRequireFromDialog(data, eb and eb:GetText() or "")
+    end,
+    EditBoxOnEnterPressed = function(editBox)
+        local d = editBox:GetParent()
+        ApplyRequireFromDialog(d and d.data, editBox:GetText() or "")
+        if d then d:Hide() end
+    end,
+}
+
 -- Rename (or, if blank, delete) a whole custom group. Opener passes { old }.
 StaticPopupDialogs["AURACUE_RENAME_GROUP"] = {
     text = "Rename group \"%s\" to (blank = delete the group):",
@@ -1499,6 +1534,36 @@ local function BuildKindPanel(kind)
                             if ns.RefreshPrivateAuras then ns.RefreshPrivateAuras() end
                             return MenuResponse and MenuResponse.Refresh or nil
                         end)
+                end
+                local reqText = cue.requireAura
+                    and ("Require: " .. (cue.requireName or cue.requireAura)
+                         .. (cue.requireMode == "absent" and " missing" or " active"))
+                    or "Require another aura…"
+                local reqSub = root:CreateButton(reqText)
+                reqSub:CreateButton(cue.requireAura and "Change required aura (spell ID)…"
+                    or "Set required aura (spell ID)…", function()
+                    StaticPopup_Show("AURACUE_REQAURA", cue.label or key, nil,
+                        { key = key, current = cue.requireAura and tostring(cue.requireAura) or "",
+                          mode = cue.requireMode or "present", after = function() RefreshAllPanels() end })
+                end)
+                if cue.requireAura then
+                    reqSub:CreateDivider()
+                    reqSub:CreateRadio("Only while it's active",
+                        function() return (cue.requireMode or "present") == "present" end,
+                        function()
+                            ns.SetCueRequire(key, cue.requireAura, "present")
+                            return MenuResponse and MenuResponse.Refresh or nil
+                        end)
+                    reqSub:CreateRadio("Only while it's missing",
+                        function() return cue.requireMode == "absent" end,
+                        function()
+                            ns.SetCueRequire(key, cue.requireAura, "absent")
+                            return MenuResponse and MenuResponse.Refresh or nil
+                        end)
+                    reqSub:CreateButton("Clear requirement", function()
+                        ns.SetCueRequire(key, nil)
+                        return MenuResponse and MenuResponse.Refresh or nil
+                    end)
                 end
                 root:CreateDivider()
                 root:CreateCheckbox("Auto-combine auras with the same name",

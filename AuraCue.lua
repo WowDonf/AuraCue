@@ -648,6 +648,19 @@ local function ConditionMet(when)
 end
 ns.ConditionMet = ConditionMet
 
+local ReadAura  -- forward (defined with the aura-read helpers below)
+
+-- Per-cue "require another aura" gate: a cue can be limited to fire only when
+-- some other aura is currently up (requireMode "present") or only when it is
+-- missing ("absent"). The read is best-effort — in instanced combat the aura
+-- may be masked (read as absent), so prefer this for open-world conditions.
+local function RequireMet(cue)
+    if not cue.requireAura then return true end
+    local present = (ReadAura(cue.requireAura) == "present")
+    if cue.requireMode == "absent" then return not present end
+    return present
+end
+
 -- Resolve the phrase spoken for an event: a literal override if given, else the
 -- profile's general format with {name} filled in (e.g. "Bloodlust gained", or a
 -- custom "Damage Now"). Shared by the live cue path and the options testers.
@@ -680,6 +693,7 @@ end
 
 local function FireCue(cue, spellName, eventKind)
     if not ConditionMet(cue.when) then return end
+    if not RequireMet(cue) then return end
     -- Respect the per-kind master switches (buffs vs debuffs).
     if cue.kind == "debuff" then
         if not activeProfile.trackDebuffs then return end
@@ -925,7 +939,7 @@ local GetPlayerAura = C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
 -- Read one watched aura's state by its known id: "present", "absent", or
 -- "unknown" (the read came back masked / secret). Querying a known id is the
 -- sanctioned path, but the game can still hide the result in combat.
-local function ReadAura(sid)
+function ReadAura(sid)
     if not sid then return "absent" end
     if GetPlayerAura then
         local a = GetPlayerAura(sid)
@@ -1657,6 +1671,22 @@ function ns.SetCueKind(spellKey, kind)
     if AuraCueDB.seen and AuraCueDB.seen[key] then AuraCueDB.seen[key].kind = kind; MarkSeenDirty() end
     cue.castSeen = nil   -- re-derive tracking mode for the new kind
     ApplyCueChange()
+end
+
+-- Per-cue "require another aura" gate. sid = the gating aura's spell id (nil to
+-- clear); mode = "present" (fire only while it's up) or "absent" (only while
+-- it's missing). The gating aura's name is cached for the options display.
+function ns.SetCueRequire(spellKey, sid, mode)
+    local cue = activeProfile and activeProfile.cues[tostring(spellKey)]
+    if not cue then return end
+    sid = tonumber(sid)
+    if not sid then
+        cue.requireAura, cue.requireMode, cue.requireName = nil, nil, nil
+    else
+        cue.requireAura = sid
+        cue.requireMode = (mode == "absent") and "absent" or "present"
+        cue.requireName = C_Spell.GetSpellName(sid) or tostring(sid)
+    end
 end
 
 -- Per-cue opt-in for the on-screen duration bar; SeedPresent re-shows / hides

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.62.0
+
+- **Conditional cues.** A watched aura's Edit (right-click) menu now has
+  **Require another aura** — gate a cue so it only fires while some other aura
+  is **active**, or only while it's **missing** (e.g. warn that a self-buff
+  dropped, or only alert on a proc while a stance is up). Set the gating aura by
+  spell ID and pick active/missing. (Best-effort in instanced combat, where the
+  gating aura may be hidden from addons.)
+
 ## v0.61.0
 
 - The on-screen flash can now show the **spell icon** above the text. Turn it on
