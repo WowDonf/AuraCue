@@ -2167,12 +2167,6 @@ do
         "but that ISN'T currently on you — an empty box means you're fully buffed. Handy as a " ..
         "pre-pull check. (In instanced combat some buffs can't be read, so this is most reliable " ..
         "out of combat.)")
-    checklistPanel.Check("Enable the checklist box",
-        function() return ns.P().checklist and ns.P().checklist.enabled end,
-        function(v)
-            if ns.P().checklist then ns.P().checklist.enabled = v end
-            if ns.UpdateChecklist then ns.UpdateChecklist() end
-        end)
     -- Weapon enchants (oils / sharpening stones) aren't auras, so they can't be
     -- added from the catalog — watch them with this instead (both weapons).
     checklistPanel.Check("Warn if a weapon enchant (oil / sharpening stone) is missing",
@@ -2419,13 +2413,15 @@ do
     checklistPanel.y = checklistPanel.y - 22
     local listHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     listHint:SetPoint("TOPLEFT", LEFT, checklistPanel.y)
-    listHint:SetText("Per buff: |cffffd200Flash|r pulses the screen edge, |cffffd200Ticker|r shows it in the scroller — while it's missing.")
+    listHint:SetText("Per buff, while it's missing: |cffffd200Box|r shows its icon, |cffffd200Flash|r pulses the screen edge, |cffffd200Ticker|r scrolls its name.")
     checklistPanel.y = checklistPanel.y - 16
     -- Column headers over the per-row checkboxes.
+    local boxHdr = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    boxHdr:SetPoint("TOPLEFT", LEFT + 210, checklistPanel.y); boxHdr:SetText("Box")
     local flashHdr = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    flashHdr:SetPoint("TOPLEFT", LEFT + 232, checklistPanel.y); flashHdr:SetText("Flash")
+    flashHdr:SetPoint("TOPLEFT", LEFT + 264, checklistPanel.y); flashHdr:SetText("Flash")
     local tickerHdr = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    tickerHdr:SetPoint("TOPLEFT", LEFT + 292, checklistPanel.y); tickerHdr:SetText("Ticker")
+    tickerHdr:SetPoint("TOPLEFT", LEFT + 318, checklistPanel.y); tickerHdr:SetText("Ticker")
     checklistPanel.y = checklistPanel.y - 16
     local listTop = checklistPanel.y
     local emptyNote = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
@@ -2441,13 +2437,15 @@ do
         r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         r.name = r:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         r.name:SetPoint("LEFT", r.icon, "RIGHT", 8, 0)
-        r.name:SetWidth(196); r.name:SetJustifyH("LEFT"); r.name:SetWordWrap(false)
+        r.name:SetWidth(176); r.name:SetJustifyH("LEFT"); r.name:SetWordWrap(false)
+        r.box = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
+        r.box:SetSize(24, 24); r.box:SetPoint("LEFT", r, "LEFT", 210, -1)
         r.flash = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
-        r.flash:SetSize(24, 24); r.flash:SetPoint("LEFT", r, "LEFT", 232, -1)
+        r.flash:SetSize(24, 24); r.flash:SetPoint("LEFT", r, "LEFT", 264, -1)
         r.ticker = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
-        r.ticker:SetSize(24, 24); r.ticker:SetPoint("LEFT", r, "LEFT", 296, -1)
+        r.ticker:SetSize(24, 24); r.ticker:SetPoint("LEFT", r, "LEFT", 318, -1)
         r.del = CreateFrame("Button", nil, r, "UIPanelCloseButton")
-        r.del:SetSize(24, 24); r.del:SetPoint("LEFT", r, "LEFT", 360, 0)
+        r.del:SetSize(24, 24); r.del:SetPoint("LEFT", r, "LEFT", 372, 0)
         clRows[i] = r
         return r
     end
@@ -2462,6 +2460,8 @@ do
             r.icon:SetTexture(e.icon)
             r.name:SetText(e.name)
             local sid = e.spellID
+            r.box:SetChecked(e.box and true or false)
+            r.box:SetScript("OnClick", function(self) ns.SetChecklistBox(sid, self:GetChecked() and true or false) end)
             r.flash:SetChecked(e.flash and true or false)
             r.flash:SetScript("OnClick", function(self) ns.SetChecklistFlash(sid, self:GetChecked() and true or false) end)
             r.ticker:SetChecked(e.ticker and true or false)

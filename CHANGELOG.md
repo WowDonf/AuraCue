@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.71.0
+
+- The missing-buff icon box is now **per buff**: each row in the checklist has a
+  **Box** tick (alongside Flash and Ticker), replacing the single "enable box"
+  toggle. New buffs default to showing in the box; existing setups are migrated.
+
 ## v0.70.3
 
 - Fixed the missing-buff checklist churning memory: it scanned your auras by

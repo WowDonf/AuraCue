@@ -131,13 +131,13 @@ local PROFILE_DEFAULTS = {
     -- Missing-buff checklist: a movable box that shows an icon for each buff in
     -- `ids` that is NOT currently on you (empty box = everything's up).
     checklist = {
-        enabled  = true,
         ids      = {},      -- { [spellID-as-string] = true } buffs you want kept up
         locked   = true,
         position = nil,     -- { point, relativePoint, x, y }
         size     = 40,      -- icon size (px)
         perRow   = 8,       -- icons per row before wrapping
         weaponEnchant = false,  -- warn when a weapon has no temporary enchant (oil/stone)
+        box      = {},      -- { [spellID-as-string] = true } items shown in the icon box
         flash    = {},      -- { [spellID-as-string] = true } items that trigger the edge flash
         flashColor = { r = 1.0, g = 0.25, b = 0.2 },  -- the edge-flash colour
         -- A scrolling marquee of selected missing buffs (per-item opt-in below).
@@ -358,7 +358,16 @@ local function ValidateRanges(db)
     local cl = db.checklist
     if type(cl.ids) ~= "table" then cl.ids = {} end
     if type(cl.flash) ~= "table" then cl.flash = {} end
-    cl.enabled = cl.enabled ~= false
+    -- The icon box is now per-item. Migrate the old global "enabled" toggle:
+    -- when it was on, every checklist item (and weapon enchant) showed in the box.
+    if type(cl.box) ~= "table" then
+        cl.box = {}
+        if cl.enabled ~= false then
+            for sidStr in pairs(cl.ids) do cl.box[sidStr] = true end
+            if cl.weaponEnchant then cl.box["weapon"] = true end
+        end
+    end
+    cl.enabled = nil
     cl.locked = cl.locked ~= false
     if type(cl.size) ~= "number" then cl.size = 40 end
     cl.size = math.max(16, math.min(80, cl.size))
@@ -1644,12 +1653,14 @@ local function UpdateChecklist()
     for _, f in ipairs(checklistIcons) do f:Hide() end
     local cfg = ChecklistCfg()
     if ns.checklistMoving then SetChecklistFlashActive(false); return end
-    if not cfg or (not cfg.enabled and not ns.checklistTest) then
+    -- No items and no weapon-enchant watch: nothing to do (skip all work).
+    if not cfg or (not ns.checklistTest and not next(cfg.ids or {}) and not cfg.weaponEnchant) then
         checklistContainer:Hide(); SetChecklistFlashActive(false); return
     end
     clNameSetReady = false   -- rebuild the aura-name set at most once this pass
     local showAll = ns.checklistTest and true or false   -- test: show every entry
     local size, perRow = cfg.size or 40, cfg.perRow or 8
+    local boxed = cfg.box or {}
     local flagged = cfg.flash or {}
     local tickered = (cfg.ticker and cfg.ticker.ids) or {}
     local idx, anyFlash = 0, false
@@ -1665,7 +1676,7 @@ local function UpdateChecklist()
             local missing = ChecklistBuffPresent(sid, name) == false
             if missing and flagged[sidStr] then anyFlash = true end
             if missing and name and tickered[sidStr] then missingNames[#missingNames + 1] = name end
-            if showAll or missing then
+            if showAll or (missing and boxed[sidStr]) then
                 idx = idx + 1
                 local f = checklistIcons[idx] or MakeChecklistIcon()
                 checklistIcons[idx] = f
@@ -1688,7 +1699,7 @@ local function UpdateChecklist()
         local function EnchantIcon(slot, has)
             local itemTex = GetInventoryItemTexture and GetInventoryItemTexture("player", slot)
             if itemTex and not has then missingEnchant = true end
-            if itemTex and (showAll or not has) then
+            if itemTex and (showAll or (not has and boxed[WEAPON_KEY])) then
                 idx = idx + 1
                 local f = checklistIcons[idx] or MakeChecklistIcon()
                 checklistIcons[idx] = f
@@ -1829,11 +1840,23 @@ function ns.SetChecklistAura(sid, on)
     local cfg = ChecklistCfg(); if not cfg then return end
     cfg.ids = cfg.ids or {}
     cfg.ids[tostring(sid)] = on and true or nil
-    if not on then
+    cfg.box = cfg.box or {}
+    if on then
+        cfg.box[tostring(sid)] = true   -- show in the icon box by default
+    else
         checklistPresent[tonumber(sid)] = nil
-        if cfg.flash then cfg.flash[tostring(sid)] = nil end   -- drop its flash flag too
+        cfg.box[tostring(sid)] = nil
+        if cfg.flash then cfg.flash[tostring(sid)] = nil end   -- drop its flags too
         if cfg.ticker and cfg.ticker.ids then cfg.ticker.ids[tostring(sid)] = nil end
     end
+    UpdateChecklist()
+end
+
+-- Per-item opt-in: show this item's icon in the on-screen box while missing.
+function ns.SetChecklistBox(sid, on)
+    local cfg = ChecklistCfg(); if not cfg then return end
+    cfg.box = cfg.box or {}
+    cfg.box[tostring(sid)] = on and true or nil
     UpdateChecklist()
 end
 
@@ -1859,7 +1882,11 @@ end
 function ns.SetChecklistWeaponEnchant(on)
     local cfg = ChecklistCfg(); if not cfg then return end
     cfg.weaponEnchant = on and true or false
-    if not on then
+    cfg.box = cfg.box or {}
+    if on then
+        cfg.box[WEAPON_KEY] = true   -- show in the icon box by default
+    else
+        cfg.box[WEAPON_KEY] = nil
         if cfg.flash then cfg.flash[WEAPON_KEY] = nil end
         if cfg.ticker and cfg.ticker.ids then cfg.ticker.ids[WEAPON_KEY] = nil end
     end
@@ -1881,6 +1908,7 @@ function ns.GetChecklist()
             name = (seen and seen.name) or C_Spell.GetSpellName(sid) or ("Spell " .. sidStr),
             icon = (seen and seen.icon)
                 or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 134400,
+            box = (cfg.box and cfg.box[sidStr]) and true or false,
             flash = (cfg.flash and cfg.flash[sidStr]) and true or false,
             ticker = (cfg.ticker and cfg.ticker.ids and cfg.ticker.ids[sidStr]) and true or false,
         }
@@ -1891,6 +1919,7 @@ function ns.GetChecklist()
             isWeapon = true,
             name = "Weapon enchant (oil / stone)",
             icon = (GetInventoryItemTexture and GetInventoryItemTexture("player", 16)) or 134400,
+            box = (cfg.box and cfg.box[WEAPON_KEY]) and true or false,
             flash = (cfg.flash and cfg.flash[WEAPON_KEY]) and true or false,
             ticker = (cfg.ticker and cfg.ticker.ids and cfg.ticker.ids[WEAPON_KEY]) and true or false,
         }
