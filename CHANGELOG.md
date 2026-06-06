@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.63.4
+
+- Further fix for a false **"lost"** when entering combat: a **permanent** aura
+  (one that can't expire — auras, stances, toggles like Devotion Aura) is now
+  held rather than faded when its read is masked in combat, since it can't have
+  actually dropped.
+
 ## v0.63.3
 
 - Fixed a false **"lost"** cue firing on a still-active aura when entering combat
