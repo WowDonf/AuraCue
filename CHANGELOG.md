@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.63.2
+
+- Conditional cues now detect the gating aura more reliably: if the spell ID you
+  entered is the *cast* ID (different from the aura's own ID), it falls back to
+  matching by name, so **"Only while it's missing"** correctly suppresses while
+  the aura is up. The gate also only fires on a confirmed read.
+
 ## v0.63.1
 
 - Fixed **"Only while it's missing"** (conditional cues) sometimes firing while

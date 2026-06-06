@@ -654,11 +654,35 @@ local ReadAura  -- forward (defined with the aura-read helpers below)
 -- some other aura is currently up (requireMode "present") or only when it is
 -- missing ("absent"). The read is best-effort — in instanced combat the aura
 -- may be masked (read as absent), so prefer this for open-world conditions.
+-- Is the gating aura on the player? Returns true / false / nil (nil = the read
+-- was masked, so we can't tell). Tries the exact id first; if that misses, falls
+-- back to a name scan, because the id a user types is often the *cast* id while
+-- the aura on them carries a different id with the same name.
+local function GateAuraPresent(cue)
+    local state = ReadAura(cue.requireAura)
+    if state == "present" then return true end
+    if state == "unknown" then return nil end
+    local name = cue.requireName
+    if name and name ~= "" and AuraUtil and AuraUtil.ForEachAura then
+        local found = false
+        local function h(data)
+            if data and Reveal(data.name) == name then found = true; return true end
+            return false
+        end
+        AuraUtil.ForEachAura("player", "HELPFUL", nil, h, true)
+        if not found then AuraUtil.ForEachAura("player", "HARMFUL", nil, h, true) end
+        if found then return true end
+    end
+    return false
+end
+
 local function RequireMet(cue)
     if not cue.requireAura then return true end
-    local present = (ReadAura(cue.requireAura) == "present")
-    if cue.requireMode == "absent" then return not present end
-    return present
+    local present = GateAuraPresent(cue)
+    -- Only fire on a CONFIRMED state — if the read was masked (nil), don't fire,
+    -- so a hidden gate aura can't accidentally satisfy either mode.
+    if cue.requireMode == "absent" then return present == false end
+    return present == true
 end
 
 -- Resolve the phrase spoken for an event: a literal override if given, else the
