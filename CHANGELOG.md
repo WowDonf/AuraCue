@@ -1,10 +1,15 @@
 # Changelog
 
+## v0.60.9
+
+- Fixed the **Bar font** dropdown erroring on open (the menu's label is a
+  protected region that blocks SetFont/CreateFontString). Each font's preview
+  now uses a pre-built font object applied with SetFontObject, so the dropdown
+  opens cleanly and still shows every name in its own font.
+
 ## v0.60.8
 
-- Fixed an error ("Use of function 'SetFont' is disallowed") when opening the
-  **Bar font** dropdown. The menu's own label is a protected region, so the
-  font preview now renders in a separate label and the dropdown opens cleanly.
+- Began fixing the Bar font dropdown error (superseded by v0.60.9).
 
 ## v0.60.7
 

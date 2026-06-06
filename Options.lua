@@ -1801,6 +1801,30 @@ do
         ns.ApplyBarStyle)
 
     -- Bar font + text outline, side by side.
+    -- The Blizzard menu's own label FontString is a secure managed region: it
+    -- disallows SetFont, and the button disallows CreateFontString/CreateTexture
+    -- etc. SetFontObject IS allowed, though — so to preview each font we make a
+    -- Font object per name up front (via the global CreateFont, in normal
+    -- context) and just point the label at it inside the menu initializer.
+    local barFontObjs, barFontN = {}, 0
+    local function EnsureBarFontObjects()
+        local list = ns.GetBarFonts and ns.GetBarFonts()
+        if not list then return end
+        for _, name in ipairs(list) do
+            if barFontObjs[name] == nil then
+                local path = ns.BarFontFile and ns.BarFontFile(name)
+                if path and CreateFont then
+                    barFontN = barFontN + 1
+                    local fo = CreateFont("AuraCueBarFontPreview" .. barFontN)
+                    if fo then fo:SetFont(path, 14, "") end
+                    barFontObjs[name] = (fo and fo:GetFont()) and fo or false
+                else
+                    barFontObjs[name] = false
+                end
+            end
+        end
+    end
+
     local fontDD, outlineDD = barsPanel.Dropdown2("Bar font", "Text outline", 200)
     fontDD:SetupMenu(function(_, root)
         if root.SetScrollMode then root:SetScrollMode(GetScreenHeight() * 0.5) end
@@ -1822,32 +1846,22 @@ do
                     fontDD:SetText(k); fontDD:GenerateMenu()
                     if ns.RefreshBars then ns.RefreshBars() end
                 end)
-            local path = ns.BarFontFile and ns.BarFontFile(k)
-            if path and r and r.AddInitializer then
-                -- The menu's own label FontString is a secure managed region and
-                -- disallows SetFont, so render the preview in a FontString we
-                -- create on the button (ours, no restriction) over on the right.
+            local fo = barFontObjs[k]
+            if fo and r and r.AddInitializer then
+                -- SetFontObject is permitted on the menu's label (SetFont isn't).
                 r:AddInitializer(function(button)
-                    local fs = button.acFontPreview
-                    if not fs then
-                        fs = button:CreateFontString(nil, "OVERLAY")
-                        button.acFontPreview = fs
-                    end
-                    if fs:SetFont(path, 14, "") then
-                        fs:SetText(k)
-                        fs:SetTextColor(0.85, 0.85, 0.85)
-                        fs:ClearAllPoints()
-                        fs:SetPoint("RIGHT", button, "RIGHT", -10, 0)
-                        fs:Show()
-                        return 260, 20
-                    else
-                        fs:Hide()
+                    if button.fontString and button.fontString.SetFontObject then
+                        button.fontString:SetFontObject(fo)
                     end
                 end)
             end
         end
     end)
-    fontDD.Refresh = function() local p = ns.P(); fontDD:SetText((p and p.bars and p.bars.font) or "Default") end
+    fontDD.Refresh = function()
+        EnsureBarFontObjects()
+        local p = ns.P(); fontDD:SetText((p and p.bars and p.bars.font) or "Default")
+    end
+    EnsureBarFontObjects()
     barsPanel.widgets[#barsPanel.widgets + 1] = fontDD
 
     local OUTLINE_OPTS = { { "NONE", "None" }, { "OUTLINE", "Outline" }, { "THICKOUTLINE", "Thick outline" } }

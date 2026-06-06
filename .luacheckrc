@@ -28,7 +28,7 @@ globals = {
 -- Blizzard / WoW API globals the addon only reads from.
 read_globals = {
     -- Frame + UI infrastructure
-    "CreateFrame", "UIParent", "GetScreenHeight", "CreateColor",
+    "CreateFrame", "CreateFont", "UIParent", "GetScreenHeight", "CreateColor",
     "Settings", "SettingsPanel", "HideUIPanel", "MenuResponse", "MenuUtil",
     "ColorPickerFrame",
     "GameTooltip", "StaticPopup_Show",
