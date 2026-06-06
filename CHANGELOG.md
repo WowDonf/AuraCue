@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.60.8
+
+- Fixed an error ("Use of function 'SetFont' is disallowed") when opening the
+  **Bar font** dropdown. The menu's own label is a protected region, so the
+  font preview now renders in a separate label and the dropdown opens cleanly.
+
 ## v0.60.7
 
 - Timer bars can now show the spell icon on the **right** of the bar instead

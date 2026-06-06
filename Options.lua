@@ -1824,8 +1824,25 @@ do
                 end)
             local path = ns.BarFontFile and ns.BarFontFile(k)
             if path and r and r.AddInitializer then
-                r:AddInitializer(function(button)   -- render the name in its own font
-                    if button.fontString then button.fontString:SetFont(path, 14, "") end
+                -- The menu's own label FontString is a secure managed region and
+                -- disallows SetFont, so render the preview in a FontString we
+                -- create on the button (ours, no restriction) over on the right.
+                r:AddInitializer(function(button)
+                    local fs = button.acFontPreview
+                    if not fs then
+                        fs = button:CreateFontString(nil, "OVERLAY")
+                        button.acFontPreview = fs
+                    end
+                    if fs:SetFont(path, 14, "") then
+                        fs:SetText(k)
+                        fs:SetTextColor(0.85, 0.85, 0.85)
+                        fs:ClearAllPoints()
+                        fs:SetPoint("RIGHT", button, "RIGHT", -10, 0)
+                        fs:Show()
+                        return 260, 20
+                    else
+                        fs:Hide()
+                    end
                 end)
             end
         end
