@@ -356,11 +356,13 @@ local function NewPanel(name)
         eb:SetScript("OnEditFocusLost", function(self) setter(self:GetText() or "") end)
         eb.Refresh = function() eb:SetText(getter() or "") end
         if placeholder then
-            -- Set the font via the CreateFontString template (reliable) rather
-            -- than SetFontObject; an unset font renders nothing (invisible).
-            local ph = eb:CreateFontString(nil, "OVERLAY", "ChatFontNormal")
-            ph:SetPoint("LEFT", eb, "LEFT", 5, 0)
-            ph:SetPoint("RIGHT", eb, "RIGHT", -5, 0)
+            -- Set the font with an explicit path (STANDARD_TEXT_FONT); a font
+            -- string inheriting a Font-object template on an editbox can end up
+            -- with no usable font and render nothing (invisible).
+            local ph = eb:CreateFontString(nil, "OVERLAY")
+            ph:SetFont(STANDARD_TEXT_FONT, 12, "")
+            ph:SetPoint("LEFT", eb, "LEFT", 8, 0)
+            ph:SetPoint("RIGHT", eb, "RIGHT", -8, 0)
             ph:SetJustifyH("LEFT")
             ph:SetTextColor(0.5, 0.5, 0.5)
             ph:SetText(placeholder)
@@ -375,7 +377,7 @@ local function NewPanel(name)
         -- SetText on an editbox that has never been shown can fail to stick, so
         -- the field looked blank after a reload until something re-refreshed it.
         -- Re-read the stored value whenever the box becomes visible.
-        eb:HookScript("OnShow", function() eb.Refresh() end)
+        eb:HookScript("OnShow", function() if ns.P() then eb.Refresh() end end)
         widgets[#widgets + 1] = eb
         ctx.y = ctx.y - 30
         return eb
@@ -733,9 +735,10 @@ local function OpenSpeechDialog(sid, name, applied, faded, after)
         -- Greyed placeholder showing the default (the general format) while the
         -- override box is empty, so it's clear what plays if you leave it blank.
         local function attachPlaceholder(box)
-            local ph = box:CreateFontString(nil, "OVERLAY", "ChatFontNormal")
-            ph:SetPoint("LEFT", box, "LEFT", 5, 0)
-            ph:SetPoint("RIGHT", box, "RIGHT", -5, 0)
+            local ph = box:CreateFontString(nil, "OVERLAY")
+            ph:SetFont(STANDARD_TEXT_FONT, 12, "")
+            ph:SetPoint("LEFT", box, "LEFT", 8, 0)
+            ph:SetPoint("RIGHT", box, "RIGHT", -8, 0)
             ph:SetJustifyH("LEFT")
             ph:SetTextColor(0.5, 0.5, 0.5)
             box.placeholder = ph

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.60.13
+
+- Fixed the greyed "{name} gained" / "{name} lost" placeholder not appearing in
+  the empty phrase fields. The font is now set with an explicit path so the
+  placeholder text actually renders.
+
 ## v0.60.12
 
 - Fixed the Audio **Gained / Lost phrase** fields showing blank after a reload

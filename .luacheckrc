@@ -34,6 +34,8 @@ read_globals = {
     "GameTooltip", "StaticPopup_Show",
     -- Default font object (for the bar text fallback font)
     "GameFontHighlightSmall",
+    -- Default font path (for editbox placeholder text)
+    "STANDARD_TEXT_FONT",
     -- Mount detection (to keep mounts out of ability groups)
     "C_MountJournal",
     -- Sound
