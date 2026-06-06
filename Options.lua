@@ -1698,11 +1698,14 @@ do
             if ns.P().bars then ns.P().bars.enabled = v end
             if not v and ns.BarClearAll then ns.BarClearAll() end
         end)
-    barsPanel.Check("Show a bar on every watched aura",
-        function() return ns.P().bars and ns.P().bars.all end,
-        function(v) if ns.SetBarsAll then ns.SetBarsAll(v) end end)
-    barsPanel.Desc("Overrides the per-aura \"Show a timer bar\" toggles without changing them — " ..
-        "turn it off and each aura goes back to its own setting.")
+    barsPanel.Check("Show a bar on every watched buff",
+        function() return ns.P().bars and ns.P().bars.allBuffs end,
+        function(v) if ns.SetBarsAll then ns.SetBarsAll("buff", v) end end)
+    barsPanel.Check("Show a bar on every watched debuff",
+        function() return ns.P().bars and ns.P().bars.allDebuffs end,
+        function(v) if ns.SetBarsAll then ns.SetBarsAll("debuff", v) end end)
+    barsPanel.Desc("Force a bar on every buff / debuff, on top of the per-aura \"Show a timer bar\" " ..
+        "toggles without changing them — turn one off and those auras go back to their own setting.")
     barsPanel.Slider("Bar width", 120, 400, 5, "%d",
         function() return (ns.P().bars and ns.P().bars.width) or 220 end,
         function(v) if ns.P().bars then ns.P().bars.width = v end; if ns.RefreshBars then ns.RefreshBars() end end)

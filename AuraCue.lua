@@ -117,7 +117,8 @@ local PROFILE_DEFAULTS = {
         position = nil,     -- { point, relativePoint, x, y }
         texture  = nil,     -- LibSharedMedia bar-style name; nil = built-in
         reverse  = false,   -- reverse the fill direction (drain the other way)
-        all      = false,   -- show a bar on every watched aura (overrides cue.bar)
+        allBuffs   = false, -- show a bar on every watched buff (overrides cue.bar)
+        allDebuffs = false, -- show a bar on every watched debuff
         colorBuff   = { r = 0.20, g = 0.86, b = 0.75 },  -- buff bar fill colour
         colorDebuff = { r = 1.00, g = 0.45, b = 0.30 },  -- debuff bar fill colour
         font     = nil,     -- LibSharedMedia font name; nil = default UI font
@@ -313,7 +314,14 @@ local function ValidateRanges(db)
     if bars.grow ~= "up" and bars.grow ~= "down" then bars.grow = "down" end
     if bars.texture ~= nil and type(bars.texture) ~= "string" then bars.texture = nil end
     bars.reverse = bars.reverse and true or false
-    bars.all = bars.all and true or false
+    -- Migrate the old single "bars on every aura" toggle into per-kind ones.
+    if bars.all ~= nil then
+        if bars.allBuffs == nil then bars.allBuffs = bars.all end
+        if bars.allDebuffs == nil then bars.allDebuffs = bars.all end
+        bars.all = nil
+    end
+    bars.allBuffs = bars.allBuffs and true or false
+    bars.allDebuffs = bars.allDebuffs and true or false
     HealColor(bars, "colorBuff", DEFAULT_COLORS.buff)
     HealColor(bars, "colorDebuff", DEFAULT_COLORS.debuff)
     if bars.font ~= nil and type(bars.font) ~= "string" then bars.font = nil end
@@ -962,13 +970,15 @@ end
 -- Sorted list of available bar-texture names (nil if LibSharedMedia is absent).
 ns.GetBarTextures = function() return LSM and LSM:List("statusbar") or nil end
 
--- Whether a cue should show a bar: its own opt-in, OR the global "bars on every
--- aura" override (which never rewrites the per-cue cue.bar setting).
+-- Whether a cue should show a bar: its own opt-in, OR the per-kind "bars on
+-- every buff/debuff" override (which never rewrites the per-cue cue.bar setting).
 local function CueWantsBar(cue)
     if not cue then return false end
     if cue.bar then return true end
     local cfg = BarCfg()
-    return (cfg and cfg.all) and true or false
+    if not cfg then return false end
+    if cue.kind == "debuff" then return cfg.allDebuffs and true or false end
+    return cfg.allBuffs and true or false
 end
 
 -- Bar fill colour for a kind (separate from the flash colours).
@@ -1606,11 +1616,13 @@ function ns.SetCueBar(spellKey, on)
     if ns.RefreshOptions then ns.RefreshOptions() end
 end
 
--- Global override: show a bar on every watched aura, regardless of each cue's
--- own toggle (which is left unchanged, so turning this off restores them).
-function ns.SetBarsAll(on)
+-- Per-kind override: show a bar on every watched buff (or debuff), regardless of
+-- each cue's own toggle (which is left unchanged, so turning this off restores
+-- them). `kind` is "buff" or "debuff".
+function ns.SetBarsAll(kind, on)
     if not (activeProfile and activeProfile.bars) then return end
-    activeProfile.bars.all = on and true or nil
+    local key = (kind == "debuff") and "allDebuffs" or "allBuffs"
+    activeProfile.bars[key] = on and true or nil
     SeedPresent()
     if ns.RefreshOptions then ns.RefreshOptions() end
 end

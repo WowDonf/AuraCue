@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.60.4
+
+- The "show a bar on every watched aura" override is now **two** toggles on the
+  Bars page — one for **buffs**, one for **debuffs** — so you can force bars on
+  all buffs, all debuffs, or both. Each still overrides the per-aura toggles
+  without changing them.
+
 ## v0.60.3
 
 - Moved the **Timer bars** settings onto their own **Bars** page in the settings
