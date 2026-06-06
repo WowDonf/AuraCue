@@ -139,6 +139,14 @@ local PROFILE_DEFAULTS = {
         perRow   = 8,       -- icons per row before wrapping
         weaponEnchant = false,  -- warn when a weapon has no temporary enchant (oil/stone)
         flash    = {},      -- { [spellID-as-string] = true } items that trigger the edge flash
+        flashColor = { r = 1.0, g = 0.25, b = 0.2 },  -- the edge-flash colour
+        -- A scrolling marquee of selected missing buffs (per-item opt-in below).
+        ticker = {
+            width    = 320,
+            locked   = true,
+            position = nil,
+            ids      = {},  -- { [spellID-as-string] = true } items shown in the ticker
+        },
     },
     -- Watched auras, keyed by spellID-as-string -> cue config.
     cues = {},
@@ -362,6 +370,12 @@ local function ValidateRanges(db)
         cl.mhEnchant, cl.ohEnchant = nil, nil
     end
     cl.weaponEnchant = cl.weaponEnchant and true or false
+    HealColor(cl, "flashColor", { r = 1.0, g = 0.25, b = 0.2 })
+    if type(cl.ticker) ~= "table" then cl.ticker = {} end
+    if type(cl.ticker.ids) ~= "table" then cl.ticker.ids = {} end
+    cl.ticker.locked = cl.ticker.locked ~= false
+    if type(cl.ticker.width) ~= "number" then cl.ticker.width = 320 end
+    cl.ticker.width = math.max(120, math.min(800, cl.ticker.width))
 end
 ns.ValidateRanges = ValidateRanges
 
@@ -1489,6 +1503,7 @@ checklistFlash:SetAllPoints(UIParent)
 checklistFlash:SetFrameStrata("BACKGROUND")
 checklistFlash:EnableMouse(false)
 checklistFlash:Hide()
+local clFlashStrips
 do
     local function MkFlashStrip() local t = checklistFlash:CreateTexture(nil, "ARTWORK"); t:SetColorTexture(1, 1, 1, 1); return t end
     local sL, sR, sT, sB = MkFlashStrip(), MkFlashStrip(), MkFlashStrip(), MkFlashStrip()
@@ -1496,22 +1511,87 @@ do
     sR:SetPoint("TOPRIGHT");   sR:SetPoint("BOTTOMRIGHT");   sR:SetWidth(150)
     sT:SetPoint("TOPLEFT");    sT:SetPoint("TOPRIGHT");      sT:SetHeight(120)
     sB:SetPoint("BOTTOMLEFT"); sB:SetPoint("BOTTOMRIGHT");   sB:SetHeight(120)
-    local r, g, b = 1.0, 0.25, 0.2   -- warning red-orange
-    local solid, clear = CreateColor(r, g, b, 1), CreateColor(r, g, b, 0)
-    sL:SetGradient("HORIZONTAL", solid, clear)
-    sR:SetGradient("HORIZONTAL", clear, solid)
-    sT:SetGradient("VERTICAL", clear, solid)
-    sB:SetGradient("VERTICAL", solid, clear)
+    clFlashStrips = { sL, sR, sT, sB }
 end
+-- Re-tint the edge flash from the configured colour (or a red-orange default).
+local function ApplyChecklistFlashColor()
+    local cfg = ChecklistCfg()
+    local c = (cfg and cfg.flashColor) or { r = 1.0, g = 0.25, b = 0.2 }
+    local solid, clear = CreateColor(c.r, c.g, c.b, 1), CreateColor(c.r, c.g, c.b, 0)
+    clFlashStrips[1]:SetGradient("HORIZONTAL", solid, clear)   -- left
+    clFlashStrips[2]:SetGradient("HORIZONTAL", clear, solid)   -- right
+    clFlashStrips[3]:SetGradient("VERTICAL", clear, solid)     -- top
+    clFlashStrips[4]:SetGradient("VERTICAL", solid, clear)     -- bottom
+end
+ns.ApplyChecklistFlashColor = ApplyChecklistFlashColor
+ApplyChecklistFlashColor()
 checklistFlash:SetScript("OnUpdate", function(self, dt)
     self.t = (self.t or 0) + dt
     self:SetAlpha(0.30 + 0.30 * (math.sin(self.t * 3.5) * 0.5 + 0.5))   -- pulse 0.30..0.60
 end)
 local function SetChecklistFlashActive(on)
     if on then
-        if not checklistFlash:IsShown() then checklistFlash.t = 0; checklistFlash:Show() end
+        if not checklistFlash:IsShown() then
+            ApplyChecklistFlashColor()
+            checklistFlash.t = 0; checklistFlash:Show()
+        end
     else
         checklistFlash:Hide()
+    end
+end
+
+-- Optional scrolling marquee of the missing-buff names. A clipped frame with a
+-- font string that drifts left, looping when the text scrolls fully past.
+local checklistTicker = CreateFrame("Frame", "AuraCueChecklistTicker", UIParent, "BackdropTemplate")
+checklistTicker:SetSize(320, 22)
+checklistTicker:SetFrameStrata("HIGH")
+checklistTicker:SetClampedToScreen(true)
+checklistTicker:SetClipsChildren(true)
+checklistTicker:EnableMouse(false)
+checklistTicker:SetMovable(true)
+checklistTicker:RegisterForDrag("LeftButton")
+checklistTicker:Hide()
+checklistTicker:SetScript("OnDragStart", function(self)
+    local cfg = ChecklistCfg()
+    if cfg and cfg.ticker and not cfg.ticker.locked then self:StartMoving() end
+end)
+checklistTicker:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local cfg = ChecklistCfg(); if not cfg or not cfg.ticker then return end
+    local point, _, rel, x, y = self:GetPoint()
+    cfg.ticker.position = { point = point, relativePoint = rel, x = x, y = y }
+end)
+checklistTicker.fs = checklistTicker:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+checklistTicker.fs:SetPoint("LEFT", checklistTicker, "LEFT", 0, 0)
+checklistTicker.fs:SetJustifyH("LEFT")
+checklistTicker.pos = 0
+checklistTicker:SetScript("OnUpdate", function(self, dt)
+    local w = self.fs:GetStringWidth()
+    if w <= 0 then return end
+    self.pos = self.pos - dt * 55                      -- ~55 px/sec leftward
+    if self.pos <= -w then self.pos = self:GetWidth() end
+    self.fs:SetPoint("LEFT", self, "LEFT", self.pos, 0)
+end)
+
+local function RestoreChecklistTickerPosition()
+    checklistTicker:ClearAllPoints()
+    local cfg = ChecklistCfg()
+    local p = cfg and cfg.ticker and cfg.ticker.position
+    if p and p.point then
+        checklistTicker:SetPoint(p.point, UIParent, p.relativePoint or p.point, p.x or 0, p.y or 0)
+    else
+        checklistTicker:SetPoint("TOP", UIParent, "TOP", 0, -220)
+    end
+end
+ns.RestoreChecklistTickerPosition = RestoreChecklistTickerPosition
+
+-- Set the ticker's text, resetting the scroll only when the content changes
+-- (so a routine refresh doesn't make it jump).
+local function SetTickerText(text)
+    if text ~= checklistTicker.content then
+        checklistTicker.content = text
+        checklistTicker.fs:SetText(text)
+        checklistTicker.pos = checklistTicker:GetWidth()
     end
 end
 
@@ -1525,7 +1605,9 @@ local function UpdateChecklist()
     local showAll = ns.checklistTest and true or false   -- test: show every entry
     local size, perRow = cfg.size or 40, cfg.perRow or 8
     local flagged = cfg.flash or {}
+    local tickered = (cfg.ticker and cfg.ticker.ids) or {}
     local idx, anyFlash = 0, false
+    local missingNames = {}
     for sidStr in pairs(cfg.ids or {}) do
         local sid = tonumber(sidStr)
         if sid then
@@ -1536,6 +1618,7 @@ local function UpdateChecklist()
             local name = C_Spell.GetSpellName(sid) or (seen and seen.name)
             local missing = ChecklistBuffPresent(sid, name) == false
             if missing and flagged[sidStr] then anyFlash = true end
+            if missing and name and tickered[sidStr] then missingNames[#missingNames + 1] = name end
             if showAll or missing then
                 idx = idx + 1
                 local f = checklistIcons[idx] or MakeChecklistIcon()
@@ -1593,6 +1676,19 @@ local function UpdateChecklist()
     -- Constant screen-edge flash while any "flash when missing" item is missing
     -- (not during the test / move preview, where the flash would just distract).
     SetChecklistFlashActive(anyFlash and not showAll)
+
+    -- Scrolling marquee of the ticker-flagged missing buffs (skipped while
+    -- placing the ticker).
+    if not ns.checklistTickerMoving then
+        if cfg.ticker and not showAll and #missingNames > 0 then
+            checklistTicker:SetWidth(cfg.ticker.width or 320)
+            SetTickerText(table.concat(missingNames, "      •      ") .. "      •      ")
+            checklistTicker:Show()
+        else
+            checklistTicker.content = nil
+            checklistTicker:Hide()
+        end
+    end
 end
 ns.UpdateChecklist = UpdateChecklist
 
@@ -1638,6 +1734,29 @@ function ns.SetChecklistReposition(on)
     end
 end
 
+-- Move / lock the scrolling ticker: pin it open with a backdrop + sample text.
+function ns.SetChecklistTickerReposition(on)
+    local cfg = ChecklistCfg(); if not cfg or not cfg.ticker then return end
+    ns.checklistTickerMoving = on or nil
+    if on then
+        cfg.ticker.locked = false
+        checklistTicker.content = nil
+        checklistTicker:SetWidth(cfg.ticker.width or 320)
+        checklistTicker.fs:SetText("Missing:  Flask      •      Food      •      Weapon enchant      •      ")
+        checklistTicker.pos = cfg.ticker.width or 320
+        checklistTicker:SetBackdrop(REPOSITION_BACKDROP)
+        checklistTicker:SetBackdropColor(0, 0, 0, 0.5)
+        checklistTicker:EnableMouse(true)
+        RestoreChecklistTickerPosition()
+        checklistTicker:Show()
+    else
+        cfg.ticker.locked = true
+        checklistTicker:SetBackdrop(nil)
+        checklistTicker:EnableMouse(false)
+        UpdateChecklist()
+    end
+end
+
 function ns.SetChecklistAura(sid, on)
     local cfg = ChecklistCfg(); if not cfg then return end
     cfg.ids = cfg.ids or {}
@@ -1645,6 +1764,7 @@ function ns.SetChecklistAura(sid, on)
     if not on then
         checklistPresent[tonumber(sid)] = nil
         if cfg.flash then cfg.flash[tostring(sid)] = nil end   -- drop its flash flag too
+        if cfg.ticker and cfg.ticker.ids then cfg.ticker.ids[tostring(sid)] = nil end
     end
     UpdateChecklist()
 end
@@ -1654,6 +1774,15 @@ function ns.SetChecklistFlash(sid, on)
     local cfg = ChecklistCfg(); if not cfg then return end
     cfg.flash = cfg.flash or {}
     cfg.flash[tostring(sid)] = on and true or nil
+    UpdateChecklist()
+end
+
+-- Per-item opt-in: include this item in the scrolling ticker while missing.
+function ns.SetChecklistTicker(sid, on)
+    local cfg = ChecklistCfg(); if not cfg then return end
+    cfg.ticker = cfg.ticker or {}
+    cfg.ticker.ids = cfg.ticker.ids or {}
+    cfg.ticker.ids[tostring(sid)] = on and true or nil
     UpdateChecklist()
 end
 
@@ -1671,6 +1800,7 @@ function ns.GetChecklist()
             icon = (seen and seen.icon)
                 or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 134400,
             flash = (cfg.flash and cfg.flash[sidStr]) and true or false,
+            ticker = (cfg.ticker and cfg.ticker.ids and cfg.ticker.ids[sidStr]) and true or false,
         }
     end
     table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)
@@ -2617,6 +2747,7 @@ local function InitProfile()
     RestorePosition("debuff")
     RestoreBarsPosition()
     RestoreChecklistPosition()
+    RestoreChecklistTickerPosition()
     ns.UpdateChecklist()
     ns.InitOptions()
 end
@@ -2672,6 +2803,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         RestorePosition("debuff")
         RestoreBarsPosition()
         RestoreChecklistPosition()
+        RestoreChecklistTickerPosition()
         ns.UpdateChecklist()
         if ns.RefreshOptions then ns.RefreshOptions() end
 
@@ -2692,6 +2824,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "PLAYER_ENTERING_WORLD" then
         SeedPresent()
         RestoreChecklistPosition()
+        RestoreChecklistTickerPosition()
         ns.UpdateChecklist()
 
     elseif event == "PLAYER_REGEN_DISABLED" then
@@ -3124,11 +3257,15 @@ SlashCmdList["AURACUE"] = function(msg)
             activeProfile.visual.buff.position = nil
             activeProfile.visual.debuff.position = nil
             activeProfile.bars.position = nil
-            if activeProfile.checklist then activeProfile.checklist.position = nil end
+            if activeProfile.checklist then
+                activeProfile.checklist.position = nil
+                if activeProfile.checklist.ticker then activeProfile.checklist.ticker.position = nil end
+            end
             RestorePosition("buff")
             RestorePosition("debuff")
             RestoreBarsPosition()
             RestoreChecklistPosition()
+            RestoreChecklistTickerPosition()
             chatPrint("overlay positions reset.")
 
         elseif cmd == "preset" or cmd == "presets" then

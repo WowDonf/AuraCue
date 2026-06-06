@@ -2268,6 +2268,26 @@ do
         "Lock box", function() if ns.SetChecklistReposition then ns.SetChecklistReposition(false) end end,
         "Test", function() if ns.TestChecklist then ns.TestChecklist() end end)
 
+    -- Scrolling ticker: width, position, and the edge-flash colour. (Which buffs
+    -- appear in the ticker / trigger the flash is per-item, in the list below.)
+    local function Ticker() return ns.P().checklist and ns.P().checklist.ticker end
+    checklistPanel.Slider("Ticker width", 120, 800, 10, "%d",
+        function() return (Ticker() and Ticker().width) or 320 end,
+        function(v) if Ticker() then Ticker().width = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
+    local clRowY = checklistPanel.y
+    local function clRowBtn(label, x, fn)
+        local b = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+        b:SetPoint("TOPLEFT", x, clRowY); b:SetSize(120, 24); b:SetText(label); b:SetScript("OnClick", fn)
+    end
+    clRowBtn("Move ticker", LEFT + 6, function() if ns.SetChecklistTickerReposition then ns.SetChecklistTickerReposition(true) end end)
+    clRowBtn("Lock ticker", LEFT + 6 + 128, function() if ns.SetChecklistTickerReposition then ns.SetChecklistTickerReposition(false) end end)
+    local flashColorBtn = MakeColorButton(content,
+        function() return ns.P().checklist.flashColor end, "Flash color…", 130,
+        function() if ns.ApplyChecklistFlashColor then ns.ApplyChecklistFlashColor() end end)
+    flashColorBtn:SetPoint("TOPLEFT", LEFT + 6 + 256, clRowY)
+    checklistPanel.widgets[#checklistPanel.widgets + 1] = flashColorBtn
+    checklistPanel.y = checklistPanel.y - 32
+
     -- The list of buffs in the checklist (pooled rows, rebuilt on refresh).
     local listHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     listHeader:SetPoint("TOPLEFT", LEFT, checklistPanel.y)
@@ -2276,8 +2296,14 @@ do
     checklistPanel.y = checklistPanel.y - 22
     local listHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     listHint:SetPoint("TOPLEFT", LEFT, checklistPanel.y)
-    listHint:SetText("Tick |cffffd200Flash|r to pulse a red screen edge while that buff is missing.")
-    checklistPanel.y = checklistPanel.y - 18
+    listHint:SetText("Per buff: |cffffd200Flash|r pulses the screen edge, |cffffd200Ticker|r shows it in the scroller — while it's missing.")
+    checklistPanel.y = checklistPanel.y - 16
+    -- Column headers over the per-row checkboxes.
+    local flashHdr = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    flashHdr:SetPoint("TOPLEFT", LEFT + 232, checklistPanel.y); flashHdr:SetText("Flash")
+    local tickerHdr = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    tickerHdr:SetPoint("TOPLEFT", LEFT + 292, checklistPanel.y); tickerHdr:SetText("Ticker")
+    checklistPanel.y = checklistPanel.y - 16
     local listTop = checklistPanel.y
     local emptyNote = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     emptyNote:SetPoint("TOPLEFT", LEFT + 4, listTop)
@@ -2292,11 +2318,11 @@ do
         r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         r.name = r:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         r.name:SetPoint("LEFT", r.icon, "RIGHT", 8, 0)
-        r.name:SetWidth(228); r.name:SetJustifyH("LEFT"); r.name:SetWordWrap(false)
+        r.name:SetWidth(196); r.name:SetJustifyH("LEFT"); r.name:SetWordWrap(false)
         r.flash = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
-        r.flash:SetSize(24, 24); r.flash:SetPoint("LEFT", r, "LEFT", 286, -1)
-        r.flashLabel = r:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-        r.flashLabel:SetPoint("LEFT", r.flash, "RIGHT", 1, 0); r.flashLabel:SetText("Flash")
+        r.flash:SetSize(24, 24); r.flash:SetPoint("LEFT", r, "LEFT", 232, -1)
+        r.ticker = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
+        r.ticker:SetSize(24, 24); r.ticker:SetPoint("LEFT", r, "LEFT", 296, -1)
         r.del = CreateFrame("Button", nil, r, "UIPanelCloseButton")
         r.del:SetSize(24, 24); r.del:SetPoint("LEFT", r, "LEFT", 360, 0)
         clRows[i] = r
@@ -2315,6 +2341,8 @@ do
             local sid = e.spellID
             r.flash:SetChecked(e.flash and true or false)
             r.flash:SetScript("OnClick", function(self) ns.SetChecklistFlash(sid, self:GetChecked() and true or false) end)
+            r.ticker:SetChecked(e.ticker and true or false)
+            r.ticker:SetScript("OnClick", function(self) ns.SetChecklistTicker(sid, self:GetChecked() and true or false) end)
             r.del:SetScript("OnClick", function() ns.SetChecklistAura(sid, false); RefreshAllPanels() end)
             r:Show()
             y = y - 26

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.68.0
+
+- Checklist gets a **scrolling ticker** — a marquee of selected missing buffs
+  that drifts left. It's **per buff** (a Ticker tick per row, like Flash), with
+  a width and Move / Lock position on the Checklist page.
+- The missing-buff **flash colour** is now configurable (a colour picker beside
+  the ticker controls).
+
 ## v0.67.0
 
 - Checklist buffs now match by **name**, so a same-named different rank (e.g.
