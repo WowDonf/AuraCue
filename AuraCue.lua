@@ -1531,7 +1531,9 @@ local function ChecklistBuffPresent(sid, name)
     if state == "present" then
         res = true
     elseif state == "unknown" then
-        res = checklistPresent[sid]                       -- masked: last known
+        -- The aura's fields are secret but it EXISTS (the id read returned non-nil
+        -- — nil would be "absent"), so for a present/missing check it's present.
+        res = true
     else
         -- Absent by id. Check by name (same-named different ranks) against the
         -- once-per-update name set instead of scanning auras per item.

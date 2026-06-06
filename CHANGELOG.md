@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.71.2
+
+- More checklist combat fixes: a present buff whose data is secret in combat is
+  now treated as present (so applying a buff mid-fight clears its icon), not held.
+
 ## v0.71.1
 
 - The missing-buff checklist now updates **in combat** (open world), matching how
