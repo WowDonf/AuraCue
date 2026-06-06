@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.60.1
+
+- Renamed the "Faded" event to **"Lost"** everywhere it's shown — the
+  spoken / flashed word ("{name} lost"), the **Gained / Lost** phrase and sound
+  fields, the **L** row column, the Lost flash colour, and the docs. Your saved
+  cue settings are unaffected.
+
 ## v0.60.0
 
 - **On-screen timer bars.** A watched aura can now show a depleting duration

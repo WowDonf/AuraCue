@@ -9,17 +9,17 @@ Turn your own buffs and debuffs into sound, speech, or on-screen flashes — pro
 *See the demo video and screenshots in the gallery above.*
 
 AuraCue watches the auras *you* choose and fires a cue when each one is
-**gained** or **fades** — handy for proc alerts, cooldown windows, and debuff
+**gained** or **lost** — handy for proc alerts, cooldown windows, and debuff
 warnings. Pick any combination of:
 
 - **Sound** — a distinct tone on the audio channel you pick (separate sounds
-  for gained and faded), including matched open/close pairs where the gained
-  tone rises and the faded one falls.
+  for gained and lost), including matched open/close pairs where the gained
+  tone rises and the lost one falls.
 - **Speech** — the aura's name spoken aloud (text-to-speech). Set your own
   phrase — a general "{name} gained" format, or a per-aura override that can
   also use {name}: "{name} activated", or a name-free "Damage now" for Bloodlust.
 - **On-screen flash** — center text and/or a screen-edge glow, with separate
-  colors for gained vs faded.
+  colors for gained vs lost.
 
 Buffs and debuffs each get their own window, and every watched aura has an
 **Edit** menu (or right-click) for its options — when to fire (everywhere, only

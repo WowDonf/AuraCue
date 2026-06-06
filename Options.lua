@@ -592,7 +592,7 @@ do
     audioPanel.Check("Play sound cues",
         function() return ns.P().audioEnabled end,
         function(v) ns.P().audioEnabled = v end)
-    audioPanel.Desc("Master switch for all cue sounds. Each aura's gained / faded sound is set in " ..
+    audioPanel.Desc("Master switch for all cue sounds. Each aura's gained / lost sound is set in " ..
         "its section; this is the audio channel they route through, so you can balance cue " ..
         "volume against game audio.")
     local channelDropdown = audioPanel.Dropdown("Audio channel", 200)
@@ -650,13 +650,13 @@ do
     audioPanel.EditLine("Gained phrase",
         function() return ns.P().speakFormatApplied end,
         function(v) ns.P().speakFormatApplied = (v ~= "" and v) or nil end, 300, "{name} gained")
-    audioPanel.EditLine("Faded phrase",
+    audioPanel.EditLine("Lost phrase",
         function() return ns.P().speakFormatFaded end,
-        function(v) ns.P().speakFormatFaded = (v ~= "" and v) or nil end, 300, "{name} faded")
+        function(v) ns.P().speakFormatFaded = (v ~= "" and v) or nil end, 300, "{name} lost")
     -- Hear the actual phrases (with {name} shown via a sample aura name).
     audioPanel.SideBySide(
         "Test gained phrase", function() ns.Speak(ns.ResolveSpokenPhrase("applied", nil, "Bloodlust")) end,
-        "Test faded phrase",  function() ns.Speak(ns.ResolveSpokenPhrase("faded", nil, "Bloodlust")) end)
+        "Test lost phrase",  function() ns.Speak(ns.ResolveSpokenPhrase("faded", nil, "Bloodlust")) end)
 
     content:SetHeight(-audioPanel.y + 20)
 end
@@ -740,7 +740,7 @@ local function OpenSpeechDialog(sid, name, applied, faded, after)
         d.appliedBox = DialogField(d, "Gained phrase", -96)
         attachPlaceholder(d.appliedBox)
         d.testApplied = testBtn(d.appliedBox, "applied", -114)
-        d.fadedBox = DialogField(d, "Faded phrase", -146)
+        d.fadedBox = DialogField(d, "Lost phrase", -146)
         attachPlaceholder(d.fadedBox)
         d.testFaded = testBtn(d.fadedBox, "faded", -164)
         speechDialog = d
@@ -750,7 +750,7 @@ local function OpenSpeechDialog(sid, name, applied, faded, after)
     d.title:SetText(AuraName(name, sid))
     local P = ns.P()
     d.appliedBox.placeholder:SetText((P and P.speakFormatApplied) or "{name} gained")
-    d.fadedBox.placeholder:SetText((P and P.speakFormatFaded) or "{name} faded")
+    d.fadedBox.placeholder:SetText((P and P.speakFormatFaded) or "{name} lost")
     d.appliedBox:SetText(applied or "")
     d.fadedBox:SetText(faded or "")
     d.appliedBox.placeholder:SetShown((applied or "") == "")
@@ -873,7 +873,7 @@ local function BuildKindPanel(kind)
             end
         end
         watchInfo:SetText("Watching |cffffd200" .. n .. "|r " .. (n == 1 and label:lower():gsub("s$", "") or label:lower())
-            .. ".   |cff808080A = gained · F = faded · V = visual · hover a row for its tooltip|r")
+            .. ".   |cff808080A = gained · L = lost · V = visual · hover a row for its tooltip|r")
     end
     ctx.widgets[#ctx.widgets + 1] = watchInfo
 
@@ -1370,7 +1370,7 @@ local function BuildKindPanel(kind)
     if kind == "debuff" then
         hint:SetText("Debuffs file under the dungeon they were first seen in; type a Group on any " ..
             "row to re-file it. Inside instances the game only exposes debuffs to addons as a sound " ..
-            "on apply, so there a debuff cue plays its Gained sound only (no visual / no faded).")
+            "on apply, so there a debuff cue plays its Gained sound only (no visual / no lost cue).")
     else
         hint:SetText("Type a Group on any row to file an aura under your own heading. Hover a row " ..
             "for the spell tooltip.")
@@ -1385,7 +1385,7 @@ local function BuildKindPanel(kind)
     end
     ColHeader("Aura", 4)
     ColHeader("A", 248)
-    ColHeader("F", 278)
+    ColHeader("L", 278)
     ColHeader("V", 308)
     ColHeader("Group", 338)
     ctx.y = ctx.y - 14
@@ -1515,7 +1515,7 @@ local function BuildKindPanel(kind)
 
         local fadeLbl = row:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         fadeLbl:SetPoint("TOPLEFT", row, "TOPLEFT", 250, -34)
-        fadeLbl:SetText("Faded")
+        fadeLbl:SetText("Lost")
         row.soundFaded = RowSoundDD(row, 296, -30, "soundFaded")
         row.previewF = RowPreview(row, 450, -30, "faded")
 
@@ -1646,7 +1646,7 @@ local function BuildAppearanceSection(ctx, kind)
         function(v) Vis().edgeIntensity = v end)
     AddColorPair(ctx,
         function() return Vis().color end, "Gained flash color...",
-        function() return Vis().colorFaded end, "Faded flash color...")
+        function() return Vis().colorFaded end, "Lost flash color...")
     ctx.Slider("Flash size", 0.5, 3.0, 0.05, "%.2fx",
         function() return Vis().scale end,
         function(v) Vis().scale = v end)

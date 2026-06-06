@@ -5,18 +5,18 @@ turns your own buffs and debuffs into a **sound**, a **spoken name**, and/or
 an **on-screen flash** — for proc alerts, cooldown windows, and debuff
 warnings.
 
-Each watched aura can cue when it's **gained**, when it **fades**, or both:
+Each watched aura can cue when it's **gained**, when it's **lost**, or both:
 
 - **Sound** — a distinct bundled tone, on the audio channel you pick. Separate
-  sounds for gained and faded (or "None" for silent), including matched
-  open/close pairs where the gained tone rises and the faded one falls
+  sounds for gained and lost (or "None" for silent), including matched
+  open/close pairs where the gained tone rises and the lost one falls
   (rise/fall, open/close, unfold/fold, bloom/wilt).
 - **Speech** — the aura's name spoken aloud (text-to-speech), with voice /
   rate / volume controls. The spoken phrase is yours to set — a general format
   like "{name} gained", or a per-aura override that can also use {name}: say
   "{name} activated", or a name-free "Damage now" the moment Bloodlust lands.
 - **On-screen flash** — center text and/or a screen-edge glow, with separate
-  colors for gained vs faded, and adjustable size, on-screen time, and edge
+  colors for gained vs lost, and adjustable size, on-screen time, and edge
   thickness / intensity.
 
 Buffs and debuffs each get their own on-screen window (size, colors, position,
@@ -29,7 +29,7 @@ combining (below).
 
 ## Screenshots
 
-**Buffs / Skills — the watched list.** Each aura has gained/faded sound
+**Buffs / Skills — the watched list.** Each aura has gained/lost sound
 dropdowns and a per-row **Edit** menu:
 
 ![The Buffs / Skills page with watched auras](assets/screenshots/buffs-skills.png)

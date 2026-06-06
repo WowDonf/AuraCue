@@ -72,7 +72,7 @@ local PROFILE_DEFAULTS = {
     ttsVoice = nil,              -- chosen TTS voice id (nil = first available)
     -- General spoken-cue phrasing; {name} is replaced by the aura's name. Left
     -- blank by default so the options field shows "{name} gained" /
-    -- "{name} faded" as greyed placeholder; ns.ResolveSpokenPhrase falls back to
+    -- "{name} lost" as greyed placeholder; ns.ResolveSpokenPhrase falls back to
     -- exactly those when blank. A cue can override per-event (cue.speakApplied).
     speakFormatApplied = nil,
     speakFormatFaded   = nil,
@@ -82,7 +82,7 @@ local PROFILE_DEFAULTS = {
         buff = {
             enabled   = true,
             color      = { r = 0.20, g = 0.86, b = 0.75 },   -- gained: teal
-            colorFaded = { r = 0.45, g = 0.55, b = 0.70 },   -- faded: muted blue-gray
+            colorFaded = { r = 0.45, g = 0.55, b = 0.70 },   -- lost: muted blue-gray
             scale     = 1.0,
             duration  = 1.5,
             locked    = true,
@@ -94,7 +94,7 @@ local PROFILE_DEFAULTS = {
         debuff = {
             enabled   = true,
             color      = { r = 1.00, g = 0.45, b = 0.30 },   -- gained: warm red-orange
-            colorFaded = { r = 0.65, g = 0.40, b = 0.55 },   -- faded: muted mauve
+            colorFaded = { r = 0.65, g = 0.40, b = 0.55 },   -- lost: muted mauve
             scale     = 1.2,
             duration  = 2.0,
             locked    = true,
@@ -625,7 +625,7 @@ function ns.ResolveSpokenPhrase(eventKind, literal, label)
     -- name-free.
     local fmt = (literal and literal ~= "") and literal
         or (eventKind == "applied" and activeProfile.speakFormatApplied or activeProfile.speakFormatFaded)
-    if not fmt or fmt == "" then fmt = (eventKind == "applied") and "{name} gained" or "{name} faded" end
+    if not fmt or fmt == "" then fmt = (eventKind == "applied") and "{name} gained" or "{name} lost" end
     return (fmt:gsub("{name}", label or ""))
 end
 
@@ -644,7 +644,7 @@ local function FireCue(cue, spellName, eventKind)
     elseif not activeProfile.trackBuffs then
         return
     end
-    local verb = (eventKind == "applied") and "gained" or "faded"
+    local verb = (eventKind == "applied") and "gained" or "lost"
     local label = cue.label or spellName or "Aura"
     local snd = (eventKind == "applied") and cue.soundApplied or cue.soundFaded
     if activeProfile.audioEnabled and snd then
@@ -669,7 +669,7 @@ function ns.PreviewCue(spellKey, eventKind)
         SpeakTextFor(cue, eventKind, cue.label or "Aura"))
     if cue.visual then
         local kind = (cue.kind == "debuff") and "debuff" or "buff"
-        ShowVisual(kind, (cue.label or "Aura") .. " " .. (eventKind == "faded" and "faded" or "gained"), eventKind)
+        ShowVisual(kind, (cue.label or "Aura") .. " " .. (eventKind == "faded" and "lost" or "gained"), eventKind)
     end
 end
 
