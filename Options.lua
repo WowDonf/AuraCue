@@ -653,6 +653,8 @@ do
     main.Check("Show login message in chat",
         function() return AuraCueDB and AuraCueDB.showLoginMessage end,
         function(v) if AuraCueDB then AuraCueDB.showLoginMessage = v or nil end end)
+    main.y = main.y - 6
+    main.Button("Show the welcome guide", 200, function() if ns.ShowWelcome then ns.ShowWelcome(true) end end)
 
     content:SetHeight(-main.y + 20)
 end
@@ -2910,7 +2912,7 @@ end
 -- ---------------------------------------------------------------------
 -- Registration: main category + Buffs / Debuffs subcategories.
 -- ---------------------------------------------------------------------
-local mainCategory
+local mainCategory, buffCategory
 if Settings and Settings.RegisterCanvasLayoutCategory then
     mainCategory = Settings.RegisterCanvasLayoutCategory(main.panel, "AuraCue")
     Settings.RegisterAddOnCategory(mainCategory)
@@ -2919,7 +2921,7 @@ if Settings and Settings.RegisterCanvasLayoutCategory then
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, appearancePanel.panel, "Appearance")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, audioPanel.panel, "Audio")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, barsPanel.panel, "Bars")
-        Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs/Skills")
+        buffCategory = Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs/Skills")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, debuffPanel.panel, "Debuffs")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, checklistPanel.panel, "Missing Buffs")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, managePanel.panel, "Organize Auras")
@@ -2953,4 +2955,67 @@ function ns.ToggleOptions()
     else
         ns.OpenOptions()
     end
+end
+
+-- Open straight to the Buffs/Skills page (used by the first-run welcome).
+function ns.OpenToBuffs()
+    if not (buffCategory and Settings and Settings.OpenToCategory) then return ns.OpenOptions() end
+    if InCombatLockdown() then
+        ns.chatPrint("can't open the options panel during combat — try again afterwards.")
+        return
+    end
+    RefreshAllPanels()
+    C_Timer.After(0, function()
+        if not InCombatLockdown() then Settings.OpenToCategory(buffCategory:GetID()) end
+    end)
+end
+
+-- First-run welcome. Shown once on a brand-new install (and re-openable with
+-- /cue setup). Sets AuraCueDB.onboarded so it doesn't nag again.
+local welcomeFrame
+function ns.ShowWelcome(force)
+    if not force and AuraCueDB and AuraCueDB.onboarded then return end
+    if InCombatLockdown() then return end
+    if not welcomeFrame then
+        local d = CreateFrame("Frame", "AuraCueWelcome", UIParent, "BackdropTemplate")
+        d:SetSize(460, 300)
+        d:SetPoint("CENTER")
+        d:SetFrameStrata("FULLSCREEN_DIALOG")
+        d:SetToplevel(true)
+        d:EnableMouse(true); d:SetMovable(true); d:RegisterForDrag("LeftButton")
+        d:SetScript("OnDragStart", d.StartMoving)
+        d:SetScript("OnDragStop", d.StopMovingOrSizing)
+        d:SetBackdrop(DIALOG_BACKDROP)
+        local title = d:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
+        title:SetPoint("TOP", 0, -18); title:SetText("Welcome to AuraCue")
+        local body = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        body:SetPoint("TOPLEFT", 26, -62); body:SetPoint("TOPRIGHT", -26, -62)
+        body:SetJustifyH("LEFT"); body:SetSpacing(3)
+        body:SetText("AuraCue turns your own buffs and debuffs into a sound, a spoken name, an "
+            .. "on-screen flash, or a timer bar — and can warn you about missing buffs.\n\n"
+            .. "To get started:\n"
+            .. "1.  Add the auras you want to watch on the |cffffd200Buffs/Skills|r page.\n"
+            .. "2.  Give each one a sound / speech / flash from its row.\n"
+            .. "3.  |cffffd200/cue test|r previews a cue; |cffffd200/cue|r opens settings any time.")
+        local b1 = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
+        b1:SetSize(180, 26); b1:SetPoint("BOTTOM", d, "BOTTOM", -98, 54); b1:SetText("Add auras to watch")
+        b1:SetScript("OnClick", function()
+            if AuraCueDB then AuraCueDB.onboarded = true end
+            d:Hide(); ns.OpenToBuffs()
+        end)
+        local b2 = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
+        b2:SetSize(180, 26); b2:SetPoint("BOTTOM", d, "BOTTOM", 98, 54); b2:SetText("Open all settings")
+        b2:SetScript("OnClick", function()
+            if AuraCueDB then AuraCueDB.onboarded = true end
+            d:Hide(); ns.OpenOptions()
+        end)
+        local b3 = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
+        b3:SetSize(120, 24); b3:SetPoint("BOTTOM", d, "BOTTOM", 0, 18); b3:SetText("Maybe later")
+        b3:SetScript("OnClick", function()
+            if AuraCueDB then AuraCueDB.onboarded = true end
+            d:Hide()
+        end)
+        welcomeFrame = d
+    end
+    welcomeFrame:Show(); welcomeFrame:Raise()
 end

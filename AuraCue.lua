@@ -2796,6 +2796,9 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         -- only works if the old SavedVariables file was renamed to match the
         -- new addon folder); this adopts it, then clears it. The extra
         -- SavedVariables entry can be dropped in a later version.
+        -- Brand-new install? (No saved DB under either name yet.) Used to show
+        -- the first-run welcome only to genuinely new users, not on an update.
+        local freshInstall = (AuraCueDB == nil) and (CueSenseDB == nil)
         if not AuraCueDB and CueSenseDB then
             AuraCueDB = CueSenseDB
             CueSenseDB = nil
@@ -2803,6 +2806,11 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         end
         AuraCueDB = AuraCueDB or {}
         MergeDefaults(AuraCueDB, DB_DEFAULTS)
+        if AuraCueDB.onboarded == nil then
+            -- New install: show the welcome. Existing install updating to this
+            -- version: treat as already onboarded so we don't nag.
+            AuraCueDB.onboarded = not freshInstall
+        end
 
         -- One-time cleanup: clear boss flags that can't be real (your own
         -- auras, or anything that isn't a debuff) from catalogs built before
@@ -2824,6 +2832,10 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         -- The one-time data-migration notice always shows (it matters).
         if ns.migratedFromCueSense then
             chatPrint("Imported your previous settings and aura catalog from CueSense.")
+        end
+        -- First-run welcome (new installs only); deferred so the world is loaded.
+        if AuraCueDB and not AuraCueDB.onboarded and ns.ShowWelcome then
+            C_Timer.After(3, function() if ns.ShowWelcome then ns.ShowWelcome() end end)
         end
 
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
@@ -3238,6 +3250,9 @@ SlashCmdList["AURACUE"] = function(msg)
 
         if cmd == "" or cmd == "config" or cmd == "options" then
             ns.OpenOptions()
+
+        elseif cmd == "setup" or cmd == "welcome" then
+            if ns.ShowWelcome then ns.ShowWelcome(true) end
 
         elseif cmd == "test" then
             ns.PlayTestCue()

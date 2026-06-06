@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.69.0
+
+- **First-run welcome.** New installs get a short welcome with quick links to
+  add auras (jumps to Buffs/Skills) or open settings. Re-open it any time with
+  `/cue setup` or the "Show the welcome guide" button in Global Settings.
+  Existing setups are treated as already onboarded, so it won't nag on update.
+
 ## v0.68.3
 
 - Renamed settings pages: **Checklist → Missing Buffs**, **Manage Auras →
