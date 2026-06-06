@@ -1553,12 +1553,13 @@ local function ChecklistBuffPresent(sid, name)
             -- Absent by id AND name. Reads of your OWN auras work in open-world
             -- combat (just like the buff/debuff cues), so trust "absent = missing"
             -- there — that's what lets the checklist update mid-fight. Only hold
-            -- the last-known state where the read is genuinely unreliable:
-            -- fully-masked instanced combat, or a permanent aura that masks in
-            -- combat (e.g. Devotion Aura).
+            -- the last-known state (kept current by reads AND your own casts —
+            -- ns.NoteChecklistCast) where the read is genuinely unreliable: inside
+            -- an instance (auras are hidden the whole time), or a permanent aura
+            -- that masks in open-world combat (e.g. Devotion Aura).
             local inCombat = InCombatLockdown() or UnitAffectingCombat("player")
             local s = AuraCueDB.seen and AuraCueDB.seen[tostring(sid)]
-            if inCombat and (IsInInstance() or (s and s.permanent)) then
+            if IsInInstance() or (inCombat and s and s.permanent) then
                 res = checklistPresent[sid]               -- can't read reliably: last known
             else
                 res = false                               -- confirmed missing
@@ -1871,6 +1872,15 @@ function ns.SetChecklistAura(sid, on)
         if cfg.ticker and cfg.ticker.ids then cfg.ticker.ids[tostring(sid)] = nil end
     end
     UpdateChecklist()
+end
+
+-- You cast / used a checklist buff: mark it present. Your own casts aren't
+-- masked, so this is how the checklist (like the cue engine's OnSelfCast) knows
+-- a buff is up in instances, where reading the aura is blocked. Only matters for
+-- buffs you don't also watch as a cue (those use the cue engine's state).
+function ns.NoteChecklistCast(spellID)
+    local cfg = ChecklistCfg(); if not cfg or not cfg.ids then return end
+    if cfg.ids[tostring(spellID)] then checklistPresent[tonumber(spellID)] = true end
 end
 
 -- Per-item opt-in: show this item's icon in the on-screen box while missing.
@@ -3013,7 +3023,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             if IsPermMineAura(spellID) then lastAuraCast = { id = spellID, time = GetTime() } end
             ApplyReplace(spellID)   -- detect an aura/stance swap (fires the old one's lost)
             OnSelfCast(spellID)
-            ScheduleChecklistUpdate()   -- e.g. applying a weapon oil
+            ns.NoteChecklistCast(spellID)   -- casting a checklist buff = present (works in instances)
+            ScheduleChecklistUpdate()       -- e.g. applying a weapon oil
             -- Catalog the aura this cast applies. The aura list can't be read
             -- in combat (its spell ids are secret), but querying this known id
             -- works in and out of combat — so buffs/debuffs you cast in a fight

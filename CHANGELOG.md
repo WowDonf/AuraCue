@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.72.0
+
+- The checklist now tracks buffs by your **casts** too (not just by reading the
+  aura), like the buff/debuff cues — so applying a checklist buff registers even
+  in instances, where reading auras is blocked. Inside an instance it holds the
+  state it knows (from your reads before entering and your casts inside) rather
+  than warning on unreadable auras.
+
 ## v0.71.3
 
 - The checklist now reuses the buff/debuff cue engine's tracking for any buff you
