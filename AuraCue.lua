@@ -1500,6 +1500,18 @@ local function UpdateChecklist()
             end
         end
     end
+    -- Test with nothing added yet: show sample icons so the box can be placed.
+    if showAll and idx == 0 then
+        for i = 1, 3 do
+            local f = checklistIcons[i] or MakeChecklistIcon()
+            checklistIcons[i] = f
+            f.tex:SetTexture(134400)
+            f:SetSize(size, size); f:ClearAllPoints()
+            f:SetPoint("TOPLEFT", checklistContainer, "TOPLEFT", (i - 1) * (size + 4), 0)
+            f:Show()
+        end
+        idx = 3
+    end
     if idx > 0 then
         local cols, rows = math.min(idx, perRow), math.ceil(idx / perRow)
         checklistContainer:SetSize(math.max(1, cols * (size + 4) - 4), math.max(1, rows * (size + 4) - 4))
@@ -1574,6 +1586,7 @@ ns.ApplyChecklistStyle = UpdateChecklist
 -- position is visible while configuring.
 function ns.TestChecklist()
     ns.checklistTest = true
+    RestoreChecklistPosition()
     UpdateChecklist()
     C_Timer.After(3, function() ns.checklistTest = nil; UpdateChecklist() end)
 end

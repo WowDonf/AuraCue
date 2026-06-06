@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.66.1
+
+- Checklist polish: the **Add a buff** picker now uses the same grouped submenus
+  as the Buffs/Debuffs pages, the **Search** box shows a live autocomplete popup
+  of matching buffs to click, and **Test** now shows sample icons even when the
+  checklist is empty (and positions the box) so you can place it first.
+
 ## v0.66.0
 
 - New **Checklist** page: build a list of buffs you want kept up, and a movable

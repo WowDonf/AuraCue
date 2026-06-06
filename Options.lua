@@ -2051,8 +2051,12 @@ do
             if ns.UpdateChecklist then ns.UpdateChecklist() end
         end)
 
-    -- Add a buff from your catalogue (filtered by the box on the right).
+    -- Add a buff: the same grouped picker as Buffs/Debuffs, plus a search box
+    -- with a live autocomplete popup.
     local clSearch = ""
+    local clSearchFocused = false
+    local UpdateClResults   -- forward (the search box updates the popup)
+
     local addLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     addLabel:SetPoint("TOPLEFT", LEFT, checklistPanel.y)
     addLabel:SetText("Add a buff:")
@@ -2062,48 +2066,159 @@ do
     addDD:SetDefaultText("Choose a buff you've had")
     local searchLabel = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     searchLabel:SetPoint("LEFT", addDD, "RIGHT", 16, 0)
-    searchLabel:SetText("Filter")
+    searchLabel:SetText("Search")
     local searchBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
     searchBox:SetPoint("LEFT", searchLabel, "RIGHT", 8, 0)
     searchBox:SetSize(150, 22)
     searchBox:SetAutoFocus(false)
     searchBox:SetFontObject("ChatFontNormal")
-    searchBox:SetScript("OnTextChanged", function(self) clSearch = (self:GetText() or ""):lower() end)
-    searchBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    addDD:SetupMenu(function(_, root)
-        if root.SetScrollMode then root:SetScrollMode(GetScreenHeight() * 0.5) end
-        local cfg = ns.P().checklist or {}
-        local ids = cfg.ids or {}
-        local list = ns.GetSeenAuras and ns.GetSeenAuras() or {}
-        local matches = {}
-        for _, sp in ipairs(list) do
-            if sp.kind == "buff" and not sp.ignored and not ids[tostring(sp.spellID)] then
-                if clSearch == "" or (sp.name and sp.name:lower():find(clSearch, 1, true))
-                   or tostring(sp.spellID):find(clSearch, 1, true) then
-                    matches[#matches + 1] = sp
-                end
-            end
-        end
-        table.sort(matches, function(a, b)
-            local ak, bk = (a.mine or a.known) and 0 or 1, (b.mine or b.known) and 0 or 1
-            if ak ~= bk then return ak < bk end
-            return (a.name or "") < (b.name or "")
+    searchBox:SetScript("OnTextChanged", function(self)
+        clSearch = (self:GetText() or ""):lower()
+        if UpdateClResults then UpdateClResults() end
+    end)
+    searchBox:SetScript("OnEditFocusGained", function() clSearchFocused = true; if UpdateClResults then UpdateClResults() end end)
+    searchBox:SetScript("OnEditFocusLost", function() clSearchFocused = false; if UpdateClResults then UpdateClResults() end end)
+    searchBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
+
+    local function clPasses(sp)
+        if sp.kind ~= "buff" or sp.ignored then return false end
+        local ids = ns.P().checklist and ns.P().checklist.ids
+        if ids and ids[tostring(sp.spellID)] then return false end
+        return true
+    end
+    local function clAddButton(parent, sp)
+        local sid = sp.spellID
+        local nm = AuraName(sp.name, sid)
+        local txt = string.format("|T%d:16:16:0:0|t %s", sp.icon or 134400, nm)
+        if sp.group and sp.group ~= "" then txt = txt .. "  |cff80c0ff[" .. sp.group .. "]|r" end
+        if sp.ignored then txt = txt .. "  |cffff6060(hidden)|r" end
+        local btn = parent:CreateButton(txt, function()
+            ns.SetChecklistAura(sid, true); RefreshAllPanels()
         end)
+        if btn and btn.SetTooltip then
+            btn:SetTooltip(function(tt) if tt and tt.SetSpellByID then tt:SetSpellByID(sid) end end)
+        end
+    end
+    addDD:SetupMenu(function(_, root)
+        if not ns.P() then return end
+        local maxH = GetScreenHeight() * 0.55
+        if root.SetScrollMode then root:SetScrollMode(maxH) end
+        local matches = {}
+        for _, sp in ipairs(ns.GetSeenAuras()) do
+            local nm = AuraName(sp.name, sp.spellID)
+            local matchText = clSearch == "" or nm:lower():find(clSearch, 1, true)
+                or tostring(sp.spellID):find(clSearch, 1, true)
+            if matchText and clPasses(sp) then matches[#matches + 1] = sp end
+        end
         if #matches == 0 then
-            root:CreateButton("|cff808080No matching buffs in your catalog|r", function() end)
+            root:CreateButton("|cff808080No buff matches — type, or add by spell ID|r", function() end)
             return
         end
-        for i = 1, math.min(#matches, 100) do
-            local sp = matches[i]
-            local sid = sp.spellID
-            local btn = root:CreateButton(sp.name or ("Spell " .. tostring(sid)), function()
-                ns.SetChecklistAura(sid, true); RefreshAllPanels()
-            end)
-            if btn and btn.SetTooltip then btn:SetTooltip(function(tt) tt:SetSpellByID(sid) end) end
+        if clSearch ~= "" then
+            for _, sp in ipairs(matches) do clAddButton(root, sp) end
+            return
+        end
+        local groups, order = {}, {}
+        for _, sp in ipairs(matches) do
+            local g = ns.GroupFor(sp.spellID)
+            if not groups[g] then groups[g] = {}; order[#order + 1] = g end
+            table.insert(groups[g], sp)
+        end
+        if #order == 1 then
+            for _, sp in ipairs(groups[order[1]]) do clAddButton(root, sp) end
+            return
+        end
+        sortGroupKeys(order)
+        for _, g in ipairs(order) do
+            local list = groups[g]
+            local sub = root:CreateButton(string.format("%s  |cff808080(%d)|r", g, #list))
+            if sub.SetScrollMode then sub:SetScrollMode(maxH) end
+            for _, sp in ipairs(list) do clAddButton(sub, sp) end
         end
     end)
     checklistPanel.widgets[#checklistPanel.widgets + 1] = addDD
     checklistPanel.y = checklistPanel.y - 36
+
+    -- Live autocomplete popup for the search box: matching buffs you can click
+    -- to add. Anchored below the add row, on a high strata so it overlays the
+    -- controls below while it's open.
+    local CL_RESULT_H, CL_MAX = 18, 12
+    local clResults = CreateFrame("Frame", nil, content, "BackdropTemplate")
+    clResults:SetPoint("TOPLEFT", content, "TOPLEFT", LEFT, checklistPanel.y - 2)
+    clResults:SetWidth(420)
+    clResults:SetFrameStrata("FULLSCREEN_DIALOG")
+    clResults:SetFrameLevel(content:GetFrameLevel() + 20)
+    clResults:SetBackdrop({
+        bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    clResults:SetBackdropColor(0, 0, 0, 0.97)
+    clResults:Hide()
+    local clMore = clResults:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    local clResultBtns = {}
+    local function MakeClResultBtn(i)
+        local b = CreateFrame("Button", nil, clResults)
+        b:SetHeight(CL_RESULT_H)
+        b:SetPoint("TOPLEFT", clResults, "TOPLEFT", 6, -6 - (i - 1) * CL_RESULT_H)
+        b:SetPoint("TOPRIGHT", clResults, "TOPRIGHT", -6, -6 - (i - 1) * CL_RESULT_H)
+        local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.15)
+        b.icon = b:CreateTexture(nil, "ARTWORK"); b.icon:SetSize(16, 16); b.icon:SetPoint("LEFT", 2, 0)
+        b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        b.text = b:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        b.text:SetPoint("LEFT", b.icon, "RIGHT", 6, 0); b.text:SetPoint("RIGHT", b, "RIGHT", -4, 0)
+        b.text:SetJustifyH("LEFT")
+        b:SetScript("OnClick", function(self)
+            if not self.spellID then return end
+            ns.SetChecklistAura(self.spellID, true)
+            searchBox:SetText("")
+            RefreshAllPanels()
+        end)
+        b:SetScript("OnEnter", function(self)
+            if self.spellID and GameTooltip.SetSpellByID then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetSpellByID(self.spellID); GameTooltip:Show()
+            end
+        end)
+        b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        clResultBtns[i] = b
+        return b
+    end
+    UpdateClResults = function()
+        if not ns.P() or (clSearch == "" and not clSearchFocused) then clResults:Hide(); return end
+        local shown, more = 0, 0
+        for _, sp in ipairs(ns.GetSeenAuras()) do
+            local nm = AuraName(sp.name, sp.spellID)
+            local matchText = clSearch == "" or nm:lower():find(clSearch, 1, true)
+                or tostring(sp.spellID):find(clSearch, 1, true)
+            if matchText and clPasses(sp) then
+                if shown < CL_MAX then
+                    shown = shown + 1
+                    local b = clResultBtns[shown] or MakeClResultBtn(shown)
+                    b.spellID = sp.spellID
+                    b.icon:SetTexture(sp.icon or 134400)
+                    b.text:SetText(nm)
+                    b:Show()
+                else
+                    more = more + 1
+                end
+            end
+        end
+        for i = shown + 1, #clResultBtns do clResultBtns[i]:Hide() end
+        if shown == 0 then clResults:Hide(); return end
+        local h = 12 + shown * CL_RESULT_H
+        if more > 0 then
+            clMore:ClearAllPoints()
+            clMore:SetPoint("TOPLEFT", clResults, "TOPLEFT", 8, -6 - shown * CL_RESULT_H)
+            clMore:SetText("…and " .. more .. " more — keep typing")
+            clMore:Show(); h = h + 16
+        else
+            clMore:Hide()
+        end
+        clResults:SetHeight(h)
+        clResults:Show(); clResults:Raise()
+    end
+    checklistPanel.y = checklistPanel.y - 8
 
     -- …or by spell ID.
     local idLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
