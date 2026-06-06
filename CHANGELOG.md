@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.63.0
+
+- Conditional cues can now carry a custom **alert text**. With a "Require
+  another aura" gate set, use **Set alert text…** in that submenu to override
+  both the on-screen flash and the spoken phrase for that cue (supports
+  {name}). Clearing the requirement clears the alert text too.
+
 ## v0.62.1
 
 - Fixed **Clear requirement** (Require another aura) appearing to do nothing —

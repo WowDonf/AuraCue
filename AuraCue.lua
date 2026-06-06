@@ -681,6 +681,15 @@ function ns.ResolveSpokenPhrase(eventKind, literal, label)
     return (fmt:gsub("{name}", label or ""))
 end
 
+-- A conditional cue (one with a "require another aura" gate) can carry an
+-- alternate text block that overrides BOTH the on-screen flash and the spoken
+-- phrase while the gate is in effect. {name} is filled in like everywhere else.
+local function CueAltText(cue, label)
+    local t = cue.requireAura and cue.requireText
+    if t and t ~= "" then return (t:gsub("{name}", label or "")) end
+    return nil
+end
+
 -- The phrase to speak for a cue/event: the cue's own literal override if set,
 -- else the profile's general format with {name} filled in.
 local function SpeakTextFor(cue, eventKind, label)
@@ -702,16 +711,18 @@ local function FireCue(cue, spellName, eventKind)
     end
     local verb = (eventKind == "applied") and "gained" or "lost"
     local label = cue.label or spellName or "Aura"
+    local alt = CueAltText(cue, label)   -- conditional-cue override text, if any
     -- NB: explicit branch, not `a and b or c` — "None (silent)" stores `false`,
     -- which the idiom would skip, falling through to the other event's sound.
     local snd
     if eventKind == "applied" then snd = cue.soundApplied else snd = cue.soundFaded end
     if activeProfile.audioEnabled and snd then
-        PlayOrSpeak(snd, cue.channel or activeProfile.channel, SpeakTextFor(cue, eventKind, label))
+        PlayOrSpeak(snd, cue.channel or activeProfile.channel,
+            alt or SpeakTextFor(cue, eventKind, label))
     end
     local kind = (cue.kind == "debuff") and "debuff" or "buff"
     if cue.visual and VisCfg(kind).enabled and not ns.testMode then
-        ShowVisual(kind, label .. " " .. verb, eventKind, cue.icon or nil)
+        ShowVisual(kind, alt or (label .. " " .. verb), eventKind, cue.icon or nil)
     end
 end
 
@@ -723,15 +734,17 @@ function ns.PreviewCue(spellKey, eventKind)
     local cue = activeProfile.cues[spellKey]
     if not cue then return end
     eventKind = (eventKind == "faded") and "faded" or "applied"
+    local label = cue.label or "Aura"
+    local alt = CueAltText(cue, label)
     local snd
     if eventKind == "applied" then snd = cue.soundApplied else snd = cue.soundFaded end
     if snd then
         PlayOrSpeak(snd, cue.channel or activeProfile.channel,
-            SpeakTextFor(cue, eventKind, cue.label or "Aura"))
+            alt or SpeakTextFor(cue, eventKind, label))
     end
     if cue.visual then
         local kind = (cue.kind == "debuff") and "debuff" or "buff"
-        ShowVisual(kind, (cue.label or "Aura") .. " " .. (eventKind == "faded" and "lost" or "gained"),
+        ShowVisual(kind, alt or (label .. " " .. (eventKind == "faded" and "lost" or "gained")),
             eventKind, cue.icon or nil)
     end
 end
@@ -1681,12 +1694,22 @@ function ns.SetCueRequire(spellKey, sid, mode)
     if not cue then return end
     sid = tonumber(sid)
     if not sid then
-        cue.requireAura, cue.requireMode, cue.requireName = nil, nil, nil
+        cue.requireAura, cue.requireMode, cue.requireName, cue.requireText = nil, nil, nil, nil
     else
         cue.requireAura = sid
         cue.requireMode = (mode == "absent") and "absent" or "present"
         cue.requireName = C_Spell.GetSpellName(sid) or tostring(sid)
     end
+end
+
+-- The alternate alert text for a conditional cue: overrides the on-screen flash
+-- and spoken phrase while the cue's "require another aura" gate is set. Blank
+-- clears it back to the cue's normal text.
+function ns.SetCueRequireText(spellKey, text)
+    local cue = activeProfile and activeProfile.cues[tostring(spellKey)]
+    if not cue then return end
+    text = text and text:gsub("^%s+", ""):gsub("%s+$", "")
+    cue.requireText = (text and text ~= "") and text or nil
 end
 
 -- Per-cue opt-in for the on-screen duration bar; SeedPresent re-shows / hides

@@ -164,6 +164,39 @@ StaticPopupDialogs["AURACUE_REQAURA"] = {
     end,
 }
 
+-- Apply the conditional-cue alert text from the dialog (blank = clear).
+local function ApplyRequireTextFromDialog(data, text)
+    if not data or not data.key then return end
+    ns.SetCueRequireText(data.key, text or "")
+    if data.after then data.after() end
+end
+
+-- Set the alternate text shown/spoken for a conditional cue while its gate holds.
+StaticPopupDialogs["AURACUE_REQTEXT"] = {
+    text = "Alert text for %s while its requirement holds\n"
+        .. "(overrides the on-screen flash and spoken text; {name} = aura name; blank to clear):",
+    button1 = "Save",
+    button2 = "Cancel",
+    hasEditBox = true,
+    editBoxWidth = 280,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    OnShow = function(self, data)
+        local eb = DEB(self)
+        if eb then eb:SetText((data and data.current) or ""); eb:HighlightText(); eb:SetFocus() end
+    end,
+    OnAccept = function(self, data)
+        local eb = DEB(self)
+        ApplyRequireTextFromDialog(data, eb and eb:GetText() or "")
+    end,
+    EditBoxOnEnterPressed = function(editBox)
+        local d = editBox:GetParent()
+        ApplyRequireTextFromDialog(d and d.data, editBox:GetText() or "")
+        if d then d:Hide() end
+    end,
+}
+
 -- Rename (or, if blank, delete) a whole custom group. Opener passes { old }.
 StaticPopupDialogs["AURACUE_RENAME_GROUP"] = {
     text = "Rename group \"%s\" to (blank = delete the group):",
@@ -1560,6 +1593,14 @@ local function BuildKindPanel(kind)
                             ns.SetCueRequire(key, cue.requireAura, "absent")
                             return MenuResponse and MenuResponse.Refresh or nil
                         end)
+                    reqSub:CreateDivider()
+                    reqSub:CreateButton(
+                        (cue.requireText and cue.requireText ~= "") and "Change alert text…"
+                        or "Set alert text…", function()
+                        StaticPopup_Show("AURACUE_REQTEXT", cue.label or key, nil,
+                            { key = key, current = cue.requireText or "",
+                              after = function() RefreshAllPanels() end })
+                    end)
                     -- Clear removes the radios + this button on the next build, so
                     -- close the menu (don't refresh into a half-rebuilt submenu)
                     -- and refresh the panels so the row reflects the change.
