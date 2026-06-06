@@ -1676,36 +1676,45 @@ do
         "window into place and \"Test this window\" to preview it.")
     BuildAppearanceSection(appearancePanel, "buff")
     BuildAppearanceSection(appearancePanel, "debuff")
+    content:SetHeight(-appearancePanel.y + 20)
+end
 
-    -- Timer bars (the depleting on-screen duration bars). Per-aura opt-in lives
-    -- on each watched row's Edit menu ("Show a timer bar"); these are the shared
-    -- bar window's appearance. Bar colour follows each aura's buff/debuff colour.
-    appearancePanel.Header("Timer bars")
-    appearancePanel.Desc("Optional depleting bars for watched auras while they're active. Turn a bar " ..
+-- ---------------------------------------------------------------------
+-- Bars subcategory: the on-screen duration bars and their appearance. Per-aura
+-- opt-in lives on each watched row's Edit menu ("Show a timer bar").
+-- ---------------------------------------------------------------------
+local barsPanel = NewPanel("Bars")
+do
+    local content, LEFT = barsPanel.content, barsPanel.LEFT
+    local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
+    titleFS:SetPoint("TOPLEFT", LEFT, barsPanel.y)
+    titleFS:SetText("Timer bars")
+    barsPanel.y = barsPanel.y - 24
+    barsPanel.Desc("Optional depleting bars for watched auras while they're active. Turn a bar " ..
         "on per aura from its Edit menu (\"Show a timer bar while active\"); these control the shared bar window.")
-    appearancePanel.Check("Enable timer bars",
+    barsPanel.Check("Enable timer bars",
         function() return ns.P().bars and ns.P().bars.enabled end,
         function(v)
             if ns.P().bars then ns.P().bars.enabled = v end
             if not v and ns.BarClearAll then ns.BarClearAll() end
         end)
-    appearancePanel.Check("Show a bar on every watched aura",
+    barsPanel.Check("Show a bar on every watched aura",
         function() return ns.P().bars and ns.P().bars.all end,
         function(v) if ns.SetBarsAll then ns.SetBarsAll(v) end end)
-    appearancePanel.Desc("Overrides the per-aura \"Show a timer bar\" toggles without changing them — " ..
+    barsPanel.Desc("Overrides the per-aura \"Show a timer bar\" toggles without changing them — " ..
         "turn it off and each aura goes back to its own setting.")
-    appearancePanel.Slider("Bar width", 120, 400, 5, "%d",
+    barsPanel.Slider("Bar width", 120, 400, 5, "%d",
         function() return (ns.P().bars and ns.P().bars.width) or 220 end,
         function(v) if ns.P().bars then ns.P().bars.width = v end; if ns.RefreshBars then ns.RefreshBars() end end)
-    appearancePanel.Slider("Bar height", 10, 40, 1, "%d",
+    barsPanel.Slider("Bar height", 10, 40, 1, "%d",
         function() return (ns.P().bars and ns.P().bars.height) or 18 end,
         function(v) if ns.P().bars then ns.P().bars.height = v end; if ns.RefreshBars then ns.RefreshBars() end end)
-    appearancePanel.Slider("Max bars shown", 1, 20, 1, "%d",
+    barsPanel.Slider("Max bars shown", 1, 20, 1, "%d",
         function() return (ns.P().bars and ns.P().bars.max) or 8 end,
         function(v) if ns.P().bars then ns.P().bars.max = v end; if ns.RefreshBars then ns.RefreshBars() end end)
     -- Grow direction + bar texture, side by side. ns.P() is nil until login and
     -- SetupMenu runs its callbacks immediately, so each guards the profile.
-    local growDD, texDD = appearancePanel.Dropdown2("Grow direction", "Bar texture", 200)
+    local growDD, texDD = barsPanel.Dropdown2("Grow direction", "Bar texture", 200)
     growDD:SetupMenu(function(_, root)
         for _, opt in ipairs({ { "down", "Downward" }, { "up", "Upward" } }) do
             local val, label2 = opt[1], opt[2]
@@ -1723,7 +1732,7 @@ do
         local p = ns.P()
         growDD:SetText(((p and p.bars and p.bars.grow) or "down") == "up" and "Upward" or "Downward")
     end
-    appearancePanel.widgets[#appearancePanel.widgets + 1] = growDD
+    barsPanel.widgets[#barsPanel.widgets + 1] = growDD
 
     texDD:SetupMenu(function(_, root)
         if root.SetScrollMode then root:SetScrollMode(GetScreenHeight() * 0.5) end
@@ -1756,22 +1765,22 @@ do
         local p = ns.P()
         texDD:SetText((p and p.bars and p.bars.texture) or "Default (built-in)")
     end
-    appearancePanel.widgets[#appearancePanel.widgets + 1] = texDD
+    barsPanel.widgets[#barsPanel.widgets + 1] = texDD
 
-    appearancePanel.Check("Reverse fill direction",
+    barsPanel.Check("Reverse fill direction",
         function() return ns.P().bars and ns.P().bars.reverse end,
         function(v)
             if ns.P().bars then ns.P().bars.reverse = v end
             if ns.ApplyBarStyle then ns.ApplyBarStyle() end
         end)
 
-    AddColorPair(appearancePanel,
+    AddColorPair(barsPanel,
         function() return ns.P().bars.colorBuff end, "Buff bar color",
         function() return ns.P().bars.colorDebuff end, "Debuff bar color",
         ns.ApplyBarStyle)
 
     -- Bar font + text outline, side by side.
-    local fontDD, outlineDD = appearancePanel.Dropdown2("Bar font", "Text outline", 200)
+    local fontDD, outlineDD = barsPanel.Dropdown2("Bar font", "Text outline", 200)
     fontDD:SetupMenu(function(_, root)
         if root.SetScrollMode then root:SetScrollMode(GetScreenHeight() * 0.5) end
         root:CreateRadio("Default",
@@ -1795,7 +1804,7 @@ do
         end
     end)
     fontDD.Refresh = function() local p = ns.P(); fontDD:SetText((p and p.bars and p.bars.font) or "Default") end
-    appearancePanel.widgets[#appearancePanel.widgets + 1] = fontDD
+    barsPanel.widgets[#barsPanel.widgets + 1] = fontDD
 
     local OUTLINE_OPTS = { { "NONE", "None" }, { "OUTLINE", "Outline" }, { "THICKOUTLINE", "Thick outline" } }
     outlineDD:SetupMenu(function(_, root)
@@ -1815,21 +1824,21 @@ do
         local cur = (p and p.bars and p.bars.outline) or "NONE"
         outlineDD:SetText(cur == "OUTLINE" and "Outline" or (cur == "THICKOUTLINE" and "Thick outline") or "None")
     end
-    appearancePanel.widgets[#appearancePanel.widgets + 1] = outlineDD
+    barsPanel.widgets[#barsPanel.widgets + 1] = outlineDD
 
-    appearancePanel.Check("Text shadow",
+    barsPanel.Check("Text shadow",
         function() return ns.P().bars and ns.P().bars.shadow end,
         function(v)
             if ns.P().bars then ns.P().bars.shadow = v end
             if ns.RefreshBars then ns.RefreshBars() end
         end)
 
-    appearancePanel.SideBySide(
+    barsPanel.SideBySide(
         "Move bars", function() ns.SetBarsReposition(true) end,
         "Lock bars", function() ns.SetBarsReposition(false) end,
         "Test bars", function() if ns.TestBars then ns.TestBars() end end)
 
-    content:SetHeight(-appearancePanel.y + 20)
+    content:SetHeight(-barsPanel.y + 20)
 end
 
 -- ---------------------------------------------------------------------
@@ -2312,6 +2321,7 @@ if Settings and Settings.RegisterCanvasLayoutCategory then
         -- Subcategories listed alphabetically.
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, appearancePanel.panel, "Appearance")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, audioPanel.panel, "Audio")
+        Settings.RegisterCanvasLayoutSubcategory(mainCategory, barsPanel.panel, "Bars")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs/Skills")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, debuffPanel.panel, "Debuffs")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, managePanel.panel, "Manage Auras")

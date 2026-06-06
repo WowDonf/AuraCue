@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.60.3
+
+- Moved the **Timer bars** settings onto their own **Bars** page in the settings
+  list (between Audio and Buffs/Skills), so the Appearance page is back to just
+  the buff/debuff flash windows.
+
 ## v0.60.2
 
 - Timer bar countdowns now read in minutes / hours once over a minute, rounded
