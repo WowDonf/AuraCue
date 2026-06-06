@@ -58,6 +58,8 @@ read_globals = {
     "C_Timer", "GetTime",
     -- Combat / protected-frame state
     "InCombatLockdown", "UnitAffectingCombat",
+    -- Weapon enchant detection for the checklist (oils / sharpening stones)
+    "GetWeaponEnchantInfo", "GetInventoryItemTexture",
     -- Modifier-key state (dropdown shift/ctrl-click actions)
     "IsShiftKeyDown", "IsControlKeyDown",
     -- Tables / misc

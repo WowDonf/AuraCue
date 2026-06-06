@@ -137,6 +137,7 @@ local PROFILE_DEFAULTS = {
         position = nil,     -- { point, relativePoint, x, y }
         size     = 40,      -- icon size (px)
         perRow   = 8,       -- icons per row before wrapping
+        weaponEnchant = false,  -- warn when a weapon has no temporary enchant (oil/stone)
     },
     -- Watched auras, keyed by spellID-as-string -> cue config.
     cues = {},
@@ -353,6 +354,12 @@ local function ValidateRanges(db)
     cl.size = math.max(16, math.min(80, cl.size))
     if type(cl.perRow) ~= "number" then cl.perRow = 8 end
     cl.perRow = math.max(1, math.min(20, math.floor(cl.perRow)))
+    -- Migrate the old separate main-/off-hand toggles into one.
+    if cl.mhEnchant ~= nil or cl.ohEnchant ~= nil then
+        if cl.weaponEnchant == nil then cl.weaponEnchant = (cl.mhEnchant or cl.ohEnchant) and true or false end
+        cl.mhEnchant, cl.ohEnchant = nil, nil
+    end
+    cl.weaponEnchant = cl.weaponEnchant and true or false
 end
 ns.ValidateRanges = ValidateRanges
 
@@ -1500,6 +1507,27 @@ local function UpdateChecklist()
             end
         end
     end
+    -- Weapon enchants (oils / sharpening stones) aren't player auras — the
+    -- catalog can't see them — so check them via the weapon-enchant API. Show
+    -- the weapon's own icon when the slot has a weapon but no temporary enchant.
+    if GetWeaponEnchantInfo and cfg.weaponEnchant then
+        local hasMH, _, _, _, hasOH = GetWeaponEnchantInfo()
+        local function EnchantIcon(slot, has)
+            local itemTex = GetInventoryItemTexture and GetInventoryItemTexture("player", slot)
+            if itemTex and (showAll or not has) then
+                idx = idx + 1
+                local f = checklistIcons[idx] or MakeChecklistIcon()
+                checklistIcons[idx] = f
+                f.tex:SetTexture(itemTex)
+                f:SetSize(size, size); f:ClearAllPoints()
+                local col, row = (idx - 1) % perRow, math.floor((idx - 1) / perRow)
+                f:SetPoint("TOPLEFT", checklistContainer, "TOPLEFT", col * (size + 4), -row * (size + 4))
+                f:Show()
+            end
+        end
+        EnchantIcon(16, hasMH)   -- main-hand slot
+        EnchantIcon(17, hasOH)   -- off-hand slot
+    end
     -- Test with nothing added yet: show sample icons so the box can be placed.
     if showAll and idx == 0 then
         for i = 1, 3 do
@@ -1521,6 +1549,17 @@ local function UpdateChecklist()
     end
 end
 ns.UpdateChecklist = UpdateChecklist
+
+-- Weapon enchants expire silently (no event), so poll while they're being
+-- watched so the "missing" icon appears when an oil/stone runs out.
+if C_Timer and C_Timer.NewTicker then
+    C_Timer.NewTicker(2, function()
+        local cfg = ChecklistCfg()
+        if cfg and cfg.enabled and cfg.weaponEnchant and not ns.checklistMoving then
+            UpdateChecklist()
+        end
+    end)
+end
 
 -- Move / lock the checklist box (Checklist page buttons): pin it open with a
 -- backdrop and sample icons to drag, then re-lock + refresh on exit.
@@ -2629,6 +2668,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             if IsPermMineAura(spellID) then lastAuraCast = { id = spellID, time = GetTime() } end
             ApplyReplace(spellID)   -- detect an aura/stance swap (fires the old one's lost)
             OnSelfCast(spellID)
+            C_Timer.After(0.3, ns.UpdateChecklist)   -- e.g. applying a weapon oil
             -- Catalog the aura this cast applies. The aura list can't be read
             -- in combat (its spell ids are secret), but querying this known id
             -- works in and out of combat — so buffs/debuffs you cast in a fight

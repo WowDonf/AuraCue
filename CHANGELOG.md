@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.66.2
+
+- Checklist can now warn about a missing **weapon enchant** (oil / sharpening
+  stone). These are temporary weapon enchants, not auras, so they don't appear
+  in the catalog — turn on "Warn if a weapon enchant is missing" on the
+  Checklist page and the box shows a weapon's icon while either weapon has no
+  enchant.
+
 ## v0.66.1
 
 - Checklist polish: the **Add a buff** picker now uses the same grouped submenus

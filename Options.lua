@@ -2050,6 +2050,11 @@ do
             if ns.P().checklist then ns.P().checklist.enabled = v end
             if ns.UpdateChecklist then ns.UpdateChecklist() end
         end)
+    -- Weapon enchants (oils / sharpening stones) aren't auras, so they can't be
+    -- added from the catalog — watch them with this instead (both weapons).
+    checklistPanel.Check("Warn if a weapon enchant (oil / sharpening stone) is missing",
+        function() return ns.P().checklist and ns.P().checklist.weaponEnchant end,
+        function(v) if ns.P().checklist then ns.P().checklist.weaponEnchant = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
 
     -- Add a buff: the same grouped picker as Buffs/Debuffs, plus a search box
     -- with a live autocomplete popup.
