@@ -1754,7 +1754,7 @@ do
         end
         for _, key in ipairs(list) do
             local k = key
-            root:CreateRadio(k,
+            local r = root:CreateRadio(k,
                 function() local p = ns.P(); return p and p.bars and p.bars.texture == k end,
                 function()
                     local p = ns.P()
@@ -1762,6 +1762,17 @@ do
                     texDD:SetText(k); texDD:GenerateMenu()
                     if ns.ApplyBarStyle then ns.ApplyBarStyle() end
                 end)
+            local path = ns.BarTextureFile and ns.BarTextureFile(k)
+            if path and r and r.AddInitializer then
+                r:AddInitializer(function(button)
+                    local tex = button:AttachTexture()
+                    tex:SetSize(96, 14)
+                    tex:SetPoint("RIGHT", button, "RIGHT", -10, 0)
+                    tex:SetTexture(path)
+                    tex:SetVertexColor(0.85, 0.85, 0.85)   -- show the texture, neutral-tinted
+                    return 240, 20                          -- room for name + swatch
+                end)
+            end
         end
     end)
     texDD.Refresh = function()
@@ -1797,13 +1808,19 @@ do
         if not list then return end
         for _, key in ipairs(list) do
             local k = key
-            root:CreateRadio(k,
+            local r = root:CreateRadio(k,
                 function() local p = ns.P(); return p and p.bars and p.bars.font == k end,
                 function()
                     local p = ns.P(); if p and p.bars then p.bars.font = k end
                     fontDD:SetText(k); fontDD:GenerateMenu()
                     if ns.RefreshBars then ns.RefreshBars() end
                 end)
+            local path = ns.BarFontFile and ns.BarFontFile(k)
+            if path and r and r.AddInitializer then
+                r:AddInitializer(function(button)   -- render the name in its own font
+                    if button.fontString then button.fontString:SetFont(path, 14, "") end
+                end)
+            end
         end
     end)
     fontDD.Refresh = function() local p = ns.P(); fontDD:SetText((p and p.bars and p.bars.font) or "Default") end

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.60.6
+
+- The **Bar texture** and **Bar font** dropdowns now preview each option: the
+  texture dropdown shows a swatch of each bar style, and the font dropdown
+  renders each name in its own font.
+
 ## v0.60.5
 
 - Fixed the Audio **Gained / Lost phrase** fields going blank after a reload

@@ -969,6 +969,8 @@ end
 
 -- Sorted list of available bar-texture names (nil if LibSharedMedia is absent).
 ns.GetBarTextures = function() return LSM and LSM:List("statusbar") or nil end
+-- Resolve a media name to its file, for the dropdown previews.
+ns.BarTextureFile = function(name) return (LSM and name and LSM:Fetch("statusbar", name, true)) or nil end
 
 -- Whether a cue should show a bar: its own opt-in, OR the per-kind "bars on
 -- every buff/debuff" override (which never rewrites the per-cue cue.bar setting).
@@ -990,6 +992,7 @@ end
 
 -- Text styling: font face (LibSharedMedia), outline flags, drop shadow.
 ns.GetBarFonts = function() return LSM and LSM:List("font") or nil end
+ns.BarFontFile = function(name) return (LSM and name and LSM:Fetch("font", name, true)) or nil end
 local OUTLINE_FLAGS = { OUTLINE = "OUTLINE", THICKOUTLINE = "THICKOUTLINE" }
 local function DefaultBarFont()
     local p = GameFontHighlightSmall and select(1, GameFontHighlightSmall:GetFont())
