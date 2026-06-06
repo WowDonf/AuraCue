@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.60.15
+
+- Further fix for phrase text scrolled off the left edge: the cursor reset now
+  also runs on the next frame (once the field is laid out), so the phrase shows
+  from the start without having to click in and press an arrow key.
+
 ## v0.60.14
 
 - Fixed phrase text appearing blank in the Audio fields (and the spoken-text

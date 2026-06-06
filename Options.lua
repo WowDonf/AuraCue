@@ -353,11 +353,16 @@ local function NewPanel(name)
         eb:SetFontObject("ChatFontNormal")
         eb:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
         eb:SetScript("OnEscapePressed", function(self) self:SetText(getter() or ""); self:ClearFocus() end)
-        eb:SetScript("OnEditFocusLost", function(self) setter(self:GetText() or "") end)
         -- After a programmatic SetText the editbox can be left scrolled so the
         -- text sits off the left edge (invisible until you move the cursor).
-        -- Reset the cursor to the start so the beginning is always shown.
-        eb.Refresh = function() eb:SetText(getter() or ""); eb:SetCursorPosition(0) end
+        -- Resetting the cursor to 0 fixes it, but only once the box is laid out
+        -- and shown — so do it now and again on the next frame.
+        local function showStart()
+            eb:SetCursorPosition(0)
+            C_Timer.After(0, function() eb:SetCursorPosition(0) end)
+        end
+        eb:SetScript("OnEditFocusLost", function(self) setter(self:GetText() or ""); showStart() end)
+        eb.Refresh = function() eb:SetText(getter() or ""); showStart() end
         if placeholder then
             -- Set the font with an explicit path (STANDARD_TEXT_FONT); a font
             -- string inheriting a Font-object template on an editbox can end up
@@ -763,6 +768,9 @@ local function OpenSpeechDialog(sid, name, applied, faded, after)
     d.fadedBox.placeholder:SetText((P and P.speakFormatFaded) or "{name} lost")
     d.appliedBox:SetText(applied or ""); d.appliedBox:SetCursorPosition(0)
     d.fadedBox:SetText(faded or ""); d.fadedBox:SetCursorPosition(0)
+    C_Timer.After(0, function()
+        d.appliedBox:SetCursorPosition(0); d.fadedBox:SetCursorPosition(0)
+    end)
     d.appliedBox.placeholder:SetShown((applied or "") == "")
     d.fadedBox.placeholder:SetShown((faded or "") == "")
     d.save:SetScript("OnClick", function()

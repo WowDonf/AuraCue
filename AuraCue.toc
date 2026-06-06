@@ -2,7 +2,7 @@
 ## Title: AuraCue
 ## Notes: Turn your own buffs and debuffs into sound, speech, or on-screen flashes — proc alerts, cooldown windows, and debuff warnings.
 ## Author: WowDonf
-## Version: v0.60.14
+## Version: v0.60.15
 ## SavedVariables: AuraCueDB CueSenseDB
 ## IconTexture: Interface\AddOns\AuraCue\Icon.png
 ## Category-enUS: AuraCue
