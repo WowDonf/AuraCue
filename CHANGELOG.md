@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.70.1
+
+- Big reduction in memory churn from the missing-buff checklist: it now updates
+  at most a few times a second (coalesced) instead of on every aura tick and
+  every spell cast, and the by-name aura lookup no longer allocates each call.
+
 ## v0.70.0
 
 - **Find a setting.** A search box on the main AuraCue page lists matching

@@ -702,16 +702,20 @@ local ReadAura  -- forward (defined with the aura-read helpers below)
 -- id, or it's masked in combat) even though the aura is in fact still up and
 -- readable by name. Returns nil if names can't be read (so callers can tell
 -- "not found" from "couldn't look").
+-- Hoisted handler + upvalues so a fresh closure isn't allocated on every call
+-- (this runs per checklist item / fade check, i.e. very often). Not re-entrant,
+-- which is fine — the ForEachAura sweep below is synchronous.
+local _anpTarget, _anpFound
+local function _anpHandler(data)
+    if data and Reveal(data.name) == _anpTarget then _anpFound = true; return true end
+    return false
+end
 local function AuraNamePresent(name)
     if not name or name == "" or not (AuraUtil and AuraUtil.ForEachAura) then return nil end
-    local found = false
-    local function h(data)
-        if data and Reveal(data.name) == name then found = true; return true end
-        return false
-    end
-    AuraUtil.ForEachAura("player", "HELPFUL", nil, h, true)
-    if not found then AuraUtil.ForEachAura("player", "HARMFUL", nil, h, true) end
-    return found
+    _anpTarget, _anpFound = name, false
+    AuraUtil.ForEachAura("player", "HELPFUL", nil, _anpHandler, true)
+    if not _anpFound then AuraUtil.ForEachAura("player", "HARMFUL", nil, _anpHandler, true) end
+    return _anpFound
 end
 
 -- Last reliable (out-of-combat) read of each gating aura, so a cue gated on an
@@ -1702,6 +1706,17 @@ local function UpdateChecklist()
     end
 end
 ns.UpdateChecklist = UpdateChecklist
+
+-- Coalesce rapid triggers (UNIT_AURA, casts) into at most one checklist update
+-- every 0.15s. The checklist scans the player's auras by name, so running it on
+-- every aura tick in combat generated a lot of churn.
+local clPending = false
+local function ScheduleChecklistUpdate()
+    if clPending or not C_Timer then return end
+    clPending = true
+    C_Timer.After(0.15, function() clPending = false; UpdateChecklist() end)
+end
+ns.ScheduleChecklistUpdate = ScheduleChecklistUpdate
 
 -- Weapon enchants expire silently (no event), so poll while they're being
 -- watched so the "missing" icon appears when an oil/stone runs out.
@@ -2891,7 +2906,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
 
     elseif event == "UNIT_AURA" then
         ScanPlayerAuras()
-        ns.UpdateChecklist()
+        ScheduleChecklistUpdate()
 
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         local unit, _, spellID = ...
@@ -2906,7 +2921,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             if IsPermMineAura(spellID) then lastAuraCast = { id = spellID, time = GetTime() } end
             ApplyReplace(spellID)   -- detect an aura/stance swap (fires the old one's lost)
             OnSelfCast(spellID)
-            C_Timer.After(0.3, ns.UpdateChecklist)   -- e.g. applying a weapon oil
+            ScheduleChecklistUpdate()   -- e.g. applying a weapon oil
             -- Catalog the aura this cast applies. The aura list can't be read
             -- in combat (its spell ids are secret), but querying this known id
             -- works in and out of combat — so buffs/debuffs you cast in a fight
