@@ -2617,13 +2617,13 @@ function ns.ListProfiles()
     return out
 end
 
--- Copy another saved profile into this character+spec (deep copy via the
--- serializer so the two never share table references). Mirrors ImportShare.
-function ns.CopyProfileFrom(sourceKey)
-    local src = AuraCueDB and AuraCueDB.profiles and AuraCueDB.profiles[sourceKey]
-    if not src or sourceKey == ProfileKey() then return false, "Pick a different profile." end
+-- Replace the current character+spec profile with a deep copy of `src` (via the
+-- serializer, so the two never share table references). Returns the cue count,
+-- or nil if the copy failed. Shared by copy-from-character and presets.
+local function ApplyProfileTable(src)
+    if type(src) ~= "table" then return nil end
     local copy = deserialize(serialize(src))
-    if type(copy) ~= "table" then return false, "Could not copy that profile." end
+    if type(copy) ~= "table" then return nil end
     MigrateVisual(copy)
     MergeDefaults(copy, PROFILE_DEFAULTS)
     ValidateRanges(copy)
@@ -2640,7 +2640,65 @@ function ns.CopyProfileFrom(sourceKey)
     if ns.RefreshOptions then ns.RefreshOptions() end
     local n = 0
     for _ in pairs(copy.cues) do n = n + 1 end
+    return n
+end
+
+-- Copy another saved profile into this character+spec. Mirrors ImportShare.
+function ns.CopyProfileFrom(sourceKey)
+    local src = AuraCueDB and AuraCueDB.profiles and AuraCueDB.profiles[sourceKey]
+    if not src or sourceKey == ProfileKey() then return false, "Pick a different profile." end
+    local n = ApplyProfileTable(src)
+    if not n then return false, "Could not copy that profile." end
     return true, n
+end
+
+-- Named presets: reusable profile snapshots stored account-wide, independent of
+-- character/spec, for quickly switching a spec between setups (raid, M+, PvP…).
+local function CleanName(name)
+    return name and name:gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+function ns.SavePreset(name)
+    name = CleanName(name)
+    if not name or name == "" then return false, "Enter a name for the preset." end
+    if not activeProfile then return false, "No active profile to save." end
+    AuraCueDB.presets = AuraCueDB.presets or {}
+    AuraCueDB.presets[name] = deserialize(serialize(activeProfile))
+    return true, name
+end
+
+function ns.ListPresets()
+    local out = {}
+    for name in pairs((AuraCueDB and AuraCueDB.presets) or {}) do out[#out + 1] = name end
+    table.sort(out, function(a, b) return a:lower() < b:lower() end)
+    return out
+end
+
+-- Resolve a preset name to its stored key, matching case-insensitively (the
+-- slash command lowercases everything, while the UI saves exact case).
+local function FindPresetName(name)
+    name = CleanName(name)
+    if not name or name == "" then return nil end
+    local presets = AuraCueDB and AuraCueDB.presets
+    if not presets then return nil end
+    if presets[name] ~= nil then return name end
+    local lower = name:lower()
+    for k in pairs(presets) do if k:lower() == lower then return k end end
+    return nil
+end
+
+function ns.ApplyPreset(name)
+    local key = FindPresetName(name)
+    if not key then return false, "No preset named \"" .. tostring(CleanName(name) or "") .. "\"." end
+    local n = ApplyProfileTable(AuraCueDB.presets[key])
+    if not n then return false, "Could not apply that preset." end
+    return true, key, n
+end
+
+function ns.DeletePreset(name)
+    local key = FindPresetName(name)
+    if key and AuraCueDB.presets then AuraCueDB.presets[key] = nil end
+    return key ~= nil
 end
 
 function ns.SeenCount()
@@ -2756,6 +2814,31 @@ SlashCmdList["AURACUE"] = function(msg)
             RestorePosition("debuff")
             RestoreBarsPosition()
             chatPrint("overlay positions reset.")
+
+        elseif cmd == "preset" or cmd == "presets" then
+            local sub = rest:match("^(%S*)")
+            local arg = rest:match("^%S*%s+(.-)$") or ""
+            if sub == "save" then
+                local okP, res = ns.SavePreset(arg)
+                chatPrint(okP and ("saved current profile as preset |cffffd200" .. res .. "|r.") or res)
+                ns.RefreshOptions()
+            elseif sub == "delete" or sub == "del" or sub == "remove" then
+                if ns.DeletePreset(arg) then chatPrint("deleted preset |cffffd200" .. arg .. "|r.")
+                else chatPrint("no preset named \"" .. arg .. "\".") end
+                ns.RefreshOptions()
+            elseif sub == "" or sub == "list" then
+                local list = ns.ListPresets()
+                if #list == 0 then
+                    chatPrint("no presets yet. Save one with |cffffd200/cue preset save <name>|r.")
+                else
+                    chatPrint("presets: |cffffd200" .. table.concat(list, "|r, |cffffd200") .. "|r"
+                        .. "  — apply with |cffffd200/cue preset <name>|r.")
+                end
+            else
+                local okP, res, cnt = ns.ApplyPreset(rest)
+                if okP then chatPrint("applied preset |cffffd200" .. res .. "|r (" .. cnt .. " auras).")
+                else chatPrint(res) end
+            end
 
         elseif cmd == "forget" then
             AuraCueDB.seen = {}

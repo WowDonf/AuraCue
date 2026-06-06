@@ -2042,6 +2042,87 @@ do
     titleFS:SetText("Sharing")
     sharePanel.y = sharePanel.y - 24
 
+    -- Profile presets: named, reusable snapshots you can apply to any spec.
+    local selectedPreset, presetDD, presetStatus
+    sharePanel.Header("Profile presets")
+    sharePanel.Desc("Save this spec's current setup as a named preset, then apply it to any " ..
+        "character or spec later — handy for switching between raid, Mythic+, and PvP setups. " ..
+        "Presets are account-wide and also work from |cffffd200/cue preset|r.")
+    local nameLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    nameLabel:SetPoint("TOPLEFT", LEFT, sharePanel.y)
+    nameLabel:SetText("Name:")
+    local nameBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+    nameBox:SetPoint("LEFT", nameLabel, "RIGHT", 12, 0)
+    nameBox:SetSize(220, 22)
+    nameBox:SetAutoFocus(false)
+    nameBox:SetFontObject("ChatFontNormal")
+    nameBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    sharePanel.y = sharePanel.y - 32
+    sharePanel.Button("Save current as preset", 200, function()
+        local ok, res = ns.SavePreset(nameBox:GetText() or "")
+        if ok then
+            nameBox:SetText(""); nameBox:ClearFocus()
+            presetStatus:SetText("|cff60ff60Saved preset \"" .. res .. "\".|r")
+            if presetDD and presetDD.Refresh then presetDD.Refresh() end
+        else
+            presetStatus:SetText("|cffff6060" .. tostring(res) .. "|r")
+        end
+    end)
+    local presetLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    presetLabel:SetPoint("TOPLEFT", LEFT, sharePanel.y)
+    presetLabel:SetText("Preset:")
+    presetDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+    presetDD:SetPoint("LEFT", presetLabel, "RIGHT", 12, 0)
+    presetDD:SetSize(260, 26)
+    presetDD:SetDefaultText("Choose a preset")
+    presetDD:SetupMenu(function(_, root)
+        local list = ns.ListPresets and ns.ListPresets() or {}
+        if #list == 0 then
+            root:CreateButton("|cff808080No presets saved yet|r", function() end)
+            return
+        end
+        for _, nm in ipairs(list) do
+            root:CreateRadio(nm,
+                function() return selectedPreset == nm end,
+                function() selectedPreset = nm; presetDD:SetText(nm); presetDD:GenerateMenu() end)
+        end
+    end)
+    presetDD.Refresh = function()
+        if not selectedPreset then return end
+        local found = false
+        for _, nm in ipairs(ns.ListPresets and ns.ListPresets() or {}) do
+            if nm == selectedPreset then found = true; break end
+        end
+        if not found then selectedPreset = nil; presetDD:SetText("Choose a preset") end
+    end
+    sharePanel.widgets[#sharePanel.widgets + 1] = presetDD
+    sharePanel.y = sharePanel.y - 34
+    presetStatus = AddStatusLine(sharePanel)
+    sharePanel.SideBySide(
+        "Apply to this spec", function()
+            if not selectedPreset then presetStatus:SetText("|cffff6060Pick a preset first.|r"); return end
+            local nm = selectedPreset
+            StaticPopup_Show("AURACUE_CONFIRM",
+                "Replace this character/spec's AuraCue profile with preset \"" .. nm .. "\"? " ..
+                "Your current watch list and settings here are overwritten.",
+                nil, { onaccept = function()
+                    local ok, a, b = ns.ApplyPreset(nm)
+                    presetStatus:SetText(ok
+                        and ("|cff60ff60Applied \"" .. tostring(a) .. "\" (" .. tostring(b) .. " auras).|r")
+                        or  ("|cffff6060" .. tostring(a) .. "|r"))
+                end })
+        end,
+        "Delete preset", function()
+            if not selectedPreset then presetStatus:SetText("|cffff6060Pick a preset first.|r"); return end
+            local nm = selectedPreset
+            StaticPopup_Show("AURACUE_CONFIRM", "Delete the preset \"" .. nm .. "\"?",
+                nil, { onaccept = function()
+                    ns.DeletePreset(nm)
+                    presetStatus:SetText("|cff60ff60Deleted \"" .. nm .. "\".|r")
+                    if presetDD.Refresh then presetDD.Refresh() end
+                end })
+        end)
+
     -- Copy from another character/spec on this account (no string needed).
     sharePanel.Header("Copy from another character")
     sharePanel.Desc("Replace this character and spec's profile with a copy of another saved profile " ..

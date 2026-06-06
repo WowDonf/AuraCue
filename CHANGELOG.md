@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.65.0
+
+- **Profile presets.** Save a spec's current setup as a named, account-wide
+  preset and apply it to any character/spec later — for quickly switching
+  between raid, Mythic+, and PvP configurations. On the **Sharing** page, or via
+  `/cue preset` (`save <name>`, `<name>` to apply, `list`, `delete <name>`).
+
 ## v0.64.0
 
 - **Detects aura/stance swaps in combat.** Aura reads are masked in combat, but
