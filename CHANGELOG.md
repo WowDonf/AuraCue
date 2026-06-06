@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.60.7
+
+- Timer bars can now show the spell icon on the **right** of the bar instead
+  of the left — a new "Icon on the right" toggle sits beside "Reverse fill
+  direction".
+
 ## v0.60.6
 
 - The **Bar texture** and **Bar font** dropdowns now preview each option: the

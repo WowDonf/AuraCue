@@ -117,6 +117,7 @@ local PROFILE_DEFAULTS = {
         position = nil,     -- { point, relativePoint, x, y }
         texture  = nil,     -- LibSharedMedia bar-style name; nil = built-in
         reverse  = false,   -- reverse the fill direction (drain the other way)
+        iconRight = false,  -- put the icon on the right of the bar instead of left
         allBuffs   = false, -- show a bar on every watched buff (overrides cue.bar)
         allDebuffs = false, -- show a bar on every watched debuff
         colorBuff   = { r = 0.20, g = 0.86, b = 0.75 },  -- buff bar fill colour
@@ -314,6 +315,7 @@ local function ValidateRanges(db)
     if bars.grow ~= "up" and bars.grow ~= "down" then bars.grow = "down" end
     if bars.texture ~= nil and type(bars.texture) ~= "string" then bars.texture = nil end
     bars.reverse = bars.reverse and true or false
+    bars.iconRight = bars.iconRight and true or false
     -- Migrate the old single "bars on every aura" toggle into per-kind ones.
     if bars.all ~= nil then
         if bars.allBuffs == nil then bars.allBuffs = bars.all end
@@ -1099,9 +1101,15 @@ local function LayoutBars()
             else
                 b:SetPoint("TOPLEFT", barContainer, "TOPLEFT", 0, -off)
             end
-            -- Icon is a square to the LEFT of the bar; the name + countdown sit
-            -- inside the bar (name at its left, time at its right).
-            b.icon:ClearAllPoints(); b.icon:SetPoint("RIGHT", b, "LEFT", -2, 0); b.icon:SetSize(h, h)
+            -- Icon is a square just outside the bar (left by default, or right);
+            -- the name + countdown sit inside the bar (name left, time right).
+            b.icon:ClearAllPoints()
+            if cfg.iconRight then
+                b.icon:SetPoint("LEFT", b, "RIGHT", 2, 0)
+            else
+                b.icon:SetPoint("RIGHT", b, "LEFT", -2, 0)
+            end
+            b.icon:SetSize(h, h)
             b.time:ClearAllPoints(); b.time:SetPoint("RIGHT", b, "RIGHT", -4, 0)
             b.name:ClearAllPoints()
             b.name:SetPoint("LEFT", b, "LEFT", 4, 0)

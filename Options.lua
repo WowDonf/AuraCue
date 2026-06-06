@@ -1781,11 +1781,18 @@ do
     end
     barsPanel.widgets[#barsPanel.widgets + 1] = texDD
 
-    barsPanel.Check("Reverse fill direction",
+    barsPanel.CheckRow(
+        "Reverse fill direction",
         function() return ns.P().bars and ns.P().bars.reverse end,
         function(v)
             if ns.P().bars then ns.P().bars.reverse = v end
             if ns.ApplyBarStyle then ns.ApplyBarStyle() end
+        end,
+        "Icon on the right",
+        function() return ns.P().bars and ns.P().bars.iconRight end,
+        function(v)
+            if ns.P().bars then ns.P().bars.iconRight = v end
+            if ns.RefreshBars then ns.RefreshBars() end
         end)
 
     AddColorPair(barsPanel,
