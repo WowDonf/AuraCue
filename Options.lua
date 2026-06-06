@@ -2033,12 +2033,12 @@ end
 -- Checklist subcategory: the missing-buff box. Pick the buffs you want kept
 -- up; an icon shows for each one that's currently missing.
 -- ---------------------------------------------------------------------
-local checklistPanel = NewPanel("Checklist")
+local checklistPanel = NewPanel("Missing Buffs")
 do
     local content, LEFT = checklistPanel.content, checklistPanel.LEFT
     local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
     titleFS:SetPoint("TOPLEFT", LEFT, checklistPanel.y)
-    titleFS:SetText("Buff checklist")
+    titleFS:SetText("Missing buffs")
     checklistPanel.y = checklistPanel.y - 24
     checklistPanel.Desc("A movable on-screen box that shows an icon for each buff you want kept up " ..
         "but that ISN'T currently on you — an empty box means you're fully buffed. Handy as a " ..
@@ -2361,13 +2361,13 @@ end
 -- Sharing subcategory: export (profile / catalog) and import, each with
 -- its own scrollable box.
 -- ---------------------------------------------------------------------
-local sharePanel = NewPanel("Sharing")
+local sharePanel = NewPanel("Profile")
 do
     local content, LEFT = sharePanel.content, sharePanel.LEFT
 
     local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
     titleFS:SetPoint("TOPLEFT", LEFT, sharePanel.y)
-    titleFS:SetText("Sharing")
+    titleFS:SetText("Profile")
     sharePanel.y = sharePanel.y - 24
 
     -- Profile presets: named, reusable snapshots you can apply to any spec.
@@ -2605,14 +2605,14 @@ end
 -- catalog — set custom groups, hide clutter, or remove entries, one at a
 -- time or in bulk via the row checkboxes.
 -- ---------------------------------------------------------------------
-local managePanel = NewPanel("Manage Auras")
+local managePanel = NewPanel("Organize Auras")
 do
     local content, LEFT = managePanel.content, managePanel.LEFT
     local ROW, MAX_ROWS = 24, 200
 
     local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
     titleFS:SetPoint("TOPLEFT", LEFT, managePanel.y)
-    titleFS:SetText("Manage Auras")
+    titleFS:SetText("Organize Auras")
     managePanel.y = managePanel.y - 24
     managePanel.Desc("Your whole aura catalog (account-wide). Set a custom group, hide clutter, or " ..
         "remove an entry. Tick rows to act on several at once. Removing an aura just forgets it here; " ..
@@ -2920,10 +2920,10 @@ if Settings and Settings.RegisterCanvasLayoutCategory then
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, audioPanel.panel, "Audio")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, barsPanel.panel, "Bars")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs/Skills")
-        Settings.RegisterCanvasLayoutSubcategory(mainCategory, checklistPanel.panel, "Checklist")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, debuffPanel.panel, "Debuffs")
-        Settings.RegisterCanvasLayoutSubcategory(mainCategory, managePanel.panel, "Manage Auras")
-        Settings.RegisterCanvasLayoutSubcategory(mainCategory, sharePanel.panel, "Sharing")
+        Settings.RegisterCanvasLayoutSubcategory(mainCategory, checklistPanel.panel, "Missing Buffs")
+        Settings.RegisterCanvasLayoutSubcategory(mainCategory, managePanel.panel, "Organize Auras")
+        Settings.RegisterCanvasLayoutSubcategory(mainCategory, sharePanel.panel, "Profile")
     end
 end
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.68.3
+
+- Renamed settings pages: **Checklist → Missing Buffs**, **Manage Auras →
+  Organize Auras**, **Sharing → Profile** (keeping the list alphabetical, with
+  Missing Buffs after Debuffs).
+
 ## v0.68.2
 
 - The checklist ticker no longer has a trailing dot after the last item.
