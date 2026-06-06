@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.63.1
+
+- Fixed **"Only while it's missing"** (conditional cues) sometimes firing while
+  the required aura was present. Switching modes now flips only the mode and can
+  no longer accidentally clear the requirement (which made the cue fire
+  unconditionally).
+
 ## v0.63.0
 
 - Conditional cues can now carry a custom **alert text**. With a "Require

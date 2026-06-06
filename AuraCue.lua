@@ -1702,6 +1702,15 @@ function ns.SetCueRequire(spellKey, sid, mode)
     end
 end
 
+-- Flip only the gate mode (present/absent) without touching the gating aura.
+-- (Going through SetCueRequire with a re-passed id risked clearing the whole
+-- requirement if that id was ever nil, which made the cue fire unconditionally.)
+function ns.SetCueRequireMode(spellKey, mode)
+    local cue = activeProfile and activeProfile.cues[tostring(spellKey)]
+    if not cue or not cue.requireAura then return end
+    cue.requireMode = (mode == "absent") and "absent" or "present"
+end
+
 -- The alternate alert text for a conditional cue: overrides the on-screen flash
 -- and spoken phrase while the cue's "require another aura" gate is set. Blank
 -- clears it back to the cue's normal text.

@@ -1584,13 +1584,13 @@ local function BuildKindPanel(kind)
                     reqSub:CreateRadio("Only while it's active",
                         function() return (cue.requireMode or "present") == "present" end,
                         function()
-                            ns.SetCueRequire(key, cue.requireAura, "present")
+                            ns.SetCueRequireMode(key, "present")
                             return MenuResponse and MenuResponse.Refresh or nil
                         end)
                     reqSub:CreateRadio("Only while it's missing",
                         function() return cue.requireMode == "absent" end,
                         function()
-                            ns.SetCueRequire(key, cue.requireAura, "absent")
+                            ns.SetCueRequireMode(key, "absent")
                             return MenuResponse and MenuResponse.Refresh or nil
                         end)
                     reqSub:CreateDivider()
