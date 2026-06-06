@@ -1336,13 +1336,34 @@ function ns.SetBarsReposition(on)
     end
 end
 
--- A permanent aura (no natural duration — auras, stances, toggles like Devotion
--- Aura) can't actually expire, so an "absent" read while in combat is masking,
--- not a real fade. Treat it as still present rather than firing a false "lost".
-local function PermanentMaskedCue(key)
-    if not InCombatLockdown() then return false end
+-- Decide what to do when a watched aura's id read comes back absent. Returns
+-- true if it's REALLY gone (caller fires "lost"); false to hold it.
+--   * Still on us by name -> hold (the id was the cast id, or masked).
+--   * Permanent aura (auras, stances, toggles like Devotion) -> can't expire, so
+--     an absent read is masking. Entering combat can mask the read a beat before
+--     the combat flags flip, so we don't trust InCombatLockdown at this instant;
+--     instead hold and re-check shortly, firing "lost" only if it's STILL gone
+--     and we're confirmed out of combat (where reads are reliable).
+local permFadePending = {}
+local function ResolveAbsent(cue, sid, key)
+    if AuraNamePresent(cue.label) then return false end
     local s = AuraCueDB.seen and AuraCueDB.seen[key]
-    return s and s.permanent and true or false
+    if s and s.permanent then
+        if not permFadePending[sid] then
+            permFadePending[sid] = true
+            C_Timer.After(0.7, function()
+                permFadePending[sid] = nil
+                if not present[sid] then return end
+                if InCombatLockdown() or UnitAffectingCombat("player") then return end
+                if ReadAura(sid) == "present" or AuraNamePresent(cue.label) then return end
+                if cue.faded then FireCue(cue, C_Spell.GetSpellName(sid), "faded") end
+                if CueWantsBar(cue) then BarStop(sid) end
+                present[sid] = nil
+            end)
+        end
+        return false
+    end
+    return true
 end
 
 local function ScanPlayerAuras()
@@ -1377,9 +1398,9 @@ local function ScanPlayerAuras()
             elseif state == "unknown" then
                 newPresent[sid] = present[sid]
             elseif castConfirmed[sid] and present[sid] and (cue.faded or CueWantsBar(cue))
-                   and not AuraNamePresent(cue.label) and not PermanentMaskedCue(key) then
-                -- Confirmed absent (by id and by name, and not a permanent aura
-                -- masked in combat) — a real fade, not just a masked id read.
+                   and ResolveAbsent(cue, sid, key) then
+                -- Confirmed gone (not still on us by name, not a masked permanent
+                -- aura) — a real fade, not just a masked id read.
                 if cue.faded then FireCue(cue, C_Spell.GetSpellName(sid), "faded") end
                 if CueWantsBar(cue) then BarStop(sid) end
                 castConfirmed[sid] = nil
@@ -1405,14 +1426,11 @@ local function ScanPlayerAuras()
             elseif state == "unknown" then
                 newPresent[sid] = present[sid]   -- secret-masked: hold
             elseif present[sid] then
-                -- The id read says absent, but entering combat can mask a still-
-                -- active aura's id. Confirm it's really gone (not still on us by
-                -- name, and not a permanent aura masked in combat) before "lost".
-                if AuraNamePresent(cue.label) or PermanentMaskedCue(key) then
-                    newPresent[sid] = true
-                else
+                if ResolveAbsent(cue, sid, key) then
                     if cue.faded then FireCue(cue, C_Spell.GetSpellName(sid), "faded") end
                     if CueWantsBar(cue) then BarStop(sid) end
+                else
+                    newPresent[sid] = true   -- held (still on us, or masked-permanent)
                 end
             end
         end

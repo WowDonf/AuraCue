@@ -57,7 +57,7 @@ read_globals = {
     -- Timing
     "C_Timer", "GetTime",
     -- Combat / protected-frame state
-    "InCombatLockdown",
+    "InCombatLockdown", "UnitAffectingCombat",
     -- Modifier-key state (dropdown shift/ctrl-click actions)
     "IsShiftKeyDown", "IsControlKeyDown",
     -- Tables / misc

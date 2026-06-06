@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.63.6
+
+- Permanent auras (Devotion Aura, stances, toggles) no longer fire a false
+  **"lost"** when entering combat. Combat can mask the aura's read a moment
+  before the combat flags engage, so the engine now holds such an aura on an
+  absent read and only fires "lost" if it's still gone a beat later and you're
+  confirmed out of combat.
+
 ## v0.63.5
 
 - Re-baseline tracking **silently on entering combat** (matching the existing
