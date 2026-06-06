@@ -1971,12 +1971,6 @@ local function SetActiveProfile()
     MigrateVisual(activeProfile)
     MergeDefaults(activeProfile, PROFILE_DEFAULTS)
     ValidateRanges(activeProfile)
-    -- The general spoken formats used to default to the literal "{name} gained"
-    -- / "{name} faded". They're blank-by-default now (shown as placeholder, same
-    -- spoken result). Clear a stored value that only matches the old default so
-    -- the placeholder shows instead of pre-filled text.
-    if activeProfile.speakFormatApplied == "{name} gained" then activeProfile.speakFormatApplied = nil end
-    if activeProfile.speakFormatFaded == "{name} faded" then activeProfile.speakFormatFaded = nil end
     BackfillCues(activeProfile.cues)
     RebuildAliases()
     ResyncTracking()   -- fresh tracking state for the (possibly different) cue set

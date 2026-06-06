@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.60.5
+
+- Fixed the Audio **Gained / Lost phrase** fields going blank after a reload
+  when set to the default wording ("{name} gained"). A leftover migration was
+  clearing them on every load; it's gone, so a phrase you enter now sticks and
+  shows in the field.
+
 ## v0.60.4
 
 - The "show a bar on every watched aura" override is now **two** toggles on the
