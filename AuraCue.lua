@@ -2073,6 +2073,7 @@ eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")  -- combat started: re-baseline
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")   -- combat ended: re-sync
 eventFrame:RegisterEvent("SPELLS_CHANGED")          -- spellbook changed: re-harvest
 eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
@@ -2288,6 +2289,14 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
+        SeedPresent()
+
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        -- Combat started: some of our own auras' id reads get masked the moment
+        -- combat begins (e.g. Devotion Aura), and the next scan would see them as
+        -- absent and fire a false "lost". Re-baseline silently against whatever is
+        -- readable now; auras that masked off here are simply held out of tracking
+        -- until combat ends, instead of announcing a fade that didn't happen.
         SeedPresent()
 
     elseif event == "PLAYER_REGEN_ENABLED" then
@@ -2695,7 +2704,11 @@ SlashCmdList["AURACUE"] = function(msg)
                 local a = GP and GP(sid)
                 local d = (a == nil) and "|cffff6060nil|r"
                     or (IsSecret(a) and "|cffffd200secret|r" or "|cff60ff60readable|r")
-                print("  " .. key .. " " .. (C_Spell.GetSpellName(sid) or "?") .. ": " .. d)
+                local s = AuraCueDB.seen and AuraCueDB.seen[key]
+                local perm = (s and s.permanent) and " perm" or ""
+                local byName = AuraNamePresent(C_Spell.GetSpellName(sid))
+                local nm = (byName == true) and " name:yes" or (byName == false and " name:no" or " name:?")
+                print("  " .. key .. " " .. (C_Spell.GetSpellName(sid) or "?") .. ": " .. d .. perm .. nm)
             end
 
         elseif cmd == "status" then

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.63.5
+
+- Re-baseline tracking **silently on entering combat** (matching the existing
+  re-sync on leaving combat), so an aura whose ID read gets masked the instant
+  combat starts is held rather than firing a false "lost". `/cue debug` now also
+  reports each aura's permanent flag and name-readability.
+
 ## v0.63.4
 
 - Further fix for a false **"lost"** when entering combat: a **permanent** aura
