@@ -708,6 +708,29 @@ local function RefreshGateStates(cues)
     end
 end
 
+-- Mutually-exclusive aura detection ("you switched your aura mid-combat"). Aura
+-- *reads* are masked in combat, but your own *casts* are not — so when you cast
+-- an aura that we've learned replaces another, we can fire the old one's "lost"
+-- and refresh its gate state even though we can't read it.
+local lastAuraCast      -- {id, time} of the most recent permanent self-aura cast
+local function IsPermMineAura(sid)
+    local s = AuraCueDB and AuraCueDB.seen and AuraCueDB.seen[tostring(sid)]
+    return (s and s.permanent and s.mine) and true or false
+end
+
+-- Learn that the last permanent self-aura you cast replaced this one (they're in
+-- the same one-at-a-time family — auras, stances). Learned from swaps seen out
+-- of combat, where the dropped aura's "lost" is observable.
+local function LearnReplace(removedSid)
+    local lc = lastAuraCast
+    if not lc or lc.id == removedSid or (GetTime() - lc.time) > 2 then return end
+    if not IsPermMineAura(removedSid) then return end
+    AuraCueDB.replaces = AuraCueDB.replaces or {}
+    local t = AuraCueDB.replaces[tostring(lc.id)]
+    if not t then t = {}; AuraCueDB.replaces[tostring(lc.id)] = t end
+    t[tostring(removedSid)] = true
+end
+
 local function RequireMet(cue)
     if not cue.requireAura then return true end
     local present = GateAuraPresent(cue)
@@ -1381,9 +1404,11 @@ local function ResolveAbsent(cue, sid, key)
                 if not present[sid] then return end
                 if InCombatLockdown() or UnitAffectingCombat("player") then return end
                 if ReadAura(sid) == "present" or AuraNamePresent(cue.label) then return end
+                LearnReplace(sid)   -- if a self-aura cast just replaced it, remember
                 if cue.faded then FireCue(cue, C_Spell.GetSpellName(sid), "faded") end
                 if CueWantsBar(cue) then BarStop(sid) end
                 present[sid] = nil
+                gateState[sid] = false
             end)
         end
         return false
@@ -1520,6 +1545,30 @@ local function ScheduleFade(cue, pid, dur)
             present[pid] = nil
         end
     end)
+end
+
+-- A self-cast just happened: mark it present in the gate cache, and if we've
+-- learned it replaces other auras (you swapped your aura/stance), fire their
+-- "lost" now and refresh their gate state — even in combat, where their reads
+-- are masked but this cast event is not.
+local function ApplyReplace(castSid)
+    gateState[castSid] = true
+    local rep = AuraCueDB.replaces and AuraCueDB.replaces[tostring(castSid)]
+    if not rep then return end
+    for removedStr in pairs(rep) do
+        local rid = tonumber(removedStr)
+        gateState[rid] = false
+        if present[rid] then
+            local rcue = activeProfile and activeProfile.cues[removedStr]
+            if rcue then
+                if rcue.faded then FireCue(rcue, C_Spell.GetSpellName(rid), "faded") end
+                if CueWantsBar(rcue) then BarStop(rid) end
+            end
+            present[rid] = nil
+            castConfirmed[rid] = nil
+            permFadePending[rid] = nil
+        end
+    end
 end
 
 -- Cast-driven tracking. Your own casts are NOT secret even in instances, so
@@ -2361,6 +2410,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
                     MarkSeenDirty()   -- newly cast-trackable: affects instanceable
                 end
             end
+            if IsPermMineAura(spellID) then lastAuraCast = { id = spellID, time = GetTime() } end
+            ApplyReplace(spellID)   -- detect an aura/stance swap (fires the old one's lost)
             OnSelfCast(spellID)
             -- Catalog the aura this cast applies. The aura list can't be read
             -- in combat (its spell ids are secret), but querying this known id

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.64.0
+
+- **Detects aura/stance swaps in combat.** Aura reads are masked in combat, but
+  your own casts aren't — so AuraCue now learns which auras replace each other
+  (from swaps it sees out of combat) and, when you cast a replacement mid-fight,
+  fires the old aura's "lost" in real time and refreshes any conditional cue
+  that depended on it. Catches an aura you switched off by accident.
+
 ## v0.63.7
 
 - Conditional cues gated on an aura that combat masks (e.g. **"only while
