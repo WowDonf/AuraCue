@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.60.11
+
+- Fixed a sound set to **None (silent)** still firing — a gained event with no
+  sound was falling through to the faded sound (and vice versa), so a "speak"
+  on the other event spoke anyway. Each event now uses strictly its own sound,
+  and "None" is truly silent.
+
 ## v0.60.10
 
 - Fixed the timer-bar window going blank after **Lock bars**, even when auras

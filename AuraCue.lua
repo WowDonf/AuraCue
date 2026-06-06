@@ -642,7 +642,10 @@ end
 -- The phrase to speak for a cue/event: the cue's own literal override if set,
 -- else the profile's general format with {name} filled in.
 local function SpeakTextFor(cue, eventKind, label)
-    local custom = (eventKind == "applied") and cue.speakApplied or cue.speakFaded
+    -- NB: avoid the `a and b or c` idiom here — the per-event value can be a
+    -- legitimately falsy nil, which would wrongly fall through to the other event.
+    local custom
+    if eventKind == "applied" then custom = cue.speakApplied else custom = cue.speakFaded end
     return ns.ResolveSpokenPhrase(eventKind, custom, label)
 end
 
@@ -656,7 +659,10 @@ local function FireCue(cue, spellName, eventKind)
     end
     local verb = (eventKind == "applied") and "gained" or "lost"
     local label = cue.label or spellName or "Aura"
-    local snd = (eventKind == "applied") and cue.soundApplied or cue.soundFaded
+    -- NB: explicit branch, not `a and b or c` — "None (silent)" stores `false`,
+    -- which the idiom would skip, falling through to the other event's sound.
+    local snd
+    if eventKind == "applied" then snd = cue.soundApplied else snd = cue.soundFaded end
     if activeProfile.audioEnabled and snd then
         PlayOrSpeak(snd, cue.channel or activeProfile.channel, SpeakTextFor(cue, eventKind, label))
     end
@@ -674,9 +680,12 @@ function ns.PreviewCue(spellKey, eventKind)
     local cue = activeProfile.cues[spellKey]
     if not cue then return end
     eventKind = (eventKind == "faded") and "faded" or "applied"
-    local snd = (eventKind == "applied") and cue.soundApplied or cue.soundFaded
-    PlayOrSpeak(snd, cue.channel or activeProfile.channel,
-        SpeakTextFor(cue, eventKind, cue.label or "Aura"))
+    local snd
+    if eventKind == "applied" then snd = cue.soundApplied else snd = cue.soundFaded end
+    if snd then
+        PlayOrSpeak(snd, cue.channel or activeProfile.channel,
+            SpeakTextFor(cue, eventKind, cue.label or "Aura"))
+    end
     if cue.visual then
         local kind = (cue.kind == "debuff") and "debuff" or "buff"
         ShowVisual(kind, (cue.label or "Aura") .. " " .. (eventKind == "faded" and "lost" or "gained"), eventKind)
