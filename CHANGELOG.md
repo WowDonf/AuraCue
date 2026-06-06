@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.70.0
+
+- **Find a setting.** A search box on the main AuraCue page lists matching
+  settings as you type and jumps straight to the page each one lives on.
+
 ## v0.69.0
 
 - **First-run welcome.** New installs get a short welcome with quick links to

@@ -607,6 +607,63 @@ end
 -- ---------------------------------------------------------------------
 -- Main panel: General + Audio.
 -- ---------------------------------------------------------------------
+-- Settings search index. Each entry: { label, pageKey, extra-search-terms }.
+-- Clicking a result jumps to that page (searchCategories is filled at register).
+local searchCategories = {}
+local PAGE_NAMES = {
+    main = "AuraCue", appearance = "Appearance", audio = "Audio", bars = "Bars",
+    buffs = "Buffs/Skills", debuffs = "Debuffs", missing = "Missing Buffs",
+    organize = "Organize Auras", profile = "Profile",
+}
+local SETTINGS_INDEX = {
+    { "Enable AuraCue", "main" },
+    { "Track buffs (helpful auras)", "main" },
+    { "Track debuffs (harmful auras)", "main" },
+    { "Combine auras with the same name", "main", "merge variants" },
+    { "Show minimap button", "main", "icon" },
+    { "Show login message in chat", "main", "greeting" },
+    { "Welcome / first-run setup guide", "main", "help tutorial onboarding" },
+    { "On-screen flash", "appearance", "visual overlay center text" },
+    { "Flash the screen edges", "appearance", "glow vignette" },
+    { "Show the spell icon in the flash", "appearance", "icon" },
+    { "Flash colors (gained / lost)", "appearance", "colour" },
+    { "Flash size and on-screen time", "appearance", "scale duration" },
+    { "Edge thickness / intensity", "appearance" },
+    { "Sound on / off and channel", "audio", "mute master sfx" },
+    { "Text-to-speech voice / rate / volume", "audio", "tts speech" },
+    { "Gained / Lost spoken phrase", "audio", "tts {name}" },
+    { "Timer / duration bars", "bars", "cooldown" },
+    { "Show a bar on every buff / debuff", "bars" },
+    { "Bar width / height / max", "bars" },
+    { "Bar texture", "bars", "sharedmedia" },
+    { "Bar font / outline / shadow", "bars", "text" },
+    { "Bar colors and fill direction", "bars", "colour reverse icon" },
+    { "Add a buff to watch", "buffs", "track aura" },
+    { "Add a debuff to watch", "debuffs", "track aura" },
+    { "Require another aura (conditional cue)", "buffs", "gate condition" },
+    { "Show a timer bar per aura", "buffs" },
+    { "Missing-buff checklist box", "missing", "pre-pull buffs" },
+    { "Weapon enchant warning", "missing", "oil sharpening stone" },
+    { "Checklist flash and color", "missing", "edge colour" },
+    { "Checklist scrolling ticker", "missing", "marquee names" },
+    { "Checklist icon size / per row", "missing" },
+    { "Organize / bulk-edit the catalog", "organize", "manage hide remove group filter" },
+    { "Profile presets (raid / M+ / PvP)", "profile", "switch" },
+    { "Copy a profile from another character", "profile" },
+    { "Export / import profile or catalog", "profile", "share string" },
+}
+
+-- Jump the Settings panel to a page key (with the usual combat guard).
+local function OpenSettingsPage(pageKey)
+    local cat = searchCategories[pageKey]
+    if not (cat and Settings and Settings.OpenToCategory) then return end
+    if InCombatLockdown() then
+        ns.chatPrint("can't open the options panel during combat — try again afterwards.")
+        return
+    end
+    C_Timer.After(0, function() if not InCombatLockdown() then Settings.OpenToCategory(cat:GetID()) end end)
+end
+
 local main = NewPanel("AuraCue")
 do
     local content, LEFT = main.content, main.LEFT
@@ -630,6 +687,70 @@ do
         profFS:SetText("Tracked auras and settings are saved per character and spec. Editing: |cffffd200" .. spec .. "|r.")
     end
     main.widgets[#main.widgets + 1] = profFS
+    main.y = main.y - 22
+
+    -- Settings finder: type to list matching settings and jump to their page.
+    local findLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    findLabel:SetPoint("TOPLEFT", LEFT, main.y)
+    findLabel:SetText("Find a setting:")
+    local findBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+    findBox:SetPoint("LEFT", findLabel, "RIGHT", 12, 0)
+    findBox:SetSize(240, 22)
+    findBox:SetAutoFocus(false)
+    findBox:SetFontObject("ChatFontNormal")
+    main.y = main.y - 6
+
+    local FIND_H, FIND_MAX = 18, 12
+    local findResults = CreateFrame("Frame", nil, content, "BackdropTemplate")
+    findResults:SetPoint("TOPLEFT", content, "TOPLEFT", LEFT, main.y)
+    findResults:SetWidth(460)
+    findResults:SetFrameStrata("FULLSCREEN_DIALOG")
+    findResults:SetFrameLevel(content:GetFrameLevel() + 20)
+    findResults:SetBackdrop({
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    findResults:SetBackdropColor(0, 0, 0, 0.97)
+    findResults:Hide()
+    local findBtns = {}
+    local function MakeFindBtn(i)
+        local b = CreateFrame("Button", nil, findResults)
+        b:SetHeight(FIND_H)
+        b:SetPoint("TOPLEFT", findResults, "TOPLEFT", 6, -6 - (i - 1) * FIND_H)
+        b:SetPoint("TOPRIGHT", findResults, "TOPRIGHT", -6, -6 - (i - 1) * FIND_H)
+        local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.15)
+        b.text = b:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        b.text:SetPoint("LEFT", b, "LEFT", 4, 0); b.text:SetPoint("RIGHT", b, "RIGHT", -4, 0)
+        b.text:SetJustifyH("LEFT")
+        b:SetScript("OnClick", function(self)
+            if self.page then findBox:SetText(""); OpenSettingsPage(self.page) end
+        end)
+        findBtns[i] = b
+        return b
+    end
+    local function UpdateFind()
+        local q = (findBox:GetText() or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+        if q == "" then findResults:Hide(); return end
+        local shown = 0
+        for _, e in ipairs(SETTINGS_INDEX) do
+            local hay = (e[1] .. " " .. (PAGE_NAMES[e[2]] or "") .. " " .. (e[3] or "")):lower()
+            if hay:find(q, 1, true) and shown < FIND_MAX then
+                shown = shown + 1
+                local b = findBtns[shown] or MakeFindBtn(shown)
+                b.page = e[2]
+                b.text:SetText(e[1] .. "   |cff808080(" .. (PAGE_NAMES[e[2]] or e[2]) .. ")|r")
+                b:Show()
+            end
+        end
+        for i = shown + 1, #findBtns do findBtns[i]:Hide() end
+        if shown == 0 then findResults:Hide(); return end
+        findResults:SetHeight(12 + shown * FIND_H)
+        findResults:Show(); findResults:Raise()
+    end
+    findBox:SetScript("OnTextChanged", UpdateFind)
+    findBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus(); findResults:Hide() end)
     main.y = main.y - 18
 
     main.Header("Global Settings")
@@ -2916,16 +3037,18 @@ local mainCategory, buffCategory
 if Settings and Settings.RegisterCanvasLayoutCategory then
     mainCategory = Settings.RegisterCanvasLayoutCategory(main.panel, "AuraCue")
     Settings.RegisterAddOnCategory(mainCategory)
+    searchCategories.main = mainCategory
     if Settings.RegisterCanvasLayoutSubcategory then
         -- Subcategories listed alphabetically.
-        Settings.RegisterCanvasLayoutSubcategory(mainCategory, appearancePanel.panel, "Appearance")
-        Settings.RegisterCanvasLayoutSubcategory(mainCategory, audioPanel.panel, "Audio")
-        Settings.RegisterCanvasLayoutSubcategory(mainCategory, barsPanel.panel, "Bars")
+        searchCategories.appearance = Settings.RegisterCanvasLayoutSubcategory(mainCategory, appearancePanel.panel, "Appearance")
+        searchCategories.audio = Settings.RegisterCanvasLayoutSubcategory(mainCategory, audioPanel.panel, "Audio")
+        searchCategories.bars = Settings.RegisterCanvasLayoutSubcategory(mainCategory, barsPanel.panel, "Bars")
         buffCategory = Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs/Skills")
-        Settings.RegisterCanvasLayoutSubcategory(mainCategory, debuffPanel.panel, "Debuffs")
-        Settings.RegisterCanvasLayoutSubcategory(mainCategory, checklistPanel.panel, "Missing Buffs")
-        Settings.RegisterCanvasLayoutSubcategory(mainCategory, managePanel.panel, "Organize Auras")
-        Settings.RegisterCanvasLayoutSubcategory(mainCategory, sharePanel.panel, "Profile")
+        searchCategories.buffs = buffCategory
+        searchCategories.debuffs = Settings.RegisterCanvasLayoutSubcategory(mainCategory, debuffPanel.panel, "Debuffs")
+        searchCategories.missing = Settings.RegisterCanvasLayoutSubcategory(mainCategory, checklistPanel.panel, "Missing Buffs")
+        searchCategories.organize = Settings.RegisterCanvasLayoutSubcategory(mainCategory, managePanel.panel, "Organize Auras")
+        searchCategories.profile = Settings.RegisterCanvasLayoutSubcategory(mainCategory, sharePanel.panel, "Profile")
     end
 end
 
