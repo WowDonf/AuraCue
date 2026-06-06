@@ -2030,6 +2030,172 @@ do
 end
 
 -- ---------------------------------------------------------------------
+-- Checklist subcategory: the missing-buff box. Pick the buffs you want kept
+-- up; an icon shows for each one that's currently missing.
+-- ---------------------------------------------------------------------
+local checklistPanel = NewPanel("Checklist")
+do
+    local content, LEFT = checklistPanel.content, checklistPanel.LEFT
+    local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
+    titleFS:SetPoint("TOPLEFT", LEFT, checklistPanel.y)
+    titleFS:SetText("Buff checklist")
+    checklistPanel.y = checklistPanel.y - 24
+    checklistPanel.Desc("A movable on-screen box that shows an icon for each buff you want kept up " ..
+        "but that ISN'T currently on you — an empty box means you're fully buffed. Handy as a " ..
+        "pre-pull check. (In instanced combat some buffs can't be read, so this is most reliable " ..
+        "out of combat.)")
+    checklistPanel.Check("Enable the checklist box",
+        function() return ns.P().checklist and ns.P().checklist.enabled end,
+        function(v)
+            if ns.P().checklist then ns.P().checklist.enabled = v end
+            if ns.UpdateChecklist then ns.UpdateChecklist() end
+        end)
+
+    -- Add a buff from your catalogue (filtered by the box on the right).
+    local clSearch = ""
+    local addLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    addLabel:SetPoint("TOPLEFT", LEFT, checklistPanel.y)
+    addLabel:SetText("Add a buff:")
+    local addDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+    addDD:SetPoint("LEFT", addLabel, "RIGHT", 12, 0)
+    addDD:SetSize(220, 30)
+    addDD:SetDefaultText("Choose a buff you've had")
+    local searchLabel = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    searchLabel:SetPoint("LEFT", addDD, "RIGHT", 16, 0)
+    searchLabel:SetText("Filter")
+    local searchBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+    searchBox:SetPoint("LEFT", searchLabel, "RIGHT", 8, 0)
+    searchBox:SetSize(150, 22)
+    searchBox:SetAutoFocus(false)
+    searchBox:SetFontObject("ChatFontNormal")
+    searchBox:SetScript("OnTextChanged", function(self) clSearch = (self:GetText() or ""):lower() end)
+    searchBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    addDD:SetupMenu(function(_, root)
+        if root.SetScrollMode then root:SetScrollMode(GetScreenHeight() * 0.5) end
+        local cfg = ns.P().checklist or {}
+        local ids = cfg.ids or {}
+        local list = ns.GetSeenAuras and ns.GetSeenAuras() or {}
+        local matches = {}
+        for _, sp in ipairs(list) do
+            if sp.kind == "buff" and not sp.ignored and not ids[tostring(sp.spellID)] then
+                if clSearch == "" or (sp.name and sp.name:lower():find(clSearch, 1, true))
+                   or tostring(sp.spellID):find(clSearch, 1, true) then
+                    matches[#matches + 1] = sp
+                end
+            end
+        end
+        table.sort(matches, function(a, b)
+            local ak, bk = (a.mine or a.known) and 0 or 1, (b.mine or b.known) and 0 or 1
+            if ak ~= bk then return ak < bk end
+            return (a.name or "") < (b.name or "")
+        end)
+        if #matches == 0 then
+            root:CreateButton("|cff808080No matching buffs in your catalog|r", function() end)
+            return
+        end
+        for i = 1, math.min(#matches, 100) do
+            local sp = matches[i]
+            local sid = sp.spellID
+            local btn = root:CreateButton(sp.name or ("Spell " .. tostring(sid)), function()
+                ns.SetChecklistAura(sid, true); RefreshAllPanels()
+            end)
+            if btn and btn.SetTooltip then btn:SetTooltip(function(tt) tt:SetSpellByID(sid) end) end
+        end
+    end)
+    checklistPanel.widgets[#checklistPanel.widgets + 1] = addDD
+    checklistPanel.y = checklistPanel.y - 36
+
+    -- …or by spell ID.
+    local idLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    idLabel:SetPoint("TOPLEFT", LEFT, checklistPanel.y)
+    idLabel:SetText("…or by spell ID:")
+    local idBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+    idBox:SetPoint("LEFT", idLabel, "RIGHT", 12, 0)
+    idBox:SetSize(90, 22)
+    idBox:SetAutoFocus(false)
+    idBox:SetNumeric(true)
+    idBox:SetFontObject("ChatFontNormal")
+    local idBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    idBtn:SetPoint("LEFT", idBox, "RIGHT", 8, 0)
+    idBtn:SetSize(60, 22)
+    idBtn:SetText("Add")
+    local idStatus = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    idStatus:SetPoint("LEFT", idBtn, "RIGHT", 12, 0)
+    local function DoAddById()
+        local id = tonumber((idBox:GetText() or ""):trim())
+        if not id then idStatus:SetText("|cffff6060Enter a spell ID number.|r"); return end
+        local nm = C_Spell.GetSpellName(id)
+        if not nm then idStatus:SetText("|cffff6060Unknown spell ID " .. id .. ".|r"); return end
+        ns.SetChecklistAura(id, true)
+        idBox:SetText("")
+        idStatus:SetText("|cff60ff60Added " .. nm .. ".|r")
+        RefreshAllPanels()
+    end
+    idBox:SetScript("OnEnterPressed", function(self) self:ClearFocus(); DoAddById() end)
+    idBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    idBtn:SetScript("OnClick", DoAddById)
+    checklistPanel.y = checklistPanel.y - 34
+
+    -- Display controls.
+    checklistPanel.Slider("Icon size", 16, 80, 2, "%d",
+        function() return (ns.P().checklist and ns.P().checklist.size) or 40 end,
+        function(v) if ns.P().checklist then ns.P().checklist.size = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
+    checklistPanel.Slider("Icons per row", 1, 20, 1, "%d",
+        function() return (ns.P().checklist and ns.P().checklist.perRow) or 8 end,
+        function(v) if ns.P().checklist then ns.P().checklist.perRow = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
+    checklistPanel.SideBySide(
+        "Move box", function() if ns.SetChecklistReposition then ns.SetChecklistReposition(true) end end,
+        "Lock box", function() if ns.SetChecklistReposition then ns.SetChecklistReposition(false) end end,
+        "Test", function() if ns.TestChecklist then ns.TestChecklist() end end)
+
+    -- The list of buffs in the checklist (pooled rows, rebuilt on refresh).
+    local listHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    listHeader:SetPoint("TOPLEFT", LEFT, checklistPanel.y)
+    listHeader:SetText("Buffs in your checklist")
+    listHeader:SetTextColor(1, 0.82, 0)
+    checklistPanel.y = checklistPanel.y - 26
+    local listTop = checklistPanel.y
+    local emptyNote = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    emptyNote:SetPoint("TOPLEFT", LEFT + 4, listTop)
+    emptyNote:SetText("Nothing added yet — add a buff above.")
+
+    local clRows = {}
+    local function MakeClRow(i)
+        local r = CreateFrame("Frame", nil, content)
+        r:SetSize(380, 26)
+        r.icon = r:CreateTexture(nil, "ARTWORK")
+        r.icon:SetSize(20, 20); r.icon:SetPoint("LEFT", 0, 0)
+        r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        r.name = r:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        r.name:SetPoint("LEFT", r.icon, "RIGHT", 8, 0)
+        r.name:SetWidth(300); r.name:SetJustifyH("LEFT"); r.name:SetWordWrap(false)
+        r.del = CreateFrame("Button", nil, r, "UIPanelCloseButton")
+        r.del:SetSize(24, 24); r.del:SetPoint("LEFT", r, "LEFT", 336, 0)
+        clRows[i] = r
+        return r
+    end
+    local function RebuildChecklist()
+        local list = ns.GetChecklist and ns.GetChecklist() or {}
+        for _, r in ipairs(clRows) do r:Hide() end
+        emptyNote:SetShown(#list == 0)
+        local y = listTop
+        for i, e in ipairs(list) do
+            local r = clRows[i] or MakeClRow(i)
+            r:ClearAllPoints(); r:SetPoint("TOPLEFT", LEFT + 4, y)
+            r.icon:SetTexture(e.icon)
+            r.name:SetText(e.name)
+            local sid = e.spellID
+            r.del:SetScript("OnClick", function() ns.SetChecklistAura(sid, false); RefreshAllPanels() end)
+            r:Show()
+            y = y - 26
+        end
+        content:SetHeight(-y + 40)
+    end
+    checklistPanel.rebuild = RebuildChecklist
+    RebuildChecklist()
+end
+
+-- ---------------------------------------------------------------------
 -- Sharing subcategory: export (profile / catalog) and import, each with
 -- its own scrollable box.
 -- ---------------------------------------------------------------------
@@ -2592,6 +2758,7 @@ if Settings and Settings.RegisterCanvasLayoutCategory then
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, audioPanel.panel, "Audio")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, barsPanel.panel, "Bars")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs/Skills")
+        Settings.RegisterCanvasLayoutSubcategory(mainCategory, checklistPanel.panel, "Checklist")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, debuffPanel.panel, "Debuffs")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, managePanel.panel, "Manage Auras")
         Settings.RegisterCanvasLayoutSubcategory(mainCategory, sharePanel.panel, "Sharing")

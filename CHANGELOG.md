@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.66.0
+
+- New **Checklist** page: build a list of buffs you want kept up, and a movable
+  on-screen box shows an icon for each one that's currently **missing** (an
+  empty box means you're fully buffed) — handy as a pre-pull check. Add buffs
+  from your catalog or by spell ID; set the icon size, icons per row, and
+  position (Move / Lock / Test). Per character and spec.
+
 ## v0.65.0
 
 - **Profile presets.** Save a spec's current setup as a named, account-wide

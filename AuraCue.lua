@@ -128,6 +128,16 @@ local PROFILE_DEFAULTS = {
         outline  = "NONE",  -- "NONE" / "OUTLINE" / "THICKOUTLINE"
         shadow   = false,   -- drop shadow on the bar text
     },
+    -- Missing-buff checklist: a movable box that shows an icon for each buff in
+    -- `ids` that is NOT currently on you (empty box = everything's up).
+    checklist = {
+        enabled  = true,
+        ids      = {},      -- { [spellID-as-string] = true } buffs you want kept up
+        locked   = true,
+        position = nil,     -- { point, relativePoint, x, y }
+        size     = 40,      -- icon size (px)
+        perRow   = 8,       -- icons per row before wrapping
+    },
     -- Watched auras, keyed by spellID-as-string -> cue config.
     cues = {},
 }
@@ -333,6 +343,16 @@ local function ValidateRanges(db)
     if bars.font ~= nil and type(bars.font) ~= "string" then bars.font = nil end
     if bars.outline ~= "OUTLINE" and bars.outline ~= "THICKOUTLINE" then bars.outline = "NONE" end
     bars.shadow = bars.shadow and true or false
+
+    if type(db.checklist) ~= "table" then db.checklist = {} end
+    local cl = db.checklist
+    if type(cl.ids) ~= "table" then cl.ids = {} end
+    cl.enabled = cl.enabled ~= false
+    cl.locked = cl.locked ~= false
+    if type(cl.size) ~= "number" then cl.size = 40 end
+    cl.size = math.max(16, math.min(80, cl.size))
+    if type(cl.perRow) ~= "number" then cl.perRow = 8 end
+    cl.perRow = math.max(1, math.min(20, math.floor(cl.perRow)))
 end
 ns.ValidateRanges = ValidateRanges
 
@@ -1384,6 +1404,180 @@ function ns.SetBarsReposition(on)
     end
 end
 
+-- ---------------------------------------------------------------------
+-- Missing-buff checklist: a movable box of icons for the buffs you want kept
+-- up. An icon shows only while that buff is MISSING, so an empty box = all good.
+-- ---------------------------------------------------------------------
+local function ChecklistCfg() return activeProfile and activeProfile.checklist end
+
+local checklistContainer = CreateFrame("Frame", "AuraCueChecklist", UIParent, "BackdropTemplate")
+checklistContainer:SetSize(40, 40)
+checklistContainer:SetFrameStrata("HIGH")
+checklistContainer:SetClampedToScreen(true)
+checklistContainer:EnableMouse(false)
+checklistContainer:SetMovable(true)
+checklistContainer:RegisterForDrag("LeftButton")
+checklistContainer:Hide()
+checklistContainer:SetScript("OnDragStart", function(self)
+    local cfg = ChecklistCfg(); if cfg and not cfg.locked then self:StartMoving() end
+end)
+checklistContainer:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing()
+    local cfg = ChecklistCfg(); if not cfg then return end
+    local point, _, relativePoint, x, y = self:GetPoint()
+    cfg.position = { point = point, relativePoint = relativePoint, x = x, y = y }
+end)
+
+local function RestoreChecklistPosition()
+    checklistContainer:ClearAllPoints()
+    local p = ChecklistCfg() and ChecklistCfg().position
+    if p and p.point then
+        checklistContainer:SetPoint(p.point, UIParent, p.relativePoint or p.point, p.x or 0, p.y or 0)
+    else
+        checklistContainer:SetPoint("CENTER", UIParent, "CENTER", 0, -160)
+    end
+end
+ns.RestoreChecklistPosition = RestoreChecklistPosition
+
+local checklistIcons = {}   -- pool of icon frames
+local function MakeChecklistIcon()
+    local f = CreateFrame("Frame", nil, checklistContainer)
+    f.border = f:CreateTexture(nil, "BACKGROUND")
+    f.border:SetPoint("TOPLEFT", -1, 1)
+    f.border:SetPoint("BOTTOMRIGHT", 1, -1)
+    f.border:SetColorTexture(0, 0, 0, 0.85)
+    f.tex = f:CreateTexture(nil, "ARTWORK")
+    f.tex:SetAllPoints()
+    f.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    return f
+end
+
+-- Best-effort present check for a checklist buff, reusing the combat-masking
+-- handling: returns true (up), false (confirmed missing), or nil (can't tell).
+local checklistPresent = {}
+local function ChecklistBuffPresent(sid, name)
+    local state = ReadAura(sid)
+    local res
+    if state == "present" then
+        res = true
+    elseif state == "unknown" then
+        res = checklistPresent[sid]                       -- masked: last known
+    elseif AuraNamePresent(name) then
+        res = true
+    elseif InCombatLockdown() or UnitAffectingCombat("player") then
+        res = checklistPresent[sid]                       -- masked-to-nil in combat
+    else
+        res = false                                       -- out of combat: confirmed gone
+    end
+    checklistPresent[sid] = res
+    return res
+end
+
+local function UpdateChecklist()
+    for _, f in ipairs(checklistIcons) do f:Hide() end
+    local cfg = ChecklistCfg()
+    if ns.checklistMoving then return end
+    if not cfg or (not cfg.enabled and not ns.checklistTest) then checklistContainer:Hide(); return end
+    local showAll = ns.checklistTest and true or false   -- test: show every entry
+    local size, perRow = cfg.size or 40, cfg.perRow or 8
+    local idx = 0
+    for sidStr in pairs(cfg.ids or {}) do
+        local sid = tonumber(sidStr)
+        if sid then
+            local seen = AuraCueDB.seen and AuraCueDB.seen[sidStr]
+            local name = (seen and seen.name) or C_Spell.GetSpellName(sid)
+            if showAll or ChecklistBuffPresent(sid, name) == false then
+                idx = idx + 1
+                local f = checklistIcons[idx] or MakeChecklistIcon()
+                checklistIcons[idx] = f
+                f.tex:SetTexture((seen and seen.icon)
+                    or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 134400)
+                f:SetSize(size, size)
+                f:ClearAllPoints()
+                local col, row = (idx - 1) % perRow, math.floor((idx - 1) / perRow)
+                f:SetPoint("TOPLEFT", checklistContainer, "TOPLEFT", col * (size + 4), -row * (size + 4))
+                f:Show()
+            end
+        end
+    end
+    if idx > 0 then
+        local cols, rows = math.min(idx, perRow), math.ceil(idx / perRow)
+        checklistContainer:SetSize(math.max(1, cols * (size + 4) - 4), math.max(1, rows * (size + 4) - 4))
+        checklistContainer:Show()
+    else
+        checklistContainer:Hide()
+    end
+end
+ns.UpdateChecklist = UpdateChecklist
+
+-- Move / lock the checklist box (Checklist page buttons): pin it open with a
+-- backdrop and sample icons to drag, then re-lock + refresh on exit.
+function ns.SetChecklistReposition(on)
+    local cfg = ChecklistCfg(); if not cfg then return end
+    ns.checklistMoving = on or nil
+    if on then
+        cfg.locked = false
+        local size = cfg.size or 40
+        for i = 1, 3 do
+            local f = checklistIcons[i] or MakeChecklistIcon()
+            checklistIcons[i] = f
+            f.tex:SetTexture(134400)
+            f:SetSize(size, size); f:ClearAllPoints()
+            f:SetPoint("TOPLEFT", checklistContainer, "TOPLEFT", (i - 1) * (size + 4), 0)
+            f:Show()
+        end
+        for i = 4, #checklistIcons do checklistIcons[i]:Hide() end
+        checklistContainer:SetSize(3 * (size + 4) - 4, size)
+        checklistContainer:SetBackdrop(REPOSITION_BACKDROP)
+        checklistContainer:SetBackdropColor(0, 0, 0, 0.5)
+        checklistContainer:EnableMouse(true)
+        RestoreChecklistPosition()
+        checklistContainer:Show()
+    else
+        cfg.locked = true
+        checklistContainer:SetBackdrop(nil)
+        checklistContainer:EnableMouse(false)
+        UpdateChecklist()
+    end
+end
+
+function ns.SetChecklistAura(sid, on)
+    local cfg = ChecklistCfg(); if not cfg then return end
+    cfg.ids = cfg.ids or {}
+    cfg.ids[tostring(sid)] = on and true or nil
+    if not on then checklistPresent[tonumber(sid)] = nil end
+    UpdateChecklist()
+end
+
+-- List of checklist buffs for the options page: { spellID, name, icon }.
+function ns.GetChecklist()
+    local cfg = ChecklistCfg()
+    local out = {}
+    if not cfg or not cfg.ids then return out end
+    for sidStr in pairs(cfg.ids) do
+        local sid = tonumber(sidStr)
+        local seen = AuraCueDB.seen and AuraCueDB.seen[sidStr]
+        out[#out + 1] = {
+            spellID = sid,
+            name = (seen and seen.name) or C_Spell.GetSpellName(sid) or ("Spell " .. sidStr),
+            icon = (seen and seen.icon)
+                or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 134400,
+        }
+    end
+    table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)
+    return out
+end
+
+ns.ApplyChecklistStyle = UpdateChecklist
+
+-- Briefly show every checklist icon (regardless of presence) so its layout /
+-- position is visible while configuring.
+function ns.TestChecklist()
+    ns.checklistTest = true
+    UpdateChecklist()
+    C_Timer.After(3, function() ns.checklistTest = nil; UpdateChecklist() end)
+end
+
 -- Decide what to do when a watched aura's id read comes back absent. Returns
 -- true if it's REALLY gone (caller fires "lost"); false to hold it.
 --   * Still on us by name -> hold (the id was the cast id, or masked).
@@ -2312,6 +2506,8 @@ local function InitProfile()
     RestorePosition("buff")
     RestorePosition("debuff")
     RestoreBarsPosition()
+    RestoreChecklistPosition()
+    ns.UpdateChecklist()
     ns.InitOptions()
 end
 
@@ -2365,6 +2561,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         RestorePosition("buff")
         RestorePosition("debuff")
         RestoreBarsPosition()
+        RestoreChecklistPosition()
+        ns.UpdateChecklist()
         if ns.RefreshOptions then ns.RefreshOptions() end
 
     elseif event == "SPELLS_CHANGED" then
@@ -2383,6 +2581,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         SeedPresent()
+        RestoreChecklistPosition()
+        ns.UpdateChecklist()
 
     elseif event == "PLAYER_REGEN_DISABLED" then
         -- Combat started: some of our own auras' id reads get masked the moment
@@ -2391,14 +2591,17 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         -- readable now; auras that masked off here are simply held out of tracking
         -- until combat ends, instead of announcing a fade that didn't happen.
         SeedPresent()
+        ns.UpdateChecklist()
 
     elseif event == "PLAYER_REGEN_ENABLED" then
         -- Combat ended: reads are reliable again. Re-sync silently (no cues)
         -- so we don't fire a burst for changes that happened while masked.
         SeedPresent()
+        ns.UpdateChecklist()
 
     elseif event == "UNIT_AURA" then
         ScanPlayerAuras()
+        ns.UpdateChecklist()
 
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         local unit, _, spellID = ...
@@ -2810,9 +3013,11 @@ SlashCmdList["AURACUE"] = function(msg)
             activeProfile.visual.buff.position = nil
             activeProfile.visual.debuff.position = nil
             activeProfile.bars.position = nil
+            if activeProfile.checklist then activeProfile.checklist.position = nil end
             RestorePosition("buff")
             RestorePosition("debuff")
             RestoreBarsPosition()
+            RestoreChecklistPosition()
             chatPrint("overlay positions reset.")
 
         elseif cmd == "preset" or cmd == "presets" then
