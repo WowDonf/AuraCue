@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.60.14
+
+- Fixed phrase text appearing blank in the Audio fields (and the spoken-text
+  dialog) when it was actually scrolled off the left edge. The cursor now
+  resets to the start after the text is set, so the phrase is always visible.
+
 ## v0.60.13
 
 - Fixed the greyed "{name} gained" / "{name} lost" placeholder not appearing in
