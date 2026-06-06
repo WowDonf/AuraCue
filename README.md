@@ -15,17 +15,21 @@ Each watched aura can cue when it's **gained**, when it's **lost**, or both:
   rate / volume controls. The spoken phrase is yours to set — a general format
   like "{name} gained", or a per-aura override that can also use {name}: say
   "{name} activated", or a name-free "Damage now" the moment Bloodlust lands.
-- **On-screen flash** — center text and/or a screen-edge glow, with separate
-  colors for gained vs lost, and adjustable size, on-screen time, and edge
-  thickness / intensity.
+- **On-screen flash** — center text (optionally with the spell's icon) and/or a
+  screen-edge glow, with separate colors for gained vs lost, and adjustable
+  size, on-screen time, and edge thickness / intensity.
+- **Timer bar** — an optional depleting duration bar while the aura is active
+  (see [Timer bars](#timer-bars)).
 
 Buffs and debuffs each get their own on-screen window (size, colors, position,
 duration), configured on the **Appearance** page; sound and speech options live
 on the **Audio** page. Every watched row has an
 **Edit** button (or right-click it) for that aura's options: a **When**
 condition — fire everywhere, only in combat, only in instances, or only in the
-open world — its spoken text, whether it's treated as a buff or a debuff, and
-combining (below).
+open world — its spoken text, whether it's treated as a buff or a debuff,
+combining (below), a **timer bar** toggle, and a **Require another aura**
+condition that only fires the cue while some other aura is active (or missing) —
+with its own override text.
 
 ## Screenshots
 
@@ -39,22 +43,22 @@ equivalents — Bloodlust, Time Warp, Primal Rage, and Fury of the Aspects:
 
 ![Watched-aura tooltip showing the combined spell IDs](assets/screenshots/combine-tooltip.png)
 
-**Manage Auras — filter and bulk-edit the whole catalog:**
+**Organize Auras — filter and bulk-edit the whole catalog:**
 
-![The Manage Auras page](assets/screenshots/manage-auras.png)
+![The Organize Auras page](assets/screenshots/manage-auras.png)
 
 **Audio — channel plus text-to-speech voice and phrases:**
 
 ![The Audio settings page](assets/screenshots/audio.png)
 
 <details>
-<summary>More pages — Global Settings, Appearance, Sharing</summary>
+<summary>More pages — Global Settings, Appearance, Profile</summary>
 
 ![Global Settings page](assets/screenshots/global-settings.png)
 
 ![Appearance page](assets/screenshots/appearance.png)
 
-![Sharing page](assets/screenshots/sharing.png)
+![Profile page](assets/screenshots/sharing.png)
 
 </details>
 
@@ -99,7 +103,7 @@ addon's side to update or wait for.
 
 It also never hides or filters abilities on its own — everything it has seen
 stays in the catalog. **Any hiding is your choice** (the ✕ on a picker entry, or
-Manage Auras), and anything you hide can be restored at any time.
+Organize Auras), and anything you hide can be restored at any time.
 
 - **Grouped submenus.** Buffs group under **your class** (e.g. abilities your
   Shaman casts → "Shaman"), **Mounts**, **From you / your pet**, and **World &
@@ -125,9 +129,30 @@ spell and its talented proc version. AuraCue can treat them as one cue:
 - Or a watched row's **Edit** menu lets you combine just that one by name, or
   add specific extra spell IDs by hand.
 
+## Timer bars
+
+Any watched aura can show an optional on-screen **duration bar** while it's
+active — turn it on from that aura's **Edit** menu ("Show a timer bar while
+active"), or force a bar on every buff / debuff from the **Bars** page. Bars
+share one movable window and can use any **LibSharedMedia** bar texture and
+font; you can set the bar colors (per buff / debuff), text outline / shadow,
+fill direction, icon side, and growth direction, and the countdown rounds up to
+minutes / hours for long buffs.
+
+## Missing-buff checklist
+
+The **Missing Buffs** page builds a list of the buffs you want kept up; a
+movable on-screen box then shows an icon for each one that **isn't** currently
+on you — an empty box means you're fully buffed, handy as a pre-pull check.
+Temporary weapon enchants (oils / sharpening stones) aren't auras, so they get
+their own "warn if missing" row. Per item you can also tick **Flash** (a pulsing
+screen-edge glow, in a color you choose, while it's missing) and **Ticker** (a
+scrolling marquee of the missing names). Matching is by name, so a different
+rank of the same flask still counts as present.
+
 ## Managing the catalog
 
-The **Manage Auras** page is a full edit view of your account-wide catalog:
+The **Organize Auras** page is a full edit view of your account-wide catalog:
 search and filter it (by kind, class, custom group, hidden, mounts, or only
 ungrouped), set a custom group, hide or show entries, or remove them — one at a
 time or in bulk by ticking rows. Each row's **Edit** dialog adjusts the finer
@@ -135,14 +160,20 @@ stored details
 (group, class, dungeon, buff/debuff). Removing an aura just forgets it until you
 see it again.
 
-## Profiles & sharing
+## Profiles, presets & sharing
 
 Settings are saved **per character and specialization**, so each spec keeps its
-own watch list and windows. The **Sharing** page exports the current spec's
-profile, or the whole aura catalog, to a copy-paste string — and imports one
-back. It can also **copy a profile from another character/spec** on your
-account directly (no string needed). The catalog is account-wide (shared across
-all your characters).
+own watch list and windows. The **Profile** page can:
+
+- Save the current setup as a named, account-wide **preset** and apply it to any
+  spec later — for quickly switching between raid, Mythic+, and PvP setups (also
+  via `/cue preset`).
+- **Copy a profile from another character/spec** on your account directly (no
+  string needed).
+- **Export / import** the current spec's profile, or the whole aura catalog, as
+  a copy-paste string.
+
+The catalog is account-wide (shared across all your characters).
 
 ## Usage
 
@@ -157,7 +188,8 @@ compartment.
 | `/cue test` | Preview a cue |
 | `/cue toggle` | Enable / disable |
 | `/cue unlock` (`move`) / `/cue lock` | Move / lock the on-screen window |
-| `/cue reset` | Reset window position |
+| `/cue reset` | Reset on-screen positions |
+| `/cue preset <name>` | Apply a saved profile preset (`save`/`list`/`delete`) |
 | `/cue gather` | Catalog auras on nearby units (target, focus, party, …) |
 | `/cue forget` | Clear the remembered-aura catalog |
 | `/cue tts` | Diagnose text-to-speech |

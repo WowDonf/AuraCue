@@ -18,13 +18,16 @@ warnings. Pick any combination of:
 - **Speech** — the aura's name spoken aloud (text-to-speech). Set your own
   phrase — a general "{name} gained" format, or a per-aura override that can
   also use {name}: "{name} activated", or a name-free "Damage now" for Bloodlust.
-- **On-screen flash** — center text and/or a screen-edge glow, with separate
-  colors for gained vs lost.
+- **On-screen flash** — center text (optionally with the spell's icon) and/or a
+  screen-edge glow, with separate colors for gained vs lost.
+- **Timer bar** — an optional depleting duration bar while the aura is active.
 
 Buffs and debuffs each get their own window, and every watched aura has an
 **Edit** menu (or right-click) for its options — when to fire (everywhere, only
 in combat, only in instances, or only in the open world), spoken text,
-buff/debuff treatment, and combining.
+buff/debuff treatment, combining, a timer bar, and a **Require another aura**
+condition (only fire while some other aura is active or missing, with its own
+override text).
 
 ## Built for Midnight's restrictions
 
@@ -64,10 +67,17 @@ is your choice** (and always reversible).
 
 - **Combine variants** — make a base spell and its proc version (different
   spell IDs) fire one alert, by name or by hand.
-- **Manage Auras page** — bulk-edit your whole catalog: filter, group, hide,
+- **Timer bars** — optional depleting duration bars for your cooldowns/buffs,
+  in one movable window with selectable bar texture, font, and colors.
+- **Missing-buff checklist** (the **Missing Buffs** page) — list the buffs you
+  want kept up and a movable box shows an icon for any that's missing (great as
+  a pre-pull check), including weapon enchants (oils / stones). Optionally pulse
+  a screen edge or scroll the missing names per item.
+- **Organize Auras page** — bulk-edit your whole catalog: filter, group, hide,
   remove, or edit an entry's stored details.
-- **Per character & spec** profiles, with export/import of profiles and the
-  catalog — or copy a profile straight from another character on your account.
+- **Per character & spec** profiles, with named **presets** you can apply to any
+  spec (raid / M+ / PvP), copy a profile from another character, and export /
+  import profiles and the catalog.
 
 ## Getting started
 
