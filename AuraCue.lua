@@ -654,6 +654,23 @@ local ReadAura  -- forward (defined with the aura-read helpers below)
 -- some other aura is currently up (requireMode "present") or only when it is
 -- missing ("absent"). The read is best-effort — in instanced combat the aura
 -- may be masked (read as absent), so prefer this for open-world conditions.
+-- Best-effort: is an aura with this NAME currently on the player? Used to avoid
+-- a false "lost" when a read by id misses (the id is the cast id, not the aura
+-- id, or it's masked in combat) even though the aura is in fact still up and
+-- readable by name. Returns nil if names can't be read (so callers can tell
+-- "not found" from "couldn't look").
+local function AuraNamePresent(name)
+    if not name or name == "" or not (AuraUtil and AuraUtil.ForEachAura) then return nil end
+    local found = false
+    local function h(data)
+        if data and Reveal(data.name) == name then found = true; return true end
+        return false
+    end
+    AuraUtil.ForEachAura("player", "HELPFUL", nil, h, true)
+    if not found then AuraUtil.ForEachAura("player", "HARMFUL", nil, h, true) end
+    return found
+end
+
 -- Is the gating aura on the player? Returns true / false / nil (nil = the read
 -- was masked, so we can't tell). Tries the exact id first; if that misses, falls
 -- back to a name scan, because the id a user types is often the *cast* id while
@@ -662,17 +679,7 @@ local function GateAuraPresent(cue)
     local state = ReadAura(cue.requireAura)
     if state == "present" then return true end
     if state == "unknown" then return nil end
-    local name = cue.requireName
-    if name and name ~= "" and AuraUtil and AuraUtil.ForEachAura then
-        local found = false
-        local function h(data)
-            if data and Reveal(data.name) == name then found = true; return true end
-            return false
-        end
-        AuraUtil.ForEachAura("player", "HELPFUL", nil, h, true)
-        if not found then AuraUtil.ForEachAura("player", "HARMFUL", nil, h, true) end
-        if found then return true end
-    end
+    if AuraNamePresent(cue.requireName) then return true end
     return false
 end
 
@@ -1360,7 +1367,10 @@ local function ScanPlayerAuras()
                 end
             elseif state == "unknown" then
                 newPresent[sid] = present[sid]
-            elseif castConfirmed[sid] and present[sid] and (cue.faded or CueWantsBar(cue)) then
+            elseif castConfirmed[sid] and present[sid] and (cue.faded or CueWantsBar(cue))
+                   and not AuraNamePresent(cue.label) then
+                -- Confirmed absent (by id and by name) — a real fade, not just a
+                -- combat-masked id read.
                 if cue.faded then FireCue(cue, C_Spell.GetSpellName(sid), "faded") end
                 if CueWantsBar(cue) then BarStop(sid) end
                 castConfirmed[sid] = nil
@@ -1386,8 +1396,15 @@ local function ScanPlayerAuras()
             elseif state == "unknown" then
                 newPresent[sid] = present[sid]   -- secret-masked: hold
             elseif present[sid] then
-                if cue.faded then FireCue(cue, C_Spell.GetSpellName(sid), "faded") end
-                if CueWantsBar(cue) then BarStop(sid) end
+                -- The id read says absent, but entering combat can mask a still-
+                -- active aura's id. Confirm it's really gone by name before firing
+                -- "lost"; if it's still on us by name, hold.
+                if AuraNamePresent(cue.label) then
+                    newPresent[sid] = true
+                else
+                    if cue.faded then FireCue(cue, C_Spell.GetSpellName(sid), "faded") end
+                    if CueWantsBar(cue) then BarStop(sid) end
+                end
             end
         end
     end

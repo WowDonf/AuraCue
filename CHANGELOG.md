@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.63.3
+
+- Fixed a false **"lost"** cue firing on a still-active aura when entering combat
+  (e.g. Devotion Aura at a training dummy). Before firing "lost", the engine now
+  confirms the aura is really gone by name — entering combat can mask an aura's
+  ID read even though it's still on you.
+
 ## v0.63.2
 
 - Conditional cues now detect the gating aura more reliably: if the spell ID you
