@@ -1560,9 +1560,13 @@ local function BuildKindPanel(kind)
                             ns.SetCueRequire(key, cue.requireAura, "absent")
                             return MenuResponse and MenuResponse.Refresh or nil
                         end)
+                    -- Clear removes the radios + this button on the next build, so
+                    -- close the menu (don't refresh into a half-rebuilt submenu)
+                    -- and refresh the panels so the row reflects the change.
                     reqSub:CreateButton("Clear requirement", function()
                         ns.SetCueRequire(key, nil)
-                        return MenuResponse and MenuResponse.Refresh or nil
+                        RefreshAllPanels()
+                        return MenuResponse and MenuResponse.Close or nil
                     end)
                 end
                 root:CreateDivider()

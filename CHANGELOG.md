@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.62.1
+
+- Fixed **Clear requirement** (Require another aura) appearing to do nothing —
+  it now closes the menu and refreshes so the cleared state shows immediately.
+
 ## v0.62.0
 
 - **Conditional cues.** A watched aura's Edit (right-click) menu now has
