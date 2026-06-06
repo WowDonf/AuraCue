@@ -1272,7 +1272,18 @@ local function MakeBar()
         local remain = (self.endTime or 0) - GetTime()
         if remain <= 0 then BarStop(self.sid); return end
         self:SetValue(remain)
-        self.time:SetText(FormatBarTime(remain))
+        -- Re-format the countdown text only when the SHOWN value changes (every
+        -- 0.1s under 10s, every 1s/1m/1h above) instead of allocating a string
+        -- every frame — a big idle-memory saver when bars are up.
+        local key
+        if remain >= 3600 then key = 30000 + math.ceil(remain / 3600)
+        elseif remain >= 60 then key = 20000 + math.ceil(remain / 60)
+        elseif remain >= 10 then key = 10000 + math.floor(remain)
+        else key = math.floor(remain * 10) end
+        if key ~= self.timeKey then
+            self.timeKey = key
+            self.time:SetText(FormatBarTime(remain))
+        end
     end)
     return b
 end
@@ -1339,7 +1350,7 @@ local function BarStart(cue, sid, endTime, duration)
     -- A recast/refresh changes the end time, which can change the sort order,
     -- so re-lay-out then (not just for brand-new bars).
     local orderChanged = isNew or b.endTime ~= endTime
-    b.sid, b.endTime = sid, endTime
+    b.sid, b.endTime, b.timeKey = sid, endTime, nil
     b:SetMinMaxValues(0, duration)
     b:SetValue(endTime - GetTime())
     if isNew then                          -- static bits only on first show
@@ -1570,8 +1581,9 @@ checklistTicker.fs = checklistTicker:CreateFontString(nil, "OVERLAY", "GameFontN
 checklistTicker.fs:SetPoint("LEFT", checklistTicker, "LEFT", 0, 0)
 checklistTicker.fs:SetJustifyH("LEFT")
 checklistTicker.pos = 0
+checklistTicker.textWidth = 0
 checklistTicker:SetScript("OnUpdate", function(self, dt)
-    local w = self.fs:GetStringWidth()
+    local w = self.textWidth                           -- cached; not measured each frame
     if w <= 0 then return end
     self.pos = self.pos - dt * 55                      -- ~55 px/sec leftward
     if self.pos <= -w then self.pos = self:GetWidth() end
@@ -1596,6 +1608,7 @@ local function SetTickerText(text)
     if text ~= checklistTicker.content then
         checklistTicker.content = text
         checklistTicker.fs:SetText(text)
+        checklistTicker.textWidth = checklistTicker.fs:GetStringWidth()   -- measure once
         checklistTicker.pos = checklistTicker:GetWidth()
     end
 end
@@ -1769,6 +1782,7 @@ function ns.SetChecklistTickerReposition(on)
         checklistTicker.content = nil
         checklistTicker:SetWidth(cfg.ticker.width or 320)
         checklistTicker.fs:SetText("Missing:  Flask      •      Food      •      Weapon enchant      •      ")
+        checklistTicker.textWidth = checklistTicker.fs:GetStringWidth()
         checklistTicker.pos = cfg.ticker.width or 320
         checklistTicker:SetBackdrop(REPOSITION_BACKDROP)
         checklistTicker:SetBackdropColor(0, 0, 0, 0.5)

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.70.2
+
+- Cut idle memory churn from on-screen timers: duration **bars** only re-format
+  their countdown text when the shown value changes (not every frame), and the
+  checklist **ticker** caches its text width instead of measuring each frame.
+
 ## v0.70.1
 
 - Big reduction in memory churn from the missing-buff checklist: it now updates
