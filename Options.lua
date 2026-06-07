@@ -546,7 +546,7 @@ local function AddColorPair(ctx, getA, labelA, getB, labelB, onChange)
 end
 
 -- ---------------------------------------------------------------------
--- A bordered, scrollable multi-line edit box (used by the Sharing panel).
+-- A bordered, scrollable multi-line edit box (used by the Profile panel).
 -- The export/import strings are long and wrap over many lines, so the box
 -- scrolls internally and the wheel scrolls the text rather than the panel.
 -- ---------------------------------------------------------------------
@@ -2153,7 +2153,7 @@ do
 end
 
 -- ---------------------------------------------------------------------
--- Checklist subcategory: the missing-buff box. Pick the buffs you want kept
+-- Missing Buffs subcategory: the missing-buff box. Pick the buffs you want kept
 -- up; an icon shows for each one that's currently missing.
 -- ---------------------------------------------------------------------
 local checklistPanel = NewPanel("Missing Buffs")
@@ -2481,7 +2481,7 @@ do
 end
 
 -- ---------------------------------------------------------------------
--- Sharing subcategory: export (profile / catalog) and import, each with
+-- Profile subcategory: export (profile / catalog) and import, each with
 -- its own scrollable box.
 -- ---------------------------------------------------------------------
 local sharePanel = NewPanel("Profile")
@@ -2724,7 +2724,7 @@ local function OpenDetailDialog(sp, after)
 end
 
 -- ---------------------------------------------------------------------
--- "Manage Auras" subcategory: an edit list over the whole account-wide
+-- "Organize Auras" subcategory: an edit list over the whole account-wide
 -- catalog — set custom groups, hide clutter, or remove entries, one at a
 -- time or in bulk via the row checkboxes.
 -- ---------------------------------------------------------------------

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.72.2
+
+- Fixed missing-buff icons for **weapon enchants** (oils/stones) not appearing
+  when they expired — the silent-expiry poll was gated on a setting that no
+  longer exists, so it never ran.
+- Fixed cues set to **"only in combat"** so they evaluate combat the same way
+  the rest of the addon does, avoiding mis-fires at the edges of a fight.
+
 ## v0.72.1
 
 - Fixed a regression where the checklist stopped tracking auras **out of combat

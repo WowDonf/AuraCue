@@ -692,7 +692,7 @@ end
 -- Per-cue "when" condition: always / only in combat / only in instances /
 -- only in the open world.
 local function ConditionMet(when)
-    if when == "combat" then return InCombatLockdown() and true or false
+    if when == "combat" then return (InCombatLockdown() or UnitAffectingCombat("player")) and true or false
     elseif when == "instance" then return (IsInInstance()) and true or false
     elseif when == "world" then return not IsInInstance()
     end
@@ -1797,7 +1797,7 @@ ns.ScheduleChecklistUpdate = ScheduleChecklistUpdate
 if C_Timer and C_Timer.NewTicker then
     C_Timer.NewTicker(2, function()
         local cfg = ChecklistCfg()
-        if cfg and cfg.enabled and cfg.weaponEnchant and not ns.checklistMoving then
+        if cfg and cfg.weaponEnchant and not ns.checklistMoving then
             UpdateChecklist()
         end
     end)
