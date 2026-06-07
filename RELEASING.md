@@ -88,13 +88,15 @@ the icon at 4x supersample and downscales with LANCZOS for clean edges.
 
 ## Libraries
 
-The minimap button needs LibStub / CallbackHandler-1.0 / LibDataBroker-1.1 /
-LibDBIcon-1.0. These are **not committed** — the packager fetches them fresh
-into `Libs/` at build time via the `externals` block in `.pkgmeta` (and
-`Libs/` is gitignored). In a local dev checkout the libraries are absent, so
-the minimap button simply doesn't appear; everything else works. To test the
-button locally, run the packager dry-run (which populates `Libs/`) or copy
-the libs in from another addon.
+Two features pull in libraries: the minimap button needs LibStub /
+CallbackHandler-1.0 / LibDataBroker-1.1 / LibDBIcon-1.0, and the timer bars'
+texture / font menus use LibSharedMedia-3.0. These are **not committed** — the
+packager fetches them fresh into `Libs/` at build time via the `externals`
+block in `.pkgmeta` (and `Libs/` is gitignored). In a local dev checkout the
+libraries are absent, so the minimap button simply doesn't appear and the bars
+fall back to their built-in texture / font; everything else works. To test
+them locally, run the packager dry-run (which populates `Libs/`) or copy the
+libs in from another addon.
 
 ## Manual packaging (for testing)
 

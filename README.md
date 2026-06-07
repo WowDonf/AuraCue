@@ -43,9 +43,17 @@ equivalents — Bloodlust, Time Warp, Primal Rage, and Fury of the Aspects:
 
 ![Watched-aura tooltip showing the combined spell IDs](assets/screenshots/combine-tooltip.png)
 
+**Timer bars — depleting duration bars in one movable window:**
+
+![The Bars settings page](assets/screenshots/bars.png)
+
+**Missing Buffs — an on-screen box of icons for the buffs you're missing:**
+
+![The Missing Buffs page](assets/screenshots/missing-buffs.png)
+
 **Organize Auras — filter and bulk-edit the whole catalog:**
 
-![The Organize Auras page](assets/screenshots/manage-auras.png)
+![The Organize Auras page](assets/screenshots/organize-auras.png)
 
 **Audio — channel plus text-to-speech voice and phrases:**
 
@@ -58,7 +66,7 @@ equivalents — Bloodlust, Time Warp, Primal Rage, and Fury of the Aspects:
 
 ![Appearance page](assets/screenshots/appearance.png)
 
-![Profile page](assets/screenshots/sharing.png)
+![Profile page](assets/screenshots/profile.png)
 
 </details>
 
@@ -139,6 +147,8 @@ font; you can set the bar colors (per buff / debuff), text outline / shadow,
 fill direction, icon side, and growth direction, and the countdown rounds up to
 minutes / hours for long buffs.
 
+![Timer bars on screen](assets/screenshots/bars-in-action.png)
+
 ## Missing-buff checklist
 
 The **Missing Buffs** page builds a list of the buffs you want kept up; a
@@ -149,6 +159,8 @@ their own "warn if missing" row. Per item you can also tick **Flash** (a pulsing
 screen-edge glow, in a color you choose, while it's missing) and **Ticker** (a
 scrolling marquee of the missing names). Matching is by name, so a different
 rank of the same flask still counts as present.
+
+![The missing-buff box and scrolling ticker on screen](assets/screenshots/missing-buffs-box.png)
 
 ## Managing the catalog
 
@@ -183,6 +195,7 @@ compartment.
 | Command | Does |
 | --- | --- |
 | `/cue` | Open the options panel |
+| `/cue setup` | Re-open the first-run welcome guide |
 | `/cue add <id>` / `/cue remove <id>` | Watch / unwatch an aura by spell ID |
 | `/cue list` | List watched auras |
 | `/cue test` | Preview a cue |
