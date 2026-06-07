@@ -1,5 +1,5 @@
 <!-- Project Summary (~150 chars, paste into the separate "Summary" field, NOT the description):
-Turn your own buffs and debuffs into sound, speech, or on-screen flashes — proc alerts, cooldown windows, and debuff warnings.
+Turn your own buffs and debuffs into sound, speech, on-screen flashes, and timer bars — proc alerts, cooldown timers, and a missing-buff checklist.
 -->
 
 # AuraCue
