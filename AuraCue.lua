@@ -464,6 +464,24 @@ local function VisCfg(kind)
 end
 ns.VisCfg = VisCfg
 
+-- Movable-frame position helpers, shared by every draggable window (overlays,
+-- bars, checklist box, ticker). Capture the current anchor on drag-stop; on
+-- restore, re-apply the saved anchor or fall back to a default (the relative
+-- point always matches the point for these frames).
+local function CapturePoint(frame)
+    local point, _, relativePoint, x, y = frame:GetPoint()
+    return { point = point, relativePoint = relativePoint, x = x, y = y }
+end
+
+local function ApplyPoint(frame, p, defPoint, defX, defY)
+    frame:ClearAllPoints()
+    if p and p.point then
+        frame:SetPoint(p.point, UIParent, p.relativePoint or p.point, p.x or 0, p.y or 0)
+    else
+        frame:SetPoint(defPoint, UIParent, defPoint, defX, defY)
+    end
+end
+
 local function MakeOverlay(kind)
     local suffix = (kind == "debuff") and "Debuff" or "Buff"
     local f = CreateFrame("Frame", "AuraCueOverlay" .. suffix, UIParent, "BackdropTemplate")
@@ -494,8 +512,7 @@ local function MakeOverlay(kind)
     end)
     f:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
-        local point, _, relativePoint, x, y = self:GetPoint()
-        VisCfg(self.kind).position = { point = point, relativePoint = relativePoint, x = x, y = y }
+        VisCfg(self.kind).position = CapturePoint(self)
     end)
 
     f.closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
@@ -528,16 +545,37 @@ local function MakeOverlay(kind)
 end
 
 local function RestorePosition(kind)
-    local f = overlays[kind]
-    f:ClearAllPoints()
-    local p = activeProfile and VisCfg(kind).position
-    if p and p.point then
-        f:SetPoint(p.point, UIParent, p.relativePoint or p.point, p.x or 0, p.y or 0)
-    else
-        f:SetPoint("CENTER", UIParent, "CENTER", 0, (kind == "debuff") and 40 or 160)
-    end
+    ApplyPoint(overlays[kind], activeProfile and VisCfg(kind).position,
+        "CENTER", 0, (kind == "debuff") and 40 or 160)
 end
 ns.RestorePosition = RestorePosition
+
+-- Build four screen-edge gradient strips (left/right `sideW` wide, top/bottom
+-- `topH` tall) on `frame` at draw layer `layer`, returned as {L, R, T, B}.
+-- Shared by the cue glow and the checklist "missing" flash; the caller tints
+-- them via ApplyEdgeGradient.
+local function MakeEdgeStrips(frame, layer, sideW, topH)
+    local function strip()
+        local t = frame:CreateTexture(nil, layer)
+        t:SetColorTexture(1, 1, 1, 1)
+        return t
+    end
+    local L, R, T, B = strip(), strip(), strip(), strip()
+    L:SetPoint("TOPLEFT");    L:SetPoint("BOTTOMLEFT");  L:SetWidth(sideW)
+    R:SetPoint("TOPRIGHT");   R:SetPoint("BOTTOMRIGHT"); R:SetWidth(sideW)
+    T:SetPoint("TOPLEFT");    T:SetPoint("TOPRIGHT");    T:SetHeight(topH)
+    B:SetPoint("BOTTOMLEFT"); B:SetPoint("BOTTOMRIGHT"); B:SetHeight(topH)
+    return { L, R, T, B }
+end
+
+-- Tint the four strips so each is bright at its own edge and fades inward.
+local function ApplyEdgeGradient(strips, r, g, b, alpha)
+    local solid, clear = CreateColor(r, g, b, alpha), CreateColor(r, g, b, 0)
+    strips[1]:SetGradient("HORIZONTAL", solid, clear)   -- bright at left, fading right
+    strips[2]:SetGradient("HORIZONTAL", clear, solid)   -- bright at right
+    strips[3]:SetGradient("VERTICAL",   clear, solid)   -- bright at top
+    strips[4]:SetGradient("VERTICAL",   solid, clear)   -- bright at bottom
+end
 
 -- Optional full-screen edge glow, shared by both kinds. Built from four
 -- gradient strips we color ourselves (edge -> transparent inward), so the
@@ -549,12 +587,7 @@ edge:SetFrameStrata("FULLSCREEN_DIALOG")
 edge:EnableMouse(false)
 edge:Hide()
 
-local function MkStrip() local t = edge:CreateTexture(nil, "OVERLAY"); t:SetColorTexture(1, 1, 1, 1); return t end
-local eL, eR, eT, eB = MkStrip(), MkStrip(), MkStrip(), MkStrip()
-eL:SetPoint("TOPLEFT");     eL:SetPoint("BOTTOMLEFT");     eL:SetWidth(160)
-eR:SetPoint("TOPRIGHT");    eR:SetPoint("BOTTOMRIGHT");    eR:SetWidth(160)
-eT:SetPoint("TOPLEFT");     eT:SetPoint("TOPRIGHT");       eT:SetHeight(120)
-eB:SetPoint("BOTTOMLEFT");  eB:SetPoint("BOTTOMRIGHT");    eB:SetHeight(120)
+local eStrips = MakeEdgeStrips(edge, "OVERLAY", 160, 120)
 
 edge.fadeElapsed, edge.fadeDuration = 0, 0
 edge:SetScript("OnUpdate", function(self, dt)
@@ -570,15 +603,10 @@ edge:SetScript("OnUpdate", function(self, dt)
 end)
 
 local function ShowEdge(color, duration, intensity, thickness)
-    local r, g, b = color.r, color.g, color.b
-    local A = intensity or 0.7
     local th = thickness or 160
-    eL:SetWidth(th); eR:SetWidth(th); eT:SetHeight(th); eB:SetHeight(th)
-    local solid, clear = CreateColor(r, g, b, A), CreateColor(r, g, b, 0)
-    eL:SetGradient("HORIZONTAL", solid, clear)   -- bright at left edge, fading right
-    eR:SetGradient("HORIZONTAL", clear, solid)   -- bright at right edge
-    eT:SetGradient("VERTICAL",   clear, solid)   -- bright at top
-    eB:SetGradient("VERTICAL",   solid, clear)   -- bright at bottom
+    eStrips[1]:SetWidth(th);  eStrips[2]:SetWidth(th)
+    eStrips[3]:SetHeight(th); eStrips[4]:SetHeight(th)
+    ApplyEdgeGradient(eStrips, color.r, color.g, color.b, intensity or 0.7)
     edge:SetAlpha(1)
     edge.fadeElapsed, edge.fadeDuration = 0, (duration or 1.0)
     edge:Show()
@@ -835,15 +863,17 @@ local function SpeakTextFor(cue, eventKind, label)
     return ns.ResolveSpokenPhrase(eventKind, custom, label)
 end
 
+-- Respect the per-kind master switches (buffs vs debuffs). Anything that isn't
+-- a debuff counts as a buff.
+local function KindEnabled(kind)
+    if kind == "debuff" then return activeProfile.trackDebuffs and true or false end
+    return activeProfile.trackBuffs and true or false
+end
+
 local function FireCue(cue, spellName, eventKind)
     if not ConditionMet(cue.when) then return end
     if not RequireMet(cue) then return end
-    -- Respect the per-kind master switches (buffs vs debuffs).
-    if cue.kind == "debuff" then
-        if not activeProfile.trackDebuffs then return end
-    elseif not activeProfile.trackBuffs then
-        return
-    end
+    if not KindEnabled(cue.kind) then return end
     local verb = (eventKind == "applied") and "gained" or "lost"
     local label = cue.label or spellName or "Aura"
     local alt = CueAltText(cue, label)   -- conditional-cue override text, if any
@@ -1236,18 +1266,11 @@ end)
 barContainer:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
     local cfg = BarCfg(); if not cfg then return end
-    local point, _, relativePoint, x, y = self:GetPoint()
-    cfg.position = { point = point, relativePoint = relativePoint, x = x, y = y }
+    cfg.position = CapturePoint(self)
 end)
 
 local function RestoreBarsPosition()
-    barContainer:ClearAllPoints()
-    local p = BarCfg() and BarCfg().position
-    if p and p.point then
-        barContainer:SetPoint(p.point, UIParent, p.relativePoint or p.point, p.x or 0, p.y or 0)
-    else
-        barContainer:SetPoint("CENTER", UIParent, "CENTER", -340, 0)
-    end
+    ApplyPoint(barContainer, BarCfg() and BarCfg().position, "CENTER", -340, 0)
 end
 ns.RestoreBarsPosition = RestoreBarsPosition
 
@@ -1346,11 +1369,7 @@ local function BarStart(cue, sid, endTime, duration)
     if not (endTime and duration and duration > 0 and endTime > GetTime()) then return end
     if not ConditionMet(cue.when) then return end
     local kind = (cue.kind == "debuff") and "debuff" or "buff"
-    if kind == "debuff" then
-        if not activeProfile.trackDebuffs then return end
-    elseif not activeProfile.trackBuffs then
-        return
-    end
+    if not KindEnabled(kind) then return end
     sid = tonumber(sid)
     local b = activeBars[sid]
     local isNew = not b
@@ -1472,18 +1491,11 @@ end)
 checklistContainer:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
     local cfg = ChecklistCfg(); if not cfg then return end
-    local point, _, relativePoint, x, y = self:GetPoint()
-    cfg.position = { point = point, relativePoint = relativePoint, x = x, y = y }
+    cfg.position = CapturePoint(self)
 end)
 
 local function RestoreChecklistPosition()
-    checklistContainer:ClearAllPoints()
-    local p = ChecklistCfg() and ChecklistCfg().position
-    if p and p.point then
-        checklistContainer:SetPoint(p.point, UIParent, p.relativePoint or p.point, p.x or 0, p.y or 0)
-    else
-        checklistContainer:SetPoint("CENTER", UIParent, "CENTER", 0, -160)
-    end
+    ApplyPoint(checklistContainer, ChecklistCfg() and ChecklistCfg().position, "CENTER", 0, -160)
 end
 ns.RestoreChecklistPosition = RestoreChecklistPosition
 
@@ -1497,6 +1509,20 @@ local function MakeChecklistIcon()
     f.tex = f:CreateTexture(nil, "ARTWORK")
     f.tex:SetAllPoints()
     f.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    return f
+end
+
+-- Place pooled checklist icon `idx` (1-based) into the grid and show it,
+-- returning the frame. Icons wrap every `perRow` and sit `size + 4` apart.
+local function PlaceChecklistIcon(idx, tex, size, perRow)
+    local f = checklistIcons[idx] or MakeChecklistIcon()
+    checklistIcons[idx] = f
+    f.tex:SetTexture(tex)
+    f:SetSize(size, size)
+    f:ClearAllPoints()
+    local col, row = (idx - 1) % perRow, math.floor((idx - 1) / perRow)
+    f:SetPoint("TOPLEFT", checklistContainer, "TOPLEFT", col * (size + 4), -row * (size + 4))
+    f:Show()
     return f
 end
 
@@ -1577,25 +1603,12 @@ checklistFlash:SetAllPoints(UIParent)
 checklistFlash:SetFrameStrata("BACKGROUND")
 checklistFlash:EnableMouse(false)
 checklistFlash:Hide()
-local clFlashStrips
-do
-    local function MkFlashStrip() local t = checklistFlash:CreateTexture(nil, "ARTWORK"); t:SetColorTexture(1, 1, 1, 1); return t end
-    local sL, sR, sT, sB = MkFlashStrip(), MkFlashStrip(), MkFlashStrip(), MkFlashStrip()
-    sL:SetPoint("TOPLEFT");    sL:SetPoint("BOTTOMLEFT");    sL:SetWidth(150)
-    sR:SetPoint("TOPRIGHT");   sR:SetPoint("BOTTOMRIGHT");   sR:SetWidth(150)
-    sT:SetPoint("TOPLEFT");    sT:SetPoint("TOPRIGHT");      sT:SetHeight(120)
-    sB:SetPoint("BOTTOMLEFT"); sB:SetPoint("BOTTOMRIGHT");   sB:SetHeight(120)
-    clFlashStrips = { sL, sR, sT, sB }
-end
+local clFlashStrips = MakeEdgeStrips(checklistFlash, "ARTWORK", 150, 120)
 -- Re-tint the edge flash from the configured colour (or a red-orange default).
 local function ApplyChecklistFlashColor()
     local cfg = ChecklistCfg()
     local c = (cfg and cfg.flashColor) or { r = 1.0, g = 0.25, b = 0.2 }
-    local solid, clear = CreateColor(c.r, c.g, c.b, 1), CreateColor(c.r, c.g, c.b, 0)
-    clFlashStrips[1]:SetGradient("HORIZONTAL", solid, clear)   -- left
-    clFlashStrips[2]:SetGradient("HORIZONTAL", clear, solid)   -- right
-    clFlashStrips[3]:SetGradient("VERTICAL", clear, solid)     -- top
-    clFlashStrips[4]:SetGradient("VERTICAL", solid, clear)     -- bottom
+    ApplyEdgeGradient(clFlashStrips, c.r, c.g, c.b, 1)
 end
 ns.ApplyChecklistFlashColor = ApplyChecklistFlashColor
 ApplyChecklistFlashColor()
@@ -1632,8 +1645,7 @@ end)
 checklistTicker:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
     local cfg = ChecklistCfg(); if not cfg or not cfg.ticker then return end
-    local point, _, rel, x, y = self:GetPoint()
-    cfg.ticker.position = { point = point, relativePoint = rel, x = x, y = y }
+    cfg.ticker.position = CapturePoint(self)
 end)
 checklistTicker.fs = checklistTicker:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 checklistTicker.fs:SetPoint("LEFT", checklistTicker, "LEFT", 0, 0)
@@ -1649,14 +1661,8 @@ checklistTicker:SetScript("OnUpdate", function(self, dt)
 end)
 
 local function RestoreChecklistTickerPosition()
-    checklistTicker:ClearAllPoints()
     local cfg = ChecklistCfg()
-    local p = cfg and cfg.ticker and cfg.ticker.position
-    if p and p.point then
-        checklistTicker:SetPoint(p.point, UIParent, p.relativePoint or p.point, p.x or 0, p.y or 0)
-    else
-        checklistTicker:SetPoint("TOP", UIParent, "TOP", 0, -220)
-    end
+    ApplyPoint(checklistTicker, cfg and cfg.ticker and cfg.ticker.position, "TOP", 0, -220)
 end
 ns.RestoreChecklistTickerPosition = RestoreChecklistTickerPosition
 
@@ -1700,15 +1706,9 @@ local function UpdateChecklist()
             if missing and name and tickered[sidStr] then missingNames[#missingNames + 1] = name end
             if showAll or (missing and boxed[sidStr]) then
                 idx = idx + 1
-                local f = checklistIcons[idx] or MakeChecklistIcon()
-                checklistIcons[idx] = f
-                f.tex:SetTexture((seen and seen.icon)
-                    or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 134400)
-                f:SetSize(size, size)
-                f:ClearAllPoints()
-                local col, row = (idx - 1) % perRow, math.floor((idx - 1) / perRow)
-                f:SetPoint("TOPLEFT", checklistContainer, "TOPLEFT", col * (size + 4), -row * (size + 4))
-                f:Show()
+                PlaceChecklistIcon(idx, (seen and seen.icon)
+                    or (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(sid)) or 134400,
+                    size, perRow)
             end
         end
     end
@@ -1723,13 +1723,7 @@ local function UpdateChecklist()
             if itemTex and not has then missingEnchant = true end
             if itemTex and (showAll or (not has and boxed[WEAPON_KEY])) then
                 idx = idx + 1
-                local f = checklistIcons[idx] or MakeChecklistIcon()
-                checklistIcons[idx] = f
-                f.tex:SetTexture(itemTex)
-                f:SetSize(size, size); f:ClearAllPoints()
-                local col, row = (idx - 1) % perRow, math.floor((idx - 1) / perRow)
-                f:SetPoint("TOPLEFT", checklistContainer, "TOPLEFT", col * (size + 4), -row * (size + 4))
-                f:Show()
+                PlaceChecklistIcon(idx, itemTex, size, perRow)
             end
         end
         EnchantIcon(16, hasMH)   -- main-hand slot
@@ -1743,14 +1737,7 @@ local function UpdateChecklist()
     end
     -- Test with nothing added yet: show sample icons so the box can be placed.
     if showAll and idx == 0 then
-        for i = 1, 3 do
-            local f = checklistIcons[i] or MakeChecklistIcon()
-            checklistIcons[i] = f
-            f.tex:SetTexture(134400)
-            f:SetSize(size, size); f:ClearAllPoints()
-            f:SetPoint("TOPLEFT", checklistContainer, "TOPLEFT", (i - 1) * (size + 4), 0)
-            f:Show()
-        end
+        for i = 1, 3 do PlaceChecklistIcon(i, 134400, size, 3) end
         idx = 3
     end
     if idx > 0 then
@@ -1811,14 +1798,7 @@ function ns.SetChecklistReposition(on)
     if on then
         cfg.locked = false
         local size = cfg.size or 40
-        for i = 1, 3 do
-            local f = checklistIcons[i] or MakeChecklistIcon()
-            checklistIcons[i] = f
-            f.tex:SetTexture(134400)
-            f:SetSize(size, size); f:ClearAllPoints()
-            f:SetPoint("TOPLEFT", checklistContainer, "TOPLEFT", (i - 1) * (size + 4), 0)
-            f:Show()
-        end
+        for i = 1, 3 do PlaceChecklistIcon(i, 134400, size, 3) end
         for i = 4, #checklistIcons do checklistIcons[i]:Hide() end
         checklistContainer:SetSize(3 * (size + 4) - 4, size)
         checklistContainer:SetBackdrop(REPOSITION_BACKDROP)

@@ -248,6 +248,100 @@ local function sortGroupKeys(keys)
     end)
 end
 
+-- ---------------------------------------------------------------------
+-- Shared autocomplete results popup (settings finder, aura picker, checklist
+-- picker). MakeResultsPopup builds the tooltip-backdrop frame on a high strata;
+-- the caller anchors it and owns its pooled rows. ShowResultsPopup sizes it to
+-- `shown` rows (plus a header offset and an optional "…and N more" line) and
+-- raises it.
+-- ---------------------------------------------------------------------
+local function MakeResultsPopup(parent, width)
+    local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    f:SetWidth(width)
+    f:SetFrameStrata("FULLSCREEN_DIALOG")
+    f:SetFrameLevel(parent:GetFrameLevel() + 20)
+    f:SetBackdrop({
+        bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 },
+    })
+    f:SetBackdropColor(0, 0, 0, 0.97)
+    f:Hide()
+    return f
+end
+
+local function ShowResultsPopup(frame, shown, rowH, headOffset, moreFS, more)
+    local h = 12 + headOffset + shown * rowH
+    if moreFS then
+        if more > 0 then
+            moreFS:ClearAllPoints()
+            moreFS:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -6 - headOffset - shown * rowH)
+            moreFS:SetText("…and " .. more .. " more — keep typing")
+            moreFS:Show(); h = h + 16
+        else
+            moreFS:Hide()
+        end
+    end
+    frame:SetHeight(h)
+    frame:Show()
+    frame:Raise()
+end
+
+-- Shared body for the "add aura" grouped dropdowns (Buffs/Debuffs picker and
+-- the Missing Buffs picker). Filters the catalog by `search` + `passes`, then
+-- shows a flat list while searching or buckets by custom/auto group otherwise.
+-- `addButton(parent, sp)` builds one entry; `emptyText` shows when nothing matches.
+local function BuildGroupedAuraMenu(root, search, passes, addButton, emptyText)
+    if not ns.P() then return end
+    -- Cap menu height so it stays on-screen and scrolls instead of being
+    -- clipped (a class bucket can hold dozens of spells). Applied to the root
+    -- and to each group submenu.
+    local maxH = GetScreenHeight() * 0.55
+    if root.SetScrollMode then root:SetScrollMode(maxH) end
+
+    local matches = {}
+    for _, sp in ipairs(ns.GetSeenAuras()) do
+        local nm = AuraName(sp.name, sp.spellID)
+        local matchText = search == ""
+            or nm:lower():find(search, 1, true)
+            or tostring(sp.spellID):find(search, 1, true)
+        if matchText and passes(sp) then matches[#matches + 1] = sp end
+    end
+
+    if #matches == 0 then
+        root:CreateButton(emptyText, function() end)
+        return
+    end
+
+    -- While searching, a flat list scans faster than nested submenus.
+    if search ~= "" then
+        for _, sp in ipairs(matches) do addButton(root, sp) end
+        return
+    end
+
+    -- Otherwise bucket into groups.
+    local groups, order = {}, {}
+    for _, sp in ipairs(matches) do
+        local g = ns.GroupFor(sp.spellID)
+        if not groups[g] then groups[g] = {}; order[#order + 1] = g end
+        local t = groups[g]; t[#t + 1] = sp
+    end
+    -- One group only -> show it flat; no point in a single submenu.
+    if #order == 1 then
+        for _, sp in ipairs(groups[order[1]]) do addButton(root, sp) end
+        return
+    end
+    -- Custom groups first (alphabetical); auto-buckets follow in fixed order.
+    sortGroupKeys(order)
+    for _, g in ipairs(order) do
+        local list = groups[g]
+        local sub = root:CreateButton(string.format("%s  |cff808080(%d)|r", g, #list))
+        if sub.SetScrollMode then sub:SetScrollMode(maxH) end
+        for _, sp in ipairs(list) do addButton(sub, sp) end
+    end
+end
+
 local refreshers = {}
 local function RefreshAllPanels()
     if not ns.P() then return end
@@ -701,19 +795,8 @@ do
     main.y = main.y - 6
 
     local FIND_H, FIND_MAX = 18, 12
-    local findResults = CreateFrame("Frame", nil, content, "BackdropTemplate")
+    local findResults = MakeResultsPopup(content, 460)
     findResults:SetPoint("TOPLEFT", content, "TOPLEFT", LEFT, main.y)
-    findResults:SetWidth(460)
-    findResults:SetFrameStrata("FULLSCREEN_DIALOG")
-    findResults:SetFrameLevel(content:GetFrameLevel() + 20)
-    findResults:SetBackdrop({
-        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
-    findResults:SetBackdropColor(0, 0, 0, 0.97)
-    findResults:Hide()
     local findBtns = {}
     local function MakeFindBtn(i)
         local b = CreateFrame("Button", nil, findResults)
@@ -746,8 +829,7 @@ do
         end
         for i = shown + 1, #findBtns do findBtns[i]:Hide() end
         if shown == 0 then findResults:Hide(); return end
-        findResults:SetHeight(12 + shown * FIND_H)
-        findResults:Show(); findResults:Raise()
+        ShowResultsPopup(findResults, shown, FIND_H, 0, nil, 0)
     end
     findBox:SetScript("OnTextChanged", UpdateFind)
     findBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus(); findResults:Hide() end)
@@ -1145,23 +1227,12 @@ local function BuildKindPanel(kind)
     -- box, which sits far right) with a contained width, so the per-row hide /
     -- group buttons can't run off the right edge of the options panel.
     local resultBtns = {}
-    local searchResults = CreateFrame("Frame", nil, content, "BackdropTemplate")
     -- Anchor below the whole picker row (the dropdown / search box are taller
-    -- than the label, so anchoring to the label's bottom overlapped them).
-    searchResults:SetPoint("TOPLEFT", content, "TOPLEFT", LEFT, ctx.y - 30)
-    searchResults:SetWidth(520)
-    -- A higher strata so it sits cleanly above the panel's own widgets (the
+    -- than the label, so anchoring to the label's bottom overlapped them). The
+    -- popup's high strata keeps it cleanly above the panel's own widgets (the
     -- watched-row close buttons / dropdowns were poking through otherwise).
-    searchResults:SetFrameStrata("FULLSCREEN_DIALOG")
-    searchResults:SetFrameLevel(content:GetFrameLevel() + 20)
-    searchResults:SetBackdrop({
-        bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile     = true, tileSize = 16, edgeSize = 16,
-        insets   = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
-    searchResults:SetBackdropColor(0, 0, 0, 0.97)
-    searchResults:Hide()
+    local searchResults = MakeResultsPopup(content, 520)
+    searchResults:SetPoint("TOPLEFT", content, "TOPLEFT", LEFT, ctx.y - 30)
     local resHeader = searchResults:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     resHeader:SetPoint("TOPLEFT", searchResults, "TOPLEFT", 8, -5)
     resHeader:SetPoint("TOPRIGHT", searchResults, "TOPRIGHT", -8, -5)
@@ -1286,19 +1357,7 @@ local function BuildKindPanel(kind)
         end
         for i = shown + 1, #resultBtns do resultBtns[i]:Hide() end
         if shown == 0 then searchResults:Hide(); return end
-        local h = 12 + RES_HEAD + shown * RESULT_H
-        if more > 0 then
-            moreText:ClearAllPoints()
-            moreText:SetPoint("TOPLEFT", searchResults, "TOPLEFT", 8, -6 - RES_HEAD - shown * RESULT_H)
-            moreText:SetText("…and " .. more .. " more — keep typing")
-            moreText:Show()
-            h = h + 16
-        else
-            moreText:Hide()
-        end
-        searchResults:SetHeight(h)
-        searchResults:Show()
-        searchResults:Raise()
+        ShowResultsPopup(searchResults, shown, RESULT_H, RES_HEAD, moreText, more)
     end
 
     searchBox:SetScript("OnTextChanged", function(self)
@@ -1375,62 +1434,12 @@ local function BuildKindPanel(kind)
         end
     end
 
-    -- Which submenu an aura belongs in. A custom group always wins; otherwise
-    -- fall back to reliable auto-buckets (debuffs by dungeon; buffs by mount /
-    -- cast-by-me / world). The auto-buckets have a fixed display order and sit
-    -- below any custom groups.
-    local function GroupOf(sp) return ns.GroupFor(sp.spellID) end
-
+    -- Grouped picker: a custom group always wins; otherwise fall back to the
+    -- reliable auto-buckets (debuffs by dungeon; buffs by mount / cast-by-me /
+    -- world), which have a fixed display order and sit below any custom groups.
     addDD:SetupMenu(function(_, root)
-        if not ns.P() then return end
-        -- Cap menu height so it stays on-screen and scrolls instead of being
-        -- clipped. Applied to the root AND each group submenu (a class bucket
-        -- can hold dozens of spells now the spellbook seeds the catalog).
-        local maxH = GetScreenHeight() * 0.55
-        if root.SetScrollMode then root:SetScrollMode(maxH) end
-
-        local matches = {}
-        for _, sp in ipairs(ns.GetSeenAuras()) do
-            local nm = AuraName(sp.name, sp.spellID)
-            local matchText = pickerSearch == ""
-                or nm:lower():find(pickerSearch, 1, true)
-                or tostring(sp.spellID):find(pickerSearch, 1, true)
-            if matchText and passes(sp) then matches[#matches + 1] = sp end
-        end
-
-        if #matches == 0 then
-            root:CreateButton("|cff808080No " .. label:lower() .. " match — type, or add by spell ID|r", function() end)
-            return
-        end
-
-        -- While searching, a flat list scans faster than nested submenus.
-        if pickerSearch ~= "" then
-            for _, sp in ipairs(matches) do AddAuraButton(root, sp) end
-            return
-        end
-
-        -- Otherwise bucket into groups.
-        local groups, order = {}, {}
-        for _, sp in ipairs(matches) do
-            local g = GroupOf(sp)
-            if not groups[g] then groups[g] = {}; order[#order + 1] = g end
-            local t = groups[g]
-            t[#t + 1] = sp
-        end
-        -- One group only -> show it flat; no point in a single submenu.
-        if #order == 1 then
-            for _, sp in ipairs(groups[order[1]]) do AddAuraButton(root, sp) end
-            return
-        end
-        -- Custom groups first (alphabetical); the auto-buckets follow in their
-        -- fixed order.
-        sortGroupKeys(order)
-        for _, g in ipairs(order) do
-            local list = groups[g]
-            local sub = root:CreateButton(string.format("%s  |cff808080(%d)|r", g, #list))
-            if sub.SetScrollMode then sub:SetScrollMode(maxH) end
-            for _, sp in ipairs(list) do AddAuraButton(sub, sp) end
-        end
+        BuildGroupedAuraMenu(root, pickerSearch, passes, AddAuraButton,
+            "|cff808080No " .. label:lower() .. " match — type, or add by spell ID|r")
     end)
     ctx.y = ctx.y - 38
 
@@ -2222,41 +2231,8 @@ do
         end
     end
     addDD:SetupMenu(function(_, root)
-        if not ns.P() then return end
-        local maxH = GetScreenHeight() * 0.55
-        if root.SetScrollMode then root:SetScrollMode(maxH) end
-        local matches = {}
-        for _, sp in ipairs(ns.GetSeenAuras()) do
-            local nm = AuraName(sp.name, sp.spellID)
-            local matchText = clSearch == "" or nm:lower():find(clSearch, 1, true)
-                or tostring(sp.spellID):find(clSearch, 1, true)
-            if matchText and clPasses(sp) then matches[#matches + 1] = sp end
-        end
-        if #matches == 0 then
-            root:CreateButton("|cff808080No buff matches — type, or add by spell ID|r", function() end)
-            return
-        end
-        if clSearch ~= "" then
-            for _, sp in ipairs(matches) do clAddButton(root, sp) end
-            return
-        end
-        local groups, order = {}, {}
-        for _, sp in ipairs(matches) do
-            local g = ns.GroupFor(sp.spellID)
-            if not groups[g] then groups[g] = {}; order[#order + 1] = g end
-            table.insert(groups[g], sp)
-        end
-        if #order == 1 then
-            for _, sp in ipairs(groups[order[1]]) do clAddButton(root, sp) end
-            return
-        end
-        sortGroupKeys(order)
-        for _, g in ipairs(order) do
-            local list = groups[g]
-            local sub = root:CreateButton(string.format("%s  |cff808080(%d)|r", g, #list))
-            if sub.SetScrollMode then sub:SetScrollMode(maxH) end
-            for _, sp in ipairs(list) do clAddButton(sub, sp) end
-        end
+        BuildGroupedAuraMenu(root, clSearch, clPasses, clAddButton,
+            "|cff808080No buff matches — type, or add by spell ID|r")
     end)
     checklistPanel.widgets[#checklistPanel.widgets + 1] = addDD
     checklistPanel.y = checklistPanel.y - 36
@@ -2265,19 +2241,8 @@ do
     -- to add. Anchored below the add row, on a high strata so it overlays the
     -- controls below while it's open.
     local CL_RESULT_H, CL_MAX = 18, 12
-    local clResults = CreateFrame("Frame", nil, content, "BackdropTemplate")
+    local clResults = MakeResultsPopup(content, 420)
     clResults:SetPoint("TOPLEFT", content, "TOPLEFT", LEFT, checklistPanel.y - 2)
-    clResults:SetWidth(420)
-    clResults:SetFrameStrata("FULLSCREEN_DIALOG")
-    clResults:SetFrameLevel(content:GetFrameLevel() + 20)
-    clResults:SetBackdrop({
-        bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 16,
-        insets = { left = 4, right = 4, top = 4, bottom = 4 },
-    })
-    clResults:SetBackdropColor(0, 0, 0, 0.97)
-    clResults:Hide()
     local clMore = clResults:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     local clResultBtns = {}
     local function MakeClResultBtn(i)
@@ -2328,17 +2293,7 @@ do
         end
         for i = shown + 1, #clResultBtns do clResultBtns[i]:Hide() end
         if shown == 0 then clResults:Hide(); return end
-        local h = 12 + shown * CL_RESULT_H
-        if more > 0 then
-            clMore:ClearAllPoints()
-            clMore:SetPoint("TOPLEFT", clResults, "TOPLEFT", 8, -6 - shown * CL_RESULT_H)
-            clMore:SetText("…and " .. more .. " more — keep typing")
-            clMore:Show(); h = h + 16
-        else
-            clMore:Hide()
-        end
-        clResults:SetHeight(h)
-        clResults:Show(); clResults:Raise()
+        ShowResultsPopup(clResults, shown, CL_RESULT_H, 0, clMore, more)
     end
     checklistPanel.y = checklistPanel.y - 8
 
