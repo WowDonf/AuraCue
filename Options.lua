@@ -11,6 +11,13 @@ local _, ns = ...
 
 local ROW_H = 64        -- two-line editor row (toggles/group, then sounds) + divider gap
 local HEADER_H = 22
+-- Disclosure markers for the collapsible group headers. Inline +/- button
+-- textures render reliably in any locale/font (unlike Unicode triangles).
+local GROUP_COLLAPSED = "|TInterface\\Buttons\\UI-PlusButton-Up:14:14:0:0|t"
+local GROUP_EXPANDED  = "|TInterface\\Buttons\\UI-MinusButton-Up:14:14:0:0|t"
+-- Set while we intentionally hide the Settings window to drag the flash overlay,
+-- so the panel OnHide handler doesn't immediately re-lock the window.
+local lockSuppressed = false
 local MAX_RESULTS = 10
 local RESULT_H = 20
 
@@ -580,6 +587,13 @@ local function NewPanel(name)
 
     refreshers[#refreshers + 1] = ctx.Refresh
     panel:SetScript("OnShow", ctx.Refresh)
+    -- Leaving any AuraCue page — closing Settings, or navigating to another
+    -- addon's / the game's settings — locks every "move" window, so none is
+    -- left draggable behind a panel the player can no longer see.
+    panel:HookScript("OnHide", function()
+        if lockSuppressed then return end
+        if ns.LockAllWindows then ns.LockAllWindows() end
+    end)
     return ctx
 end
 
@@ -1617,12 +1631,29 @@ local function BuildKindPanel(kind)
     emptyText:SetPoint("TOPLEFT", LEFT + 4, editorTopY - 7)
     emptyText:SetText("No " .. label:lower() .. " watched yet — add one above.")
 
+    -- A clickable group header: click anywhere on the bar to collapse / expand
+    -- that group. RebuildList sets `collapseKey` per use; the state persists in
+    -- the profile so groups stay folded across reloads.
     MakeHeader = function(i)
-        local fs = editor:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        fs:SetTextColor(1, 0.82, 0)
-        fs:SetJustifyH("LEFT")
-        headers[i] = fs
-        return fs
+        local b = CreateFrame("Button", nil, editor)
+        b:SetHeight(HEADER_H)
+        b.label = b:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        b.label:SetTextColor(1, 0.82, 0)
+        b.label:SetJustifyH("LEFT")
+        b.label:SetPoint("LEFT", b, "LEFT", 0, 0)
+        b.label:SetPoint("RIGHT", b, "RIGHT", 0, 0)
+        local hl = b:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 1, 1, 0.07)
+        b:SetScript("OnClick", function(self)
+            if not self.collapseKey or not ns.P() then return end
+            local c = ns.P().collapsed or {}
+            ns.P().collapsed = c
+            c[self.collapseKey] = (not c[self.collapseKey]) or nil
+            RebuildList()
+        end)
+        headers[i] = b
+        return b
     end
 
     MakeRow = function(i)
@@ -1822,6 +1853,8 @@ local function BuildKindPanel(kind)
 
     RebuildList = function()
         if not ns.P() then return end
+        local collapsed = ns.P().collapsed or {}
+        ns.P().collapsed = collapsed
         local groups, total = {}, 0
         for sid, cue in pairs(ns.P().cues) do
             local k = (cue.kind == "debuff") and "debuff" or "buff"
@@ -1840,14 +1873,21 @@ local function BuildKindPanel(kind)
         local yOff, rowIdx, hdrIdx = 0, 0, 0
         for _, cat in ipairs(cats) do
             hdrIdx = hdrIdx + 1
+            local key = kind .. ":" .. cat
+            local isCollapsed = collapsed[key] and true or false
             local hdr = headers[hdrIdx] or MakeHeader(hdrIdx)
+            hdr.collapseKey = key
             hdr:ClearAllPoints()
             hdr:SetPoint("TOPLEFT", editor, "TOPLEFT", 2, -yOff)
-            hdr:SetText(cat .. "  |cff808080(" .. #groups[cat] .. ")|r")
+            hdr:SetPoint("TOPRIGHT", editor, "TOPRIGHT", -2, -yOff)
+            hdr.label:SetText((isCollapsed and GROUP_COLLAPSED or GROUP_EXPANDED)
+                .. " " .. cat .. "  |cff808080(" .. #groups[cat] .. ")|r")
             hdr:Show()
             yOff = yOff + HEADER_H
 
-            local sids = groups[cat]
+            -- Collapsed groups feed an empty list, so their pooled rows stay
+            -- hidden (cleaned up below) and only the header takes vertical space.
+            local sids = (not isCollapsed) and groups[cat] or {}
             table.sort(sids, function(a, b) return (tonumber(a) or 0) < (tonumber(b) or 0) end)
             for _, sid in ipairs(sids) do
                 rowIdx = rowIdx + 1
@@ -1918,7 +1958,17 @@ local function BuildAppearanceSection(ctx, kind)
     ctx.SideBySide(
         "Move window", function()
             ns.SetRepositionMode(kind, true)
-            if SettingsPanel and SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
+            -- Hide Settings so the overlay can be dragged; suppress the lock that
+            -- the panel's OnHide would otherwise trigger for this deliberate hide.
+            if SettingsPanel and SettingsPanel:IsShown() then
+                lockSuppressed = true
+                HideUIPanel(SettingsPanel)
+                if C_Timer then
+                    C_Timer.After(0, function() lockSuppressed = false end)
+                else
+                    lockSuppressed = false
+                end
+            end
         end,
         "Reset position", function()
             Vis().position = nil

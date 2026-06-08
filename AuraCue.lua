@@ -148,6 +148,9 @@ local PROFILE_DEFAULTS = {
             ids      = {},  -- { [spellID-as-string] = true } items shown in the ticker
         },
     },
+    -- Which watched-aura groups are collapsed on the Buffs/Debuffs pages,
+    -- keyed "kind:groupName" -> true. UI state only.
+    collapsed = {},
     -- Watched auras, keyed by spellID-as-string -> cue config.
     cues = {},
 }
@@ -353,6 +356,8 @@ local function ValidateRanges(db)
     if bars.font ~= nil and type(bars.font) ~= "string" then bars.font = nil end
     if bars.outline ~= "OUTLINE" and bars.outline ~= "THICKOUTLINE" then bars.outline = "NONE" end
     bars.shadow = bars.shadow and true or false
+
+    if type(db.collapsed) ~= "table" then db.collapsed = {} end
 
     if type(db.checklist) ~= "table" then db.checklist = {} end
     local cl = db.checklist
@@ -1836,6 +1841,24 @@ function ns.SetChecklistTickerReposition(on)
         checklistTicker:EnableMouse(false)
         UpdateChecklist()
     end
+end
+
+-- Lock every window that's currently in "move" mode. Called when the player
+-- leaves the AuraCue options (closing Settings, or switching to another addon's
+-- or the game's settings) so no window is left draggable behind a panel they
+-- can no longer see. Only touches windows actually being moved, so navigating
+-- between AuraCue pages doesn't trigger needless work.
+function ns.LockAllWindows()
+    if not activeProfile then return end
+    for _, kind in ipairs({ "buff", "debuff" }) do
+        if overlays[kind] and not VisCfg(kind).locked then
+            ns.SetRepositionMode(kind, false)
+        end
+    end
+    local bc = BarCfg()
+    if bc and not bc.locked then ns.SetBarsReposition(false) end
+    if ns.checklistMoving then ns.SetChecklistReposition(false) end
+    if ns.checklistTickerMoving then ns.SetChecklistTickerReposition(false) end
 end
 
 function ns.SetChecklistAura(sid, on)

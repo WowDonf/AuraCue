@@ -1,7 +1,15 @@
 # Changelog
 
-## v0.72.2
+## v0.73.0
 
+- **Collapsible groups on the Buffs/Skills and Debuffs pages.** Click a group
+  header to fold or unfold that group, so a long watch list stays manageable —
+  collapse the groups you rarely touch and the page stays short. The
+  folded/unfolded state is remembered per spec.
+- **Move windows now lock when you leave the options.** Putting a flash window,
+  timer bars, the missing-buff box, or the ticker into "move" mode and then
+  closing Settings — or switching to another addon's or the game's options —
+  now locks it, instead of leaving it draggable.
 - Fixed missing-buff icons for **weapon enchants** (oils/stones) not appearing
   when they expired — the silent-expiry poll was gated on a setting that no
   longer exists, so it never ran.
