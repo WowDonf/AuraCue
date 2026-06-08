@@ -1275,7 +1275,18 @@ barContainer:SetScript("OnDragStop", function(self)
 end)
 
 local function RestoreBarsPosition()
-    ApplyPoint(barContainer, BarCfg() and BarCfg().position, "CENTER", -340, 0)
+    local cfg = BarCfg()
+    -- The container is CENTER-anchored but bars anchor to its LEFT edge, so a
+    -- bar's position depends on the container width. Move mode inflates the
+    -- container into a tall grab box; outside it, size the container to the
+    -- configured bar width so the left edge — and thus the bars — land exactly
+    -- where they did when moved. Without this the bars drift sideways by half
+    -- the width difference after a reload. (Skipped while moving: cfg.locked is
+    -- false then, and the inflated size must stay.)
+    if cfg and cfg.locked then
+        barContainer:SetSize(cfg.width or 220, cfg.height or 18)
+    end
+    ApplyPoint(barContainer, cfg and cfg.position, "CENTER", -340, 0)
 end
 ns.RestoreBarsPosition = RestoreBarsPosition
 

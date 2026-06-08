@@ -2004,6 +2004,7 @@ do
     barsPanel.y = barsPanel.y - 24
     barsPanel.Desc("Optional depleting bars for watched auras while they're active. Turn a bar " ..
         "on per aura from its Edit menu (\"Show a timer bar while active\"); these control the shared bar window.")
+    barsPanel.y = barsPanel.y + 12   -- tighten the gap below the description
     barsPanel.Check("Enable timer bars",
         function() return ns.P().bars and ns.P().bars.enabled end,
         function(v)
@@ -2226,6 +2227,7 @@ do
         "but that ISN'T currently on you — an empty box means you're fully buffed. Handy as a " ..
         "pre-pull check. (In instanced combat some buffs can't be read, so this is most reliable " ..
         "out of combat.)")
+    checklistPanel.y = checklistPanel.y + 20   -- tighten the gap below the description
     -- Weapon enchants (oils / sharpening stones) aren't auras, so they can't be
     -- added from the catalog — watch them with this instead (both weapons).
     checklistPanel.Check("Warn if a weapon enchant (oil / sharpening stone) is missing",
@@ -2504,17 +2506,21 @@ do
     sharePanel.Desc("Save this spec's current setup as a named preset, then apply it to any " ..
         "character or spec later — handy for switching between raid, Mythic+, and PvP setups. " ..
         "Presets are account-wide and also work from |cffffd200/cue preset|r.")
+    sharePanel.y = sharePanel.y + 18   -- tighten the gap below the description
     local nameLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     nameLabel:SetPoint("TOPLEFT", LEFT, sharePanel.y)
     nameLabel:SetText("Name:")
     local nameBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
-    nameBox:SetPoint("LEFT", nameLabel, "RIGHT", 12, 0)
-    nameBox:SetSize(220, 22)
+    nameBox:SetPoint("LEFT", nameLabel, "RIGHT", 10, 0)
+    nameBox:SetSize(180, 22)
     nameBox:SetAutoFocus(false)
     nameBox:SetFontObject("ChatFontNormal")
     nameBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    sharePanel.y = sharePanel.y - 32
-    sharePanel.Button("Save current as preset", 200, function()
+    local saveBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    saveBtn:SetPoint("LEFT", nameBox, "RIGHT", 12, 0)
+    saveBtn:SetSize(190, 22)
+    saveBtn:SetText("Save current as preset")
+    saveBtn:SetScript("OnClick", function()
         local ok, res = ns.SavePreset(nameBox:GetText() or "")
         if ok then
             nameBox:SetText(""); nameBox:ClearFocus()
@@ -2524,11 +2530,12 @@ do
             presetStatus:SetText("|cffff6060" .. tostring(res) .. "|r")
         end
     end)
+    sharePanel.y = sharePanel.y - 30
     local presetLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     presetLabel:SetPoint("TOPLEFT", LEFT, sharePanel.y)
     presetLabel:SetText("Preset:")
     presetDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
-    presetDD:SetPoint("LEFT", presetLabel, "RIGHT", 12, 0)
+    presetDD:SetPoint("LEFT", presetLabel, "RIGHT", 10, 0)
     presetDD:SetSize(260, 26)
     presetDD:SetDefaultText("Choose a preset")
     presetDD:SetupMenu(function(_, root)
@@ -2552,8 +2559,7 @@ do
         if not found then selectedPreset = nil; presetDD:SetText("Choose a preset") end
     end
     sharePanel.widgets[#sharePanel.widgets + 1] = presetDD
-    sharePanel.y = sharePanel.y - 34
-    presetStatus = AddStatusLine(sharePanel)
+    sharePanel.y = sharePanel.y - 32
     sharePanel.SideBySide(
         "Apply to this spec", function()
             if not selectedPreset then presetStatus:SetText("|cffff6060Pick a preset first.|r"); return end
@@ -2578,17 +2584,20 @@ do
                     if presetDD.Refresh then presetDD.Refresh() end
                 end })
         end)
+    presetStatus = AddStatusLine(sharePanel)
 
     -- Copy from another character/spec on this account (no string needed).
+    sharePanel.y = sharePanel.y + 12   -- pull this section up under the one above
     sharePanel.Header("Copy from another character")
     sharePanel.Desc("Replace this character and spec's profile with a copy of another saved profile " ..
         "on this account. A copy is made, so the two stay independent afterward.")
+    sharePanel.y = sharePanel.y + 10   -- tighten the gap below the description
     local copyLabel = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     copyLabel:SetPoint("TOPLEFT", LEFT, sharePanel.y)
     copyLabel:SetText("Profile:")
     local selectedProfile, selectedLabel
     local copyDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
-    copyDD:SetPoint("LEFT", copyLabel, "RIGHT", 12, 0)
+    copyDD:SetPoint("LEFT", copyLabel, "RIGHT", 10, 0)
     copyDD:SetSize(260, 26)
     copyDD:SetDefaultText("Choose a profile")
     copyDD:SetupMenu(function(_, root)
@@ -2604,9 +2613,12 @@ do
                 function() selectedProfile = key; selectedLabel = lbl; copyDD:SetText(lbl); copyDD:GenerateMenu() end)
         end
     end)
-    sharePanel.y = sharePanel.y - 34
-    local copyStatus = AddStatusLine(sharePanel)
-    sharePanel.Button("Copy here", 160, function()
+    local copyStatus
+    local copyBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    copyBtn:SetPoint("LEFT", copyDD, "RIGHT", 12, 0)
+    copyBtn:SetSize(140, 24)
+    copyBtn:SetText("Copy here")
+    copyBtn:SetScript("OnClick", function()
         if not selectedProfile then copyStatus:SetText("|cffff6060Pick a profile first.|r"); return end
         local nm = selectedLabel or "that profile"
         StaticPopup_Show("AURACUE_CONFIRM",
@@ -2619,11 +2631,15 @@ do
                     or  ("|cffff6060" .. tostring(res) .. "|r"))
             end })
     end)
+    sharePanel.y = sharePanel.y - 32
+    copyStatus = AddStatusLine(sharePanel)
 
     -- Export.
+    sharePanel.y = sharePanel.y + 12   -- pull this section up under the one above
     sharePanel.Header("Export")
     sharePanel.Desc("Export this spec's profile, or the whole aura catalog, to a string you can save " ..
         "or share. The string appears below — click the box, then Ctrl+A and Ctrl+C to copy it.")
+    sharePanel.y = sharePanel.y + 16   -- tighten the gap below the description
     local exportBox, exportScroll = AddShareBox(sharePanel, 130)
     local exportStatus = AddStatusLine(sharePanel)
     sharePanel.SideBySide(
@@ -2642,6 +2658,7 @@ do
     sharePanel.Header("Import")
     sharePanel.Desc("Paste a profile or catalog string into the box below, then click Import. " ..
         "A profile replaces this spec's tracked auras and settings; a catalog merges into your aura list.")
+    sharePanel.y = sharePanel.y + 16   -- tighten the gap below the description
     local importBox = AddShareBox(sharePanel, 130)
     local importStatus = AddStatusLine(sharePanel)
     sharePanel.Button("Import", 160, function()
@@ -2745,6 +2762,7 @@ do
     managePanel.Desc("Your whole aura catalog (account-wide). Set a custom group, hide clutter, or " ..
         "remove an entry. Tick rows to act on several at once. Removing an aura just forgets it here; " ..
         "it returns to the list if you see it again.")
+    managePanel.y = managePanel.y + 20   -- tighten the gap below the description
 
     local search, showHidden = "", false
     local kindFilter, hideMounts, ungroupedOnly = "all", false, false
