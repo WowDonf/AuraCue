@@ -3,7 +3,7 @@
 ## Notes: Turn your own buffs and debuffs into sound, speech, on-screen flashes, and timer bars — proc alerts, cooldown timers, and a missing-buff checklist.
 ## Author: WowDonf
 ## Version: v0.72.2
-## SavedVariables: AuraCueDB CueSenseDB
+## SavedVariables: AuraCueDB
 ## IconTexture: Interface\AddOns\AuraCue\Icon.png
 ## Category-enUS: AuraCue
 ## AddonCompartmentFunc: AuraCue_OnCompartmentClick

@@ -2897,19 +2897,9 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
         local name = ...
         if name ~= addonName then return end
-        -- One-time carry-over from the addon's former name. CueSenseDB is
-        -- still listed in the TOC SavedVariables so the old data loads (this
-        -- only works if the old SavedVariables file was renamed to match the
-        -- new addon folder); this adopts it, then clears it. The extra
-        -- SavedVariables entry can be dropped in a later version.
-        -- Brand-new install? (No saved DB under either name yet.) Used to show
-        -- the first-run welcome only to genuinely new users, not on an update.
-        local freshInstall = (AuraCueDB == nil) and (CueSenseDB == nil)
-        if not AuraCueDB and CueSenseDB then
-            AuraCueDB = CueSenseDB
-            CueSenseDB = nil
-            ns.migratedFromCueSense = true
-        end
+        -- Brand-new install? (No saved DB yet.) Used to show the first-run
+        -- welcome only to genuinely new users, not on an update.
+        local freshInstall = (AuraCueDB == nil)
         AuraCueDB = AuraCueDB or {}
         MergeDefaults(AuraCueDB, DB_DEFAULTS)
         if AuraCueDB.onboarded == nil then
@@ -2934,10 +2924,6 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         -- The "loaded" greeting is off by default; opt in via Global Settings.
         if AuraCueDB and AuraCueDB.showLoginMessage then
             chatPrint("loaded. Type |cffffd200/cue|r for commands.")
-        end
-        -- The one-time data-migration notice always shows (it matters).
-        if ns.migratedFromCueSense then
-            chatPrint("Imported your previous settings and aura catalog from CueSense.")
         end
         -- First-run welcome (new installs only); deferred so the world is loaded.
         if AuraCueDB and not AuraCueDB.onboarded and ns.ShowWelcome then
