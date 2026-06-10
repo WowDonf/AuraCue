@@ -2,6 +2,31 @@
 
 ## v0.73.0
 
+- **Cooldown-ready alerts (new Cooldowns page).** Watch your spells and get a
+  sound, spoken name, and/or a flash the instant each comes off cooldown. Each
+  alert's spoken text is editable per spell (blank = "<name> ready"). Your own cooldowns are never hidden from addons, so these fire
+  reliably in any content — raids, Mythic+, anywhere. Handles charge spells and
+  ignores the global cooldown. Each row has its own **Test** button. A per-row
+  **Edit** menu combines same- or similar-named ability IDs into one watch (so it
+  follows talent/override variants — same-name is on by default and the variants
+  drop out of the picker) or adds IDs by hand; the picker has a live search box,
+  and rows show the spell tooltip on hover.
+- The **Organize Auras** edit dialog has a **Watch this aura** button — add an
+  ability straight to your Buffs/Debuffs cues from the catalog.
+- **Match similar names.** A new per-buff option folds variant-named auras
+  together — e.g. "Fleeting Flask of the Magisters" now satisfies a "Flask of
+  the Magisters" entry, and "Hearty Well Fed" counts as "Well Fed". It's a
+  **Similar** tick on each Missing Buffs row, and an **Also match similar names**
+  toggle in a watched aura's Edit menu (which its timer bar follows too).
+- **Gained alerts are silenced briefly after a loading screen.** Zoning (or
+  reloading, or stepping into an instance) re-applies your buffs as the world
+  settles, which used to fire a burst of "gained" cues — now suppressed for a
+  couple of seconds while it re-baselines.
+- Fixed the **Missing Buffs box wrongly filling up in combat**. The game hides
+  your auras from addons during combat (everything reads as absent), which made
+  buffs you actually had show as missing. The checklist now holds what it last
+  knew while you're in combat — updated by the buffs you cast — instead of
+  trusting those blank reads, so it only flags things that are genuinely missing.
 - **Collapsible groups on the Buffs/Skills and Debuffs pages.** Click a group
   header to fold or unfold that group, so a long watch list stays manageable —
   collapse the groups you rarely touch and the page stays short. The

@@ -107,7 +107,7 @@ local function ApplyAltsFromDialog(data, text)
     if not data or not data.key then return end
     local list = {}
     for tok in (text or ""):gmatch("[^,%s]+") do list[#list + 1] = tok end
-    ns.SetCueAlts(data.key, list)
+    if data.cooldown then ns.SetCooldownAlts(data.key, list) else ns.SetCueAlts(data.key, list) end
     if data.after then data.after() end
 end
 
@@ -720,8 +720,8 @@ end
 local searchCategories = {}
 local PAGE_NAMES = {
     main = "AuraCue", appearance = "Appearance", audio = "Audio", bars = "Bars",
-    buffs = "Buffs/Skills", debuffs = "Debuffs", missing = "Missing Buffs",
-    organize = "Organize Auras", profile = "Profile",
+    buffs = "Buffs/Skills", cooldowns = "Cooldowns", debuffs = "Debuffs",
+    missing = "Missing Buffs", organize = "Organize Auras", profile = "Profile",
 }
 local SETTINGS_INDEX = {
     { "Enable AuraCue", "main" },
@@ -745,6 +745,8 @@ local SETTINGS_INDEX = {
     { "Bar width / height / max", "bars" },
     { "Bar texture", "bars", "sharedmedia" },
     { "Bar font / outline / shadow", "bars", "text" },
+    { "Cooldown-ready alerts", "cooldowns", "spell ready off cooldown ability" },
+    { "Add a cooldown to watch", "cooldowns", "ability spell" },
     { "Bar colors and fill direction", "bars", "colour reverse icon" },
     { "Add a buff to watch", "buffs", "track aura" },
     { "Add a debuff to watch", "debuffs", "track aura" },
@@ -754,7 +756,7 @@ local SETTINGS_INDEX = {
     { "Weapon enchant warning", "missing", "oil sharpening stone" },
     { "Checklist flash and color", "missing", "edge colour" },
     { "Checklist scrolling ticker", "missing", "marquee names" },
-    { "Checklist icon size / per row", "missing" },
+    { "Missing-buff box size / per row / ticker", "appearance", "checklist icon move" },
     { "Organize / bulk-edit the catalog", "organize", "manage hide remove group filter" },
     { "Profile presets (raid / M+ / PvP)", "profile", "switch" },
     { "Copy a profile from another character", "profile" },
@@ -980,6 +982,12 @@ local function MakeDialog(w, h)
     d:SetFrameStrata("FULLSCREEN_DIALOG")
     d:EnableMouse(true)
     d:SetBackdrop(DIALOG_BACKDROP)
+    -- The dialog-box background texture renders see-through over the game world,
+    -- making the fields hard to read; a solid dark fill inside the border fixes it.
+    local fill = d:CreateTexture(nil, "BORDER")
+    fill:SetPoint("TOPLEFT", 11, -12)
+    fill:SetPoint("BOTTOMRIGHT", -12, 11)
+    fill:SetColorTexture(0.05, 0.05, 0.06, 0.95)
     d.title = d:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     d.title:SetPoint("TOP", 0, -16)
     d.save = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
@@ -1777,6 +1785,9 @@ local function BuildKindPanel(kind)
                 root:CreateCheckbox("Auto-combine auras with the same name",
                     function() return cue.matchName end,
                     function() ns.SetMatchName(key, not cue.matchName) end)
+                root:CreateCheckbox("Also match similar names (e.g. variant flasks)",
+                    function() return cue.matchSimilar end,
+                    function() ns.SetMatchSimilar(key, not cue.matchSimilar) end)
                 root:CreateButton("Add other spell IDs by hand…", openAltsDialog)
                 if cue.alts and #cue.alts > 0 then
                     root:CreateButton("Clear hand-added IDs", function() ns.SetCueAlts(key, {}) end)
@@ -1988,6 +1999,38 @@ do
         "window into place and \"Test this window\" to preview it.")
     BuildAppearanceSection(appearancePanel, "buff")
     BuildAppearanceSection(appearancePanel, "debuff")
+
+    -- Missing-buff box + ticker look / placement (which buffs go in them is set
+    -- on the Missing Buffs page).
+    appearancePanel.Header("Missing Buffs box")
+    appearancePanel.Slider("Icon size", 16, 80, 2, "%d",
+        function() return (ns.P().checklist and ns.P().checklist.size) or 40 end,
+        function(v) if ns.P().checklist then ns.P().checklist.size = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
+    appearancePanel.Slider("Icons per row", 1, 20, 1, "%d",
+        function() return (ns.P().checklist and ns.P().checklist.perRow) or 8 end,
+        function(v) if ns.P().checklist then ns.P().checklist.perRow = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
+    appearancePanel.SideBySide(
+        "Move box", function() if ns.SetChecklistReposition then ns.SetChecklistReposition(true) end end,
+        "Lock box", function() if ns.SetChecklistReposition then ns.SetChecklistReposition(false) end end,
+        "Test", function() if ns.TestChecklist then ns.TestChecklist() end end)
+    local function ClTicker() return ns.P().checklist and ns.P().checklist.ticker end
+    appearancePanel.Slider("Ticker width", 120, 800, 10, "%d",
+        function() return (ClTicker() and ClTicker().width) or 320 end,
+        function(v) if ClTicker() then ClTicker().width = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
+    local clRowY = appearancePanel.y
+    local function clRowBtn(label, x, fn)
+        local b = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+        b:SetPoint("TOPLEFT", x, clRowY); b:SetSize(120, 24); b:SetText(label); b:SetScript("OnClick", fn)
+    end
+    clRowBtn("Move ticker", LEFT + 6, function() if ns.SetChecklistTickerReposition then ns.SetChecklistTickerReposition(true) end end)
+    clRowBtn("Lock ticker", LEFT + 6 + 128, function() if ns.SetChecklistTickerReposition then ns.SetChecklistTickerReposition(false) end end)
+    local clFlashColor = MakeColorButton(content,
+        function() return ns.P().checklist.flashColor end, "Flash color…", 130,
+        function() if ns.ApplyChecklistFlashColor then ns.ApplyChecklistFlashColor() end end)
+    clFlashColor:SetPoint("TOPLEFT", LEFT + 6 + 256, clRowY)
+    appearancePanel.widgets[#appearancePanel.widgets + 1] = clFlashColor
+    appearancePanel.y = appearancePanel.y - 32
+
     content:SetHeight(-appearancePanel.y + 20)
 end
 
@@ -2380,37 +2423,8 @@ do
     idBtn:SetScript("OnClick", DoAddById)
     checklistPanel.y = checklistPanel.y - 34
 
-    -- Display controls.
-    checklistPanel.Slider("Icon size", 16, 80, 2, "%d",
-        function() return (ns.P().checklist and ns.P().checklist.size) or 40 end,
-        function(v) if ns.P().checklist then ns.P().checklist.size = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
-    checklistPanel.Slider("Icons per row", 1, 20, 1, "%d",
-        function() return (ns.P().checklist and ns.P().checklist.perRow) or 8 end,
-        function(v) if ns.P().checklist then ns.P().checklist.perRow = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
-    checklistPanel.SideBySide(
-        "Move box", function() if ns.SetChecklistReposition then ns.SetChecklistReposition(true) end end,
-        "Lock box", function() if ns.SetChecklistReposition then ns.SetChecklistReposition(false) end end,
-        "Test", function() if ns.TestChecklist then ns.TestChecklist() end end)
-
-    -- Scrolling ticker: width, position, and the edge-flash colour. (Which buffs
-    -- appear in the ticker / trigger the flash is per-item, in the list below.)
-    local function Ticker() return ns.P().checklist and ns.P().checklist.ticker end
-    checklistPanel.Slider("Ticker width", 120, 800, 10, "%d",
-        function() return (Ticker() and Ticker().width) or 320 end,
-        function(v) if Ticker() then Ticker().width = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
-    local clRowY = checklistPanel.y
-    local function clRowBtn(label, x, fn)
-        local b = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
-        b:SetPoint("TOPLEFT", x, clRowY); b:SetSize(120, 24); b:SetText(label); b:SetScript("OnClick", fn)
-    end
-    clRowBtn("Move ticker", LEFT + 6, function() if ns.SetChecklistTickerReposition then ns.SetChecklistTickerReposition(true) end end)
-    clRowBtn("Lock ticker", LEFT + 6 + 128, function() if ns.SetChecklistTickerReposition then ns.SetChecklistTickerReposition(false) end end)
-    local flashColorBtn = MakeColorButton(content,
-        function() return ns.P().checklist.flashColor end, "Flash color…", 130,
-        function() if ns.ApplyChecklistFlashColor then ns.ApplyChecklistFlashColor() end end)
-    flashColorBtn:SetPoint("TOPLEFT", LEFT + 6 + 256, clRowY)
-    checklistPanel.widgets[#checklistPanel.widgets + 1] = flashColorBtn
-    checklistPanel.y = checklistPanel.y - 32
+    -- (Box / ticker size + position + flash colour now live on the Appearance
+    -- page, under "Missing Buffs box".)
 
     -- The list of buffs in the checklist (pooled rows, rebuilt on refresh).
     local listHeader = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -2420,8 +2434,12 @@ do
     checklistPanel.y = checklistPanel.y - 22
     local listHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     listHint:SetPoint("TOPLEFT", LEFT, checklistPanel.y)
-    listHint:SetText("Per buff, while it's missing: |cffffd200Box|r shows its icon, |cffffd200Flash|r pulses the screen edge, |cffffd200Ticker|r scrolls its name.")
-    checklistPanel.y = checklistPanel.y - 16
+    listHint:SetWidth(500)
+    listHint:SetJustifyH("LEFT")
+    listHint:SetText("Per buff, while it's missing: |cffffd200Box|r shows its icon, "
+        .. "|cffffd200Flash|r pulses the screen edge, |cffffd200Ticker|r scrolls its name. "
+        .. "|cffffd200Similar|r counts variant names (e.g. Fleeting Flask) as present.")
+    checklistPanel.y = checklistPanel.y - 30
     -- Column headers over the per-row checkboxes.
     local boxHdr = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     boxHdr:SetPoint("TOPLEFT", LEFT + 210, checklistPanel.y); boxHdr:SetText("Box")
@@ -2429,6 +2447,8 @@ do
     flashHdr:SetPoint("TOPLEFT", LEFT + 264, checklistPanel.y); flashHdr:SetText("Flash")
     local tickerHdr = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
     tickerHdr:SetPoint("TOPLEFT", LEFT + 318, checklistPanel.y); tickerHdr:SetText("Ticker")
+    local similarHdr = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    similarHdr:SetPoint("TOPLEFT", LEFT + 372, checklistPanel.y); similarHdr:SetText("Similar")
     checklistPanel.y = checklistPanel.y - 16
     local listTop = checklistPanel.y
     local emptyNote = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
@@ -2438,7 +2458,7 @@ do
     local clRows = {}
     local function MakeClRow(i)
         local r = CreateFrame("Frame", nil, content)
-        r:SetSize(400, 26)
+        r:SetSize(460, 26)
         r.icon = r:CreateTexture(nil, "ARTWORK")
         r.icon:SetSize(20, 20); r.icon:SetPoint("LEFT", 0, 0)
         r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
@@ -2451,8 +2471,10 @@ do
         r.flash:SetSize(24, 24); r.flash:SetPoint("LEFT", r, "LEFT", 264, -1)
         r.ticker = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
         r.ticker:SetSize(24, 24); r.ticker:SetPoint("LEFT", r, "LEFT", 318, -1)
+        r.similar = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
+        r.similar:SetSize(24, 24); r.similar:SetPoint("LEFT", r, "LEFT", 372, -1)
         r.del = CreateFrame("Button", nil, r, "UIPanelCloseButton")
-        r.del:SetSize(24, 24); r.del:SetPoint("LEFT", r, "LEFT", 372, 0)
+        r.del:SetSize(24, 24); r.del:SetPoint("LEFT", r, "LEFT", 426, 0)
         clRows[i] = r
         return r
     end
@@ -2473,6 +2495,10 @@ do
             r.flash:SetScript("OnClick", function(self) ns.SetChecklistFlash(sid, self:GetChecked() and true or false) end)
             r.ticker:SetChecked(e.ticker and true or false)
             r.ticker:SetScript("OnClick", function(self) ns.SetChecklistTicker(sid, self:GetChecked() and true or false) end)
+            -- "Similar" name-matching is meaningless for the weapon-enchant row.
+            r.similar:SetShown(not e.isWeapon)
+            r.similar:SetChecked(e.similar and true or false)
+            r.similar:SetScript("OnClick", function(self) ns.SetChecklistSimilar(sid, self:GetChecked() and true or false) end)
             if e.isWeapon then
                 r.del:SetScript("OnClick", function() ns.SetChecklistWeaponEnchant(false); RefreshAllPanels() end)
             else
@@ -2485,6 +2511,290 @@ do
     end
     checklistPanel.rebuild = RebuildChecklist
     RebuildChecklist()
+end
+
+-- ---------------------------------------------------------------------
+-- Cooldowns subcategory: watch your spells and get an alert the moment each
+-- comes off cooldown. (Own cooldowns are never masked, so this works anywhere.)
+-- ---------------------------------------------------------------------
+local cooldownsPanel = NewPanel("Cooldowns")
+do
+    local content, LEFT = cooldownsPanel.content, cooldownsPanel.LEFT
+    local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
+    titleFS:SetPoint("TOPLEFT", LEFT, cooldownsPanel.y)
+    titleFS:SetText("Cooldowns")
+    cooldownsPanel.y = cooldownsPanel.y - 24
+    cooldownsPanel.Desc("Get an alert the instant a spell comes off cooldown — handy for big "
+        .. "abilities and procs. These read fine in any content, including raids and Mythic+.")
+    cooldownsPanel.y = cooldownsPanel.y + 14
+
+    -- Shared alert: one sound (a tone, Speak the name, or None) + optional flash.
+    local soundLbl = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    soundLbl:SetPoint("TOPLEFT", LEFT, cooldownsPanel.y)
+    soundLbl:SetText("Alert sound:")
+    local soundDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+    soundDD:SetPoint("LEFT", soundLbl, "RIGHT", 10, 0)
+    soundDD:SetSize(180, 26)
+    soundDD:SetDefaultText("None (silent)")
+    soundDD:SetupMenu(function(_, root)
+        local function cd() return ns.P() and ns.P().cooldowns end
+        root:CreateRadio("None (silent)",
+            function() local c = cd(); return c and not c.sound end,
+            function() ns.SetCooldownSound(false); C_Timer.After(0, function() soundDD:GenerateMenu() end) end)
+        for _, item in ipairs(ns.SOUNDS) do
+            local key = item.key
+            root:CreateRadio(item.label,
+                function() local c = cd(); return c and c.sound == key end,
+                function()
+                    ns.SetCooldownSound(key)
+                    if key == "speak" then ns.Speak("Combustion ready")
+                    else ns.PlaySoundEntry(key, ns.P().channel) end
+                    C_Timer.After(0, function() soundDD:GenerateMenu() end)
+                end)
+        end
+    end)
+    cooldownsPanel.y = cooldownsPanel.y - 32
+
+    cooldownsPanel.Check("Also flash the buff window when a cooldown is ready",
+        function() local p = ns.P(); return p and p.cooldowns and p.cooldowns.flash end,
+        function(v) ns.SetCooldownFlash(v) end)
+    cooldownsPanel.Button("Test alert", 120, function() if ns.TestCooldown then ns.TestCooldown() end end)
+
+    -- Add a cooldown: pick one of your abilities (with a live search), or by ID.
+    local cdSearch, cdSearchFocused = "", false
+    local UpdateCdResults
+    local addLbl = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    addLbl:SetPoint("TOPLEFT", LEFT, cooldownsPanel.y)
+    addLbl:SetText("Add a cooldown:")
+    local addDD = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+    addDD:SetPoint("LEFT", addLbl, "RIGHT", 10, 0)
+    addDD:SetSize(190, 26)
+    addDD:SetDefaultText("Choose an ability")
+    local searchLabel = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    searchLabel:SetPoint("LEFT", addDD, "RIGHT", 16, 0)
+    searchLabel:SetText("Search")
+    local searchBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+    searchBox:SetPoint("LEFT", searchLabel, "RIGHT", 8, 0)
+    searchBox:SetSize(130, 22)
+    searchBox:SetAutoFocus(false)
+    searchBox:SetFontObject("ChatFontNormal")
+    searchBox:SetScript("OnTextChanged", function(self)
+        cdSearch = (self:GetText() or ""):lower()
+        if UpdateCdResults then UpdateCdResults() end
+        addDD:GenerateMenu()
+    end)
+    searchBox:SetScript("OnEditFocusGained", function() cdSearchFocused = true; if UpdateCdResults then UpdateCdResults() end end)
+    searchBox:SetScript("OnEditFocusLost", function() cdSearchFocused = false; if UpdateCdResults then UpdateCdResults() end end)
+    searchBox:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
+
+    local function cdPasses(sp)
+        if not sp.mine then return false end                 -- your own abilities only
+        local p = ns.P()
+        if p and p.cooldowns and p.cooldowns.ids and p.cooldowns.ids[tostring(sp.spellID)] then
+            return false
+        end
+        -- Already covered by a combined watch (same / similar name) -> don't offer.
+        if ns.IsCooldownNameCombined and ns.IsCooldownNameCombined(sp.name) then return false end
+        return true
+    end
+    local function cdAddButton(parent, sp)
+        local sid = sp.spellID
+        local txt = string.format("|T%d:16:16:0:0|t %s", sp.icon or 134400, AuraName(sp.name, sid))
+        local btn = parent:CreateButton(txt, function() ns.SetCooldownWatch(sid, true); RefreshAllPanels() end)
+        if btn and btn.SetTooltip then
+            btn:SetTooltip(function(tt) if tt and tt.SetSpellByID then tt:SetSpellByID(sid) end end)
+        end
+    end
+    addDD:SetupMenu(function(_, root)
+        BuildGroupedAuraMenu(root, cdSearch, cdPasses, cdAddButton,
+            "|cff808080No abilities match — type, or add by spell ID|r")
+    end)
+    cooldownsPanel.widgets[#cooldownsPanel.widgets + 1] = addDD
+    cooldownsPanel.y = cooldownsPanel.y - 36
+
+    -- Live autocomplete popup for the search box: matching abilities to click-add.
+    local CD_RESULT_H, CD_MAX = 18, 12
+    local cdResults = MakeResultsPopup(content, 420)
+    cdResults:SetPoint("TOPLEFT", content, "TOPLEFT", LEFT, cooldownsPanel.y - 2)
+    local cdMore = cdResults:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    local cdResultBtns = {}
+    local function MakeCdResultBtn(i)
+        local b = CreateFrame("Button", nil, cdResults)
+        b:SetHeight(CD_RESULT_H)
+        b:SetPoint("TOPLEFT", cdResults, "TOPLEFT", 6, -6 - (i - 1) * CD_RESULT_H)
+        b:SetPoint("TOPRIGHT", cdResults, "TOPRIGHT", -6, -6 - (i - 1) * CD_RESULT_H)
+        local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.15)
+        b.icon = b:CreateTexture(nil, "ARTWORK"); b.icon:SetSize(16, 16); b.icon:SetPoint("LEFT", 2, 0)
+        b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        b.text = b:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        b.text:SetPoint("LEFT", b.icon, "RIGHT", 6, 0); b.text:SetPoint("RIGHT", b, "RIGHT", -4, 0)
+        b.text:SetJustifyH("LEFT")
+        b:SetScript("OnClick", function(self)
+            if not self.spellID then return end
+            ns.SetCooldownWatch(self.spellID, true)
+            searchBox:SetText("")
+            RefreshAllPanels()
+        end)
+        b:SetScript("OnEnter", function(self)
+            if self.spellID and GameTooltip.SetSpellByID then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetSpellByID(self.spellID); GameTooltip:Show()
+            end
+        end)
+        b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        cdResultBtns[i] = b
+        return b
+    end
+    UpdateCdResults = function()
+        if not ns.P() or (cdSearch == "" and not cdSearchFocused) then cdResults:Hide(); return end
+        local shown, more = 0, 0
+        for _, sp in ipairs(ns.GetSeenAuras()) do
+            local nm = AuraName(sp.name, sp.spellID)
+            local matchText = cdSearch == "" or nm:lower():find(cdSearch, 1, true)
+                or tostring(sp.spellID):find(cdSearch, 1, true)
+            if matchText and cdPasses(sp) then
+                if shown < CD_MAX then
+                    shown = shown + 1
+                    local b = cdResultBtns[shown] or MakeCdResultBtn(shown)
+                    b.spellID = sp.spellID
+                    b.icon:SetTexture(sp.icon or 134400)
+                    b.text:SetText(nm)
+                    b:Show()
+                else
+                    more = more + 1
+                end
+            end
+        end
+        for i = shown + 1, #cdResultBtns do cdResultBtns[i]:Hide() end
+        if shown == 0 then cdResults:Hide(); return end
+        ShowResultsPopup(cdResults, shown, CD_RESULT_H, 0, cdMore, more)
+    end
+    cooldownsPanel.y = cooldownsPanel.y - 8
+
+    local idLbl = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    idLbl:SetPoint("TOPLEFT", LEFT, cooldownsPanel.y)
+    idLbl:SetText("…or by spell ID:")
+    local idBox = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+    idBox:SetPoint("LEFT", idLbl, "RIGHT", 10, 0)
+    idBox:SetSize(80, 22)
+    idBox:SetAutoFocus(false); idBox:SetNumeric(true); idBox:SetFontObject("ChatFontNormal")
+    idBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    local idAdd = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    idAdd:SetPoint("LEFT", idBox, "RIGHT", 8, 0)
+    idAdd:SetSize(60, 22); idAdd:SetText("Add")
+    idAdd:SetScript("OnClick", function()
+        local id = tonumber(idBox:GetText())
+        if id and C_Spell.GetSpellName(id) then
+            ns.SetCooldownWatch(id, true); idBox:SetText(""); idBox:ClearFocus(); RefreshAllPanels()
+        end
+    end)
+    cooldownsPanel.y = cooldownsPanel.y - 36
+
+    cooldownsPanel.Header("Watched cooldowns")
+    local cdHint = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    cdHint:SetPoint("TOPLEFT", LEFT, cooldownsPanel.y)
+    cdHint:SetWidth(500); cdHint:SetJustifyH("LEFT")
+    cdHint:SetText("Optional: set what each alert says (blank = \"<name> ready\"). "
+        .. "The text is spoken when the alert sound is Speak the name.")
+    cooldownsPanel.y = cooldownsPanel.y - 18
+    local cdTop = cooldownsPanel.y
+    local cdEmpty = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    cdEmpty:SetPoint("TOPLEFT", LEFT + 4, cdTop)
+    cdEmpty:SetText("Nothing added yet — add an ability above.")
+    local cdRows = {}
+    local function MakeCdRow(i)
+        local r = CreateFrame("Frame", nil, content)
+        r:SetSize(440, 26)
+        r:EnableMouse(true)
+        r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        r.icon = r:CreateTexture(nil, "ARTWORK")
+        r.icon:SetSize(20, 20); r.icon:SetPoint("LEFT", 0, 0); r.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        r.name = r:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        r.name:SetPoint("LEFT", r.icon, "RIGHT", 8, 0); r.name:SetWidth(120)
+        r.name:SetJustifyH("LEFT"); r.name:SetWordWrap(false)
+        r.speak = CreateFrame("EditBox", nil, r, "InputBoxTemplate")
+        r.speak:SetPoint("LEFT", r.name, "RIGHT", 8, 0); r.speak:SetSize(150, 22)
+        r.speak:SetAutoFocus(false); r.speak:SetFontObject("ChatFontNormal")
+        r.speak:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+        r.ph = r.speak:CreateFontString(nil, "OVERLAY")
+        r.ph:SetFont(STANDARD_TEXT_FONT, 12, "")
+        r.ph:SetPoint("LEFT", r.speak, "LEFT", 6, 0); r.ph:SetPoint("RIGHT", r.speak, "RIGHT", -6, 0)
+        r.ph:SetJustifyH("LEFT"); r.ph:SetTextColor(0.5, 0.5, 0.5)
+        r.speak:HookScript("OnTextChanged", function(self) r.ph:SetShown((self:GetText() or "") == "") end)
+        r.test = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")
+        r.test:SetSize(40, 22); r.test:SetPoint("LEFT", r.speak, "RIGHT", 8, 0); r.test:SetText("Test")
+        r.edit = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")
+        r.edit:SetSize(42, 22); r.edit:SetPoint("LEFT", r.test, "RIGHT", 6, 0); r.edit:SetText("Edit")
+        r.del = CreateFrame("Button", nil, r, "UIPanelCloseButton")
+        r.del:SetSize(24, 24); r.del:SetPoint("LEFT", r.edit, "RIGHT", 6, 0)
+        cdRows[i] = r
+        return r
+    end
+    local function RebuildCooldowns()
+        local list = ns.GetCooldowns and ns.GetCooldowns() or {}
+        for _, r in ipairs(cdRows) do r:Hide() end
+        cdEmpty:SetShown(#list == 0)
+        local y = cdTop
+        for i, e in ipairs(list) do
+            local r = cdRows[i] or MakeCdRow(i)
+            r:ClearAllPoints(); r:SetPoint("TOPLEFT", LEFT + 4, y)
+            r.icon:SetTexture(e.icon); r.name:SetText(e.name)
+            local sid = e.spellID
+            r:SetScript("OnEnter", function(self)
+                if sid and GameTooltip.SetSpellByID then
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetSpellByID(sid); GameTooltip:Show()
+                end
+            end)
+            r.speak:SetText(e.speak or "")
+            r.speak:SetCursorPosition(0)
+            r.ph:SetText((e.name or "Spell") .. " ready")
+            r.ph:SetShown((e.speak or "") == "")
+            r.speak:SetScript("OnEscapePressed", function(self) self:SetText(e.speak or ""); self:ClearFocus() end)
+            r.speak:SetScript("OnEditFocusLost", function(self)
+                ns.SetCooldownSpeak(sid, self:GetText() or "")
+                self:SetCursorPosition(0)
+            end)
+            -- Edit menu: combine variant-named IDs into this one cooldown watch.
+            local cdAlts = e.alts
+            r.edit:SetScript("OnClick", function()
+                local cds = ns.P() and ns.P().cooldowns
+                if not cds then return end
+                local key = tostring(sid)
+                local function openAlts()
+                    StaticPopup_Show("AURACUE_ALTS", C_Spell.GetSpellName(sid) or key, nil, {
+                        key = sid, cooldown = true,
+                        current = cdAlts and table.concat(cdAlts, ", ") or "",
+                        after = function() RefreshAllPanels() end })
+                end
+                if not (MenuUtil and MenuUtil.CreateContextMenu) then openAlts(); return end
+                MenuUtil.CreateContextMenu(r.edit, function(_, root)
+                    root:CreateTitle(C_Spell.GetSpellName(sid) or "Cooldown")
+                    root:CreateCheckbox("Combine abilities with the same name",
+                        function() return cds.match and cds.match[key] end,
+                        function()
+                            ns.SetCooldownMatch(sid, not (cds.match and cds.match[key]))
+                            return MenuResponse and MenuResponse.Refresh or nil
+                        end)
+                    root:CreateCheckbox("Also match similar names (e.g. variants)",
+                        function() return cds.similar and cds.similar[key] end,
+                        function()
+                            ns.SetCooldownSimilar(sid, not (cds.similar and cds.similar[key]))
+                            return MenuResponse and MenuResponse.Refresh or nil
+                        end)
+                    root:CreateButton("Add other spell IDs by hand…", openAlts)
+                    if cdAlts and #cdAlts > 0 then
+                        root:CreateButton("Clear hand-added IDs", function() ns.SetCooldownAlts(sid, {}); RefreshAllPanels() end)
+                    end
+                end)
+            end)
+            r.test:SetScript("OnClick", function() if ns.TestCooldownAlert then ns.TestCooldownAlert(sid) end end)
+            r.del:SetScript("OnClick", function() ns.SetCooldownWatch(sid, false); RefreshAllPanels() end)
+            r:Show()
+            y = y - 26
+        end
+        content:SetHeight(-y + 40)
+    end
+    cooldownsPanel.rebuild = RebuildCooldowns
+    RebuildCooldowns()
 end
 
 -- ---------------------------------------------------------------------
@@ -2719,6 +3029,9 @@ local function OpenDetailDialog(sp, after)
         d.kindCheck:SetPoint("TOPLEFT", 24, -250); d.kindCheck:SetSize(24, 24)
         local kindFS = d:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         kindFS:SetPoint("LEFT", d.kindCheck, "RIGHT", 2, 1); kindFS:SetText("Treat as a debuff")
+        -- Quick path from the catalog to actually tracking the aura.
+        d.watch = CreateFrame("Button", nil, d, "UIPanelButtonTemplate")
+        d.watch:SetSize(140, 24); d.watch:SetPoint("BOTTOMLEFT", 20, 16)
         detailDialog = d
     end
     local d = detailDialog
@@ -2730,7 +3043,7 @@ local function OpenDetailDialog(sp, after)
     d.classDD:SetText(sp.className or "(none)")
     d.classDD:GenerateMenu()
     d.kindCheck:SetChecked(sp.kind == "debuff")
-    d.save:SetScript("OnClick", function()
+    local function applyEdits()
         ns.SetAuraGroup(sid, d.groupBox:GetText())
         ns.SetAuraDetail(sid, {
             dungeon   = d.dungeonBox:GetText(),
@@ -2738,6 +3051,18 @@ local function OpenDetailDialog(sp, after)
             className = d.selClass or "",
             kind      = d.kindCheck:GetChecked() and "debuff" or "buff",
         })
+    end
+    d.save:SetScript("OnClick", function()
+        applyEdits()
+        d:Hide()
+        if after then after() end
+    end)
+    local watched = ns.P() and ns.P().cues[tostring(sid)]
+    d.watch:SetText(watched and "Already watching" or "Watch this aura")
+    d.watch:SetEnabled(not watched)
+    d.watch:SetScript("OnClick", function()
+        applyEdits()   -- save the kind etc. first so the new cue is filed correctly
+        if not (ns.P() and ns.P().cues[tostring(sid)]) then ns.AddCue(sid) end
         d:Hide()
         if after then after() end
     end)
@@ -3068,6 +3393,7 @@ if Settings and Settings.RegisterCanvasLayoutCategory then
         searchCategories.bars = Settings.RegisterCanvasLayoutSubcategory(mainCategory, barsPanel.panel, "Bars")
         buffCategory = Settings.RegisterCanvasLayoutSubcategory(mainCategory, buffPanel.panel, "Buffs/Skills")
         searchCategories.buffs = buffCategory
+        searchCategories.cooldowns = Settings.RegisterCanvasLayoutSubcategory(mainCategory, cooldownsPanel.panel, "Cooldowns")
         searchCategories.debuffs = Settings.RegisterCanvasLayoutSubcategory(mainCategory, debuffPanel.panel, "Debuffs")
         searchCategories.missing = Settings.RegisterCanvasLayoutSubcategory(mainCategory, checklistPanel.panel, "Missing Buffs")
         searchCategories.organize = Settings.RegisterCanvasLayoutSubcategory(mainCategory, managePanel.panel, "Organize Auras")

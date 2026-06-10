@@ -139,6 +139,7 @@ local PROFILE_DEFAULTS = {
         weaponEnchant = false,  -- warn when a weapon has no temporary enchant (oil/stone)
         box      = {},      -- { [spellID-as-string] = true } items shown in the icon box
         flash    = {},      -- { [spellID-as-string] = true } items that trigger the edge flash
+        similar  = {},      -- { [spellID-as-string] = true } items satisfied by similar-named auras
         flashColor = { r = 1.0, g = 0.25, b = 0.2 },  -- the edge-flash colour
         -- A scrolling marquee of selected missing buffs (per-item opt-in below).
         ticker = {
@@ -151,6 +152,16 @@ local PROFILE_DEFAULTS = {
     -- Which watched-aura groups are collapsed on the Buffs/Debuffs pages,
     -- keyed "kind:groupName" -> true. UI state only.
     collapsed = {},
+    -- Cooldown-ready alerts: spells whose cooldown finishing fires an alert.
+    cooldowns = {
+        ids   = {},      -- { [spellID-as-string] = true } spells to watch
+        speak = {},      -- { [spellID-as-string] = "custom text" } per-spell alert text
+        match = {},      -- { [spellID-as-string] = true } combine same-named ability IDs
+        similar = {},    -- { [spellID-as-string] = true } combine similar-named IDs
+        alts  = {},      -- { [spellID-as-string] = { extra spellID, ... } } hand-added IDs
+        sound = "rise",  -- shared alert sound (a tone, "speak" for TTS, or false)
+        flash = false,   -- also flash the buff window when a cooldown comes up
+    },
     -- Watched auras, keyed by spellID-as-string -> cue config.
     cues = {},
 }
@@ -358,11 +369,18 @@ local function ValidateRanges(db)
     bars.shadow = bars.shadow and true or false
 
     if type(db.collapsed) ~= "table" then db.collapsed = {} end
+    if type(db.cooldowns) ~= "table" then db.cooldowns = {} end
+    if type(db.cooldowns.ids) ~= "table" then db.cooldowns.ids = {} end
+    if type(db.cooldowns.speak) ~= "table" then db.cooldowns.speak = {} end
+    if type(db.cooldowns.match) ~= "table" then db.cooldowns.match = {} end
+    if type(db.cooldowns.similar) ~= "table" then db.cooldowns.similar = {} end
+    if type(db.cooldowns.alts) ~= "table" then db.cooldowns.alts = {} end
 
     if type(db.checklist) ~= "table" then db.checklist = {} end
     local cl = db.checklist
     if type(cl.ids) ~= "table" then cl.ids = {} end
     if type(cl.flash) ~= "table" then cl.flash = {} end
+    if type(cl.similar) ~= "table" then cl.similar = {} end
     -- The icon box is now per-item. Migrate the old global "enabled" toggle:
     -- when it was on, every checklist item (and weapon enchant) showed in the box.
     if type(cl.box) ~= "table" then
@@ -875,7 +893,12 @@ local function KindEnabled(kind)
     return activeProfile.trackBuffs and true or false
 end
 
+-- Suppressed briefly after a loading screen: zoning re-applies your buffs as the
+-- world finishes loading, which would otherwise fire a burst of "gained" alerts.
+local zoneSettling = false
+
 local function FireCue(cue, spellName, eventKind)
+    if eventKind == "applied" and zoneSettling then return end
     if not ConditionMet(cue.when) then return end
     if not RequireMet(cue) then return end
     if not KindEnabled(cue.kind) then return end
@@ -1284,7 +1307,11 @@ local function RestoreBarsPosition()
     -- the width difference after a reload. (Skipped while moving: cfg.locked is
     -- false then, and the inflated size must stay.)
     if cfg and cfg.locked then
-        barContainer:SetSize(cfg.width or 220, cfg.height or 18)
+        -- Same size as move mode (full width + max-bars height) so the bars'
+        -- anchor edge — the container top for grow-down, bottom for grow-up —
+        -- lands exactly where the sample bars showed. A shorter container here
+        -- would shift the real bars off the spot you dragged the box to.
+        barContainer:SetSize(cfg.width or 220, (cfg.max or 8) * ((cfg.height or 18) + 2))
     end
     ApplyPoint(barContainer, cfg and cfg.position, "CENTER", -340, 0)
 end
@@ -1478,7 +1505,8 @@ function ns.SetBarsReposition(on)
     else
         cfg.locked = true
         barContainer:SetBackdrop(nil)
-        barContainer:SetSize(cfg.width or 220, cfg.height or 18)
+        -- Keep the full move-mode size so the bars don't jump when locking.
+        barContainer:SetSize(cfg.width or 220, (cfg.max or 8) * ((cfg.height or 18) + 2))
         barContainer:EnableMouse(false)
         -- Drop the sample bars from move mode, then restore the real ones for
         -- whatever's actually active right now (don't leave the window blank).
@@ -1566,46 +1594,67 @@ end
 
 -- Best-effort present check for a checklist buff, reusing the combat-masking
 -- handling: returns true (up), false (confirmed missing), or nil (can't tell).
+-- Two aura names "match similar" when one contains the other (case-insensitive),
+-- so variant consumables fold together (e.g. "Flask of the Magisters" and
+-- "Fleeting Flask of the Magisters"). A minimum length on each name keeps short,
+-- generic names (e.g. "Power") from over-matching.
+local function NamesSimilar(a, b)
+    if not a or not b then return false end
+    if a == b then return true end
+    if #a < 6 or #b < 6 then return false end
+    local la, lb = a:lower(), b:lower()
+    return la:find(lb, 1, true) ~= nil or lb:find(la, 1, true) ~= nil
+end
+ns.NamesSimilar = NamesSimilar
+
 local checklistPresent = {}
-local function ChecklistBuffPresent(sid, name)
-    -- If you ALSO watch this aura as a cue, reuse the cue engine's `present`
-    -- state — it's the same tracking the buff/debuff pages use, kept correct by
-    -- cast events as well as reads, so it works in instances where a raw read
-    -- can't. (Buffs that aren't watched fall through to reading them directly.)
+local function ChecklistBuffPresent(sid, name, loose)
+    -- In combat the game hides your auras from addons — instanced combat masks
+    -- every aura (all read nil), and consumable/other buffs mask in the open
+    -- world too — which made the box wrongly fill with "missing" buffs you
+    -- actually had. So while in combat, hold the last-known state, kept current
+    -- by out-of-combat reads and by the buffs you cast (ns.NoteChecklistCast /
+    -- ns.NoteChecklistReplaced), instead of trusting a blank read.
+    if InCombatLockdown() or UnitAffectingCombat("player") then
+        return checklistPresent[sid]
+    end
+    -- Out of combat, reads are reliable (even inside instances). If you ALSO
+    -- watch this aura as a cue, reuse the cue engine's `present` state (the same
+    -- tracking the buff/debuff pages use); otherwise read the aura directly.
     if activeProfile and activeProfile.cues[tostring(sid)] then
         local p = present[sid] and true or false
-        checklistPresent[sid] = p
-        return p
+        -- A "similar" item must still match variant buffs even when its exact
+        -- aura is tracked as a cue: only trust the cue's state here when it's UP
+        -- (or when this item isn't doing similar matching). Otherwise fall
+        -- through to the name-similarity check below.
+        if p or not loose then
+            checklistPresent[sid] = p
+            return p
+        end
     end
     local state = ReadAura(sid)
     local res
     if state == "present" then
         res = true
     elseif state == "unknown" then
-        -- The aura's fields are secret but it EXISTS (the id read returned non-nil
-        -- — nil would be "absent"), so for a present/missing check it's present.
+        -- Fields secret but the aura EXISTS (a nil read would be "absent"), so
+        -- for a present/missing check it counts as present.
         res = true
     else
-        -- Absent by id. Check by name (same-named different ranks) against the
-        -- once-per-update name set instead of scanning auras per item.
+        -- Absent by id; match by name (same-named different ranks) against the
+        -- once-per-update name set. With "match similar names" on for this item,
+        -- also accept a present aura whose name contains this one (e.g. "Fleeting
+        -- Flask of the Magisters" satisfies "Flask of the Magisters").
         EnsurePlayerNameSet()
         if name and clNameSet[name] then
             res = true
-        else
-            -- Absent by id AND name. Your own auras read fine in the open world
-            -- AND out of combat in instances (that's why the cues only freeze in
-            -- instanced *combat*), so trust "absent = missing" there. Only hold
-            -- the last-known state (kept current by reads, your casts via
-            -- ns.NoteChecklistCast, and aura swaps via ns.NoteChecklistReplaced)
-            -- where the read is unreliable: in INSTANCED combat, or a permanent
-            -- aura that masks in open-world combat (e.g. Devotion Aura).
-            local inCombat = InCombatLockdown() or UnitAffectingCombat("player")
-            local s = AuraCueDB.seen and AuraCueDB.seen[tostring(sid)]
-            if inCombat and (IsInInstance() or (s and s.permanent)) then
-                res = checklistPresent[sid]               -- can't read reliably: last known
-            else
-                res = false                               -- confirmed missing
+        elseif loose and name then
+            res = false
+            for pn in pairs(clNameSet) do
+                if NamesSimilar(pn, name) then res = true; break end
             end
+        else
+            res = false
         end
     end
     checklistPresent[sid] = res
@@ -1706,6 +1755,7 @@ local function UpdateChecklist()
     local size, perRow = cfg.size or 40, cfg.perRow or 8
     local boxed = cfg.box or {}
     local flagged = cfg.flash or {}
+    local similar = cfg.similar or {}
     local tickered = (cfg.ticker and cfg.ticker.ids) or {}
     local idx, anyFlash = 0, false
     local missingNames = {}
@@ -1717,7 +1767,7 @@ local function UpdateChecklist()
             -- same-named different-rank flask satisfy this one) lines up with
             -- the live aura's name.
             local name = C_Spell.GetSpellName(sid) or (seen and seen.name)
-            local missing = ChecklistBuffPresent(sid, name) == false
+            local missing = ChecklistBuffPresent(sid, name, similar[sidStr]) == false
             if missing and flagged[sidStr] then anyFlash = true end
             if missing and name and tickered[sidStr] then missingNames[#missingNames + 1] = name end
             if showAll or (missing and boxed[sidStr]) then
@@ -1921,6 +1971,15 @@ function ns.SetChecklistFlash(sid, on)
     UpdateChecklist()
 end
 
+-- Per-item opt-in: also count this item as present when a similar-named aura is
+-- up (e.g. "Flask of the Magisters" satisfied by "Fleeting Flask of the Magisters").
+function ns.SetChecklistSimilar(sid, on)
+    local cfg = ChecklistCfg(); if not cfg then return end
+    cfg.similar = cfg.similar or {}
+    cfg.similar[tostring(sid)] = on and true or nil
+    UpdateChecklist()
+end
+
 -- Per-item opt-in: include this item in the scrolling ticker while missing.
 function ns.SetChecklistTicker(sid, on)
     local cfg = ChecklistCfg(); if not cfg then return end
@@ -1964,6 +2023,7 @@ function ns.GetChecklist()
             box = (cfg.box and cfg.box[sidStr]) and true or false,
             flash = (cfg.flash and cfg.flash[sidStr]) and true or false,
             ticker = (cfg.ticker and cfg.ticker.ids and cfg.ticker.ids[sidStr]) and true or false,
+            similar = (cfg.similar and cfg.similar[sidStr]) and true or false,
         }
     end
     if cfg.weaponEnchant then
@@ -1990,6 +2050,243 @@ function ns.TestChecklist()
     RestoreChecklistPosition()
     UpdateChecklist()
     C_Timer.After(3, function() ns.checklistTest = nil; UpdateChecklist() end)
+end
+
+-- ---------------------------------------------------------------------
+-- Cooldown-ready alerts: watch your spells and fire an alert the moment each
+-- comes off cooldown. Your own cooldowns are never masked, so this works in any
+-- content. Driven by SPELL_UPDATE_COOLDOWN plus a per-spell timer that catches
+-- the exact natural expiry (the event doesn't reliably fire then).
+-- ---------------------------------------------------------------------
+local function CdCfg() return activeProfile and activeProfile.cooldowns end
+
+local cdOnCooldown = {}   -- id(number) -> true while on its own cooldown
+local cdReadyAt    = {}   -- id -> the ready time we've currently scheduled for
+local cdToken      = {}   -- id -> latest timer token (stale fires are ignored)
+
+-- ready(bool), readyAt(time it next becomes ready, or nil if ready now). Ignores
+-- the GCD (a short shared cooldown) and treats a charge spell as ready when it
+-- has at least one charge available.
+local function CooldownReadyInfoOne(id)
+    local GC = C_Spell and C_Spell.GetSpellCharges and C_Spell.GetSpellCharges(id)
+    if GC and (GC.maxCharges or 0) > 1 then
+        if (GC.currentCharges or 0) >= 1 then return true end
+        return false, (GC.cooldownStartTime or 0) + (GC.cooldownDuration or 0)
+    end
+    local CD = C_Spell and C_Spell.GetSpellCooldown and C_Spell.GetSpellCooldown(id)
+    if not CD then return true end
+    local dur = CD.duration or 0
+    if dur <= 1.6 then return true end                       -- off cooldown (or just the GCD)
+    local at = (CD.startTime or 0) + dur
+    if at - GetTime() <= 0.05 then return true end
+    return false, at
+end
+
+-- The spell IDs a cooldown entry covers: itself, hand-added alts, and (when
+-- combining) catalogued spells with the same / similar name. Lets one entry
+-- follow an ability across its talent/override variants.
+local function CooldownEntryIds(id)
+    local cfg = CdCfg()
+    if not cfg then return { id } end
+    local idStr = tostring(id)
+    local set, list = { [id] = true }, { id }
+    local function add(v) v = tonumber(v); if v and not set[v] then set[v] = true; list[#list + 1] = v end end
+    local alts = cfg.alts and cfg.alts[idStr]
+    if alts then for _, a in ipairs(alts) do add(a) end end
+    local match = cfg.match and cfg.match[idStr]
+    local similar = cfg.similar and cfg.similar[idStr]
+    if match or similar then
+        local myName = C_Spell.GetSpellName(id)
+        if myName then
+            for sidStr, info in pairs(AuraCueDB.seen or {}) do
+                local nm = info.name
+                if nm and ((match and nm == myName) or (similar and NamesSimilar(nm, myName))) then
+                    add(sidStr)
+                end
+            end
+        end
+    end
+    return list
+end
+
+-- Combined readiness: on cooldown if ANY covered spell is, ready only when all
+-- are; readyAt is the latest of the ones still on cooldown.
+local function CooldownReadyInfo(id)
+    local latest
+    for _, sid in ipairs(CooldownEntryIds(id)) do
+        local ready, at = CooldownReadyInfoOne(sid)
+        if not ready and (not latest or (at and at > latest)) then latest = at end
+    end
+    if latest then return false, latest end
+    return true
+end
+
+local function FireCooldownReady(id)
+    if zoneSettling then return end
+    local cfg = CdCfg(); if not cfg then return end
+    local name = C_Spell.GetSpellName(id) or "Ability"
+    local text = (cfg.speak and cfg.speak[tostring(id)]) or (name .. " ready")
+    if activeProfile.audioEnabled and cfg.sound then
+        PlayOrSpeak(cfg.sound, activeProfile.channel, text)
+    end
+    if cfg.flash then
+        local icon = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)
+        ShowVisual("buff", text, "applied", icon)
+    end
+end
+
+local EvalCooldown   -- forward (the scheduled timer re-evaluates through it)
+EvalCooldown = function(id)
+    local ready, at = CooldownReadyInfo(id)
+    if ready then
+        cdReadyAt[id] = nil
+        if cdOnCooldown[id] then
+            cdOnCooldown[id] = nil
+            FireCooldownReady(id)
+        end
+    else
+        cdOnCooldown[id] = true
+        -- Only (re)schedule when the ready time actually changed, so the
+        -- frequent cooldown event doesn't churn a timer every fire.
+        if not (cdReadyAt[id] and math.abs(cdReadyAt[id] - (at or 0)) < 0.1) then
+            cdReadyAt[id] = at
+            local token = (cdToken[id] or 0) + 1
+            cdToken[id] = token
+            if C_Timer then
+                C_Timer.After(math.max(0.05, (at or GetTime()) - GetTime() + 0.05),
+                    function() if cdToken[id] == token then EvalCooldown(id) end end)
+            end
+        end
+    end
+end
+
+-- Re-evaluate every watched cooldown (cooldown event, login, spec change). A
+-- spell already ready doesn't fire — only the on-cooldown -> ready transition.
+local function EvalAllCooldowns()
+    local cfg = CdCfg(); if not cfg or not cfg.ids then return end
+    for idStr in pairs(cfg.ids) do
+        local id = tonumber(idStr)
+        if id then EvalCooldown(id) end
+    end
+end
+ns.EvalAllCooldowns = EvalAllCooldowns
+
+-- Drop all transition state (used on spec change, where the watched set differs).
+function ns.ResyncCooldowns()
+    wipe(cdOnCooldown); wipe(cdReadyAt); wipe(cdToken)
+    EvalAllCooldowns()
+end
+
+function ns.SetCooldownWatch(id, on)
+    local cfg = CdCfg(); if not cfg then return end
+    cfg.ids = cfg.ids or {}
+    local idStr = tostring(id)
+    local isNew = on and not cfg.ids[idStr]
+    cfg.ids[idStr] = on and true or nil
+    if isNew then
+        -- Combine same-named ability IDs by default (talent/override variants).
+        cfg.match = cfg.match or {}
+        cfg.match[idStr] = true
+    elseif not on then
+        -- Removed: drop its per-spell settings so nothing stale lingers.
+        if cfg.match then cfg.match[idStr] = nil end
+        if cfg.similar then cfg.similar[idStr] = nil end
+        if cfg.alts then cfg.alts[idStr] = nil end
+        if cfg.speak then cfg.speak[idStr] = nil end
+    end
+    local n = tonumber(id)
+    cdOnCooldown[n] = nil; cdReadyAt[n] = nil   -- reset so re-adding can't double-fire
+    if on and n then EvalCooldown(n) end
+end
+
+-- True if a watched cooldown already combines this name (so the picker can stop
+-- offering the same-/similar-named variants as separate adds).
+function ns.IsCooldownNameCombined(name)
+    local cfg = CdCfg()
+    if not name or not cfg then return false end
+    for idStr in pairs(cfg.ids or {}) do
+        local match = cfg.match and cfg.match[idStr]
+        local similar = cfg.similar and cfg.similar[idStr]
+        if match or similar then
+            local nm = C_Spell.GetSpellName(tonumber(idStr))
+            if nm and ((match and nm == name) or (similar and NamesSimilar(nm, name))) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+function ns.SetCooldownSound(key) local cfg = CdCfg(); if cfg then cfg.sound = key end end
+function ns.SetCooldownFlash(on) local cfg = CdCfg(); if cfg then cfg.flash = on and true or nil end end
+
+-- Per-spell custom alert text (spoken when the sound is "Speak", and shown in
+-- the flash). Empty clears it back to the default "<name> ready".
+function ns.SetCooldownSpeak(id, text)
+    local cfg = CdCfg(); if not cfg then return end
+    cfg.speak = cfg.speak or {}
+    text = (text and text:gsub("^%s+", ""):gsub("%s+$", "")) or ""
+    cfg.speak[tostring(id)] = (text ~= "") and text or nil
+end
+
+-- Combine options (covered-ID set changes, so re-evaluate the entry).
+function ns.SetCooldownMatch(id, on)
+    local cfg = CdCfg(); if not cfg then return end
+    cfg.match = cfg.match or {}
+    cfg.match[tostring(id)] = on and true or nil
+    ns.SetCooldownWatch(id, true)
+end
+function ns.SetCooldownSimilar(id, on)
+    local cfg = CdCfg(); if not cfg then return end
+    cfg.similar = cfg.similar or {}
+    cfg.similar[tostring(id)] = on and true or nil
+    ns.SetCooldownWatch(id, true)
+end
+function ns.SetCooldownAlts(id, list)
+    local cfg = CdCfg(); if not cfg then return end
+    cfg.alts = cfg.alts or {}
+    cfg.alts[tostring(id)] = (list and #list > 0) and list or nil
+    ns.SetCooldownWatch(id, true)
+end
+
+function ns.GetCooldowns()
+    local cfg, out = CdCfg(), {}
+    if not cfg then return out end
+    for idStr in pairs(cfg.ids or {}) do
+        local id = tonumber(idStr)
+        local s = AuraCueDB.seen and AuraCueDB.seen[idStr]
+        out[#out + 1] = {
+            spellID = id,
+            name = C_Spell.GetSpellName(id) or (s and s.name) or ("Spell " .. idStr),
+            icon = (C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)) or (s and s.icon) or 134400,
+            speak = cfg.speak and cfg.speak[idStr] or nil,
+            match = (cfg.match and cfg.match[idStr]) and true or false,
+            similar = (cfg.similar and cfg.similar[idStr]) and true or false,
+            alts = cfg.alts and cfg.alts[idStr] or nil,
+        }
+    end
+    table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)
+    return out
+end
+
+-- Preview the cooldown-ready alert (Test button on the Cooldowns page).
+function ns.TestCooldown()
+    local cfg = CdCfg(); if not cfg then return end
+    if cfg.sound then PlayOrSpeak(cfg.sound, activeProfile.channel, "Combustion ready") end
+    if cfg.flash then ShowVisual("buff", "Combustion ready", "applied", 135826) end
+end
+
+-- Preview one watched cooldown's alert exactly as it would fire (its own spoken
+-- text / icon). Bypasses the zoning + audio-master guards so a test always plays.
+function ns.TestCooldownAlert(id)
+    local cfg = CdCfg(); if not cfg then return end
+    local name = C_Spell.GetSpellName(id) or "Ability"
+    local text = (cfg.speak and cfg.speak[tostring(id)]) or (name .. " ready")
+    if cfg.sound then PlayOrSpeak(cfg.sound, activeProfile.channel, text) end
+    if cfg.flash then
+        local icon = C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)
+        ShowVisual("buff", text, "applied", icon)
+    end
 end
 
 -- Decide what to do when a watched aura's id read comes back absent. Returns
@@ -2334,6 +2631,14 @@ local function RebuildAliases()
             local list = byName[cue.label]
             if list then for _, sidStr in ipairs(list) do add(sidStr) end end
         end
+        if cue.matchSimilar and cue.label then
+            -- Pull in catalogued auras whose name is similar (one contains the
+            -- other), e.g. variant consumables. O(catalog) per such cue, but only
+            -- for the cues you opt in. NamesSimilar also covers exact same-name.
+            for sidStr, info in pairs(seen) do
+                if info.name and NamesSimilar(info.name, cue.label) then add(sidStr) end
+            end
+        end
         cueAlts[key] = (#merged > 0) and merged or nil
     end
 end
@@ -2396,6 +2701,16 @@ function ns.SetMatchName(spellKey, on)
             if k ~= tostring(spellKey) and c.label == cue.label then cues[k] = nil end
         end
     end
+    ApplyCueChange()
+end
+
+-- Like SetMatchName but loose: also fold in catalogued auras whose name contains
+-- (or is contained by) this cue's name — e.g. variant consumables. The cue's bar
+-- follows the same matching since it tracks the cue.
+function ns.SetMatchSimilar(spellKey, on)
+    local cue = activeProfile and activeProfile.cues and activeProfile.cues[tostring(spellKey)]
+    if not cue then return end
+    cue.matchSimilar = on and true or nil
     ApplyCueChange()
 end
 
@@ -2778,6 +3093,7 @@ eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")  -- combat started: re-baseline
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")   -- combat ended: re-sync
 eventFrame:RegisterEvent("SPELLS_CHANGED")          -- spellbook changed: re-harvest
+eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")   -- a cooldown started/changed
 eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
 eventFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 
@@ -2978,6 +3294,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         RestoreChecklistPosition()
         RestoreChecklistTickerPosition()
         ns.UpdateChecklist()
+        ns.ResyncCooldowns()   -- the new spec has its own abilities / cooldowns
         if ns.RefreshOptions then ns.RefreshOptions() end
 
     elseif event == "SPELLS_CHANGED" then
@@ -2995,10 +3312,26 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
+        -- Zoning re-applies your buffs as the world loads, and reads can lag the
+        -- load — an aura can baseline absent here then re-register a moment later,
+        -- firing a false "gained". Silence gained alerts briefly, then re-baseline
+        -- once things have settled.
+        zoneSettling = true
         SeedPresent()
         RestoreChecklistPosition()
         RestoreChecklistTickerPosition()
         ns.UpdateChecklist()
+        EvalAllCooldowns()
+        if C_Timer then
+            C_Timer.After(2, function()
+                zoneSettling = false
+                SeedPresent()
+                ns.UpdateChecklist()
+                EvalAllCooldowns()
+            end)
+        else
+            zoneSettling = false
+        end
 
     elseif event == "PLAYER_REGEN_DISABLED" then
         -- Combat started: some of our own auras' id reads get masked the moment
@@ -3018,6 +3351,9 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     elseif event == "UNIT_AURA" then
         ScanPlayerAuras()
         ScheduleChecklistUpdate()
+
+    elseif event == "SPELL_UPDATE_COOLDOWN" then
+        EvalAllCooldowns()
 
     elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         local unit, _, spellID = ...
@@ -3517,6 +3853,27 @@ SlashCmdList["AURACUE"] = function(msg)
                 local byName = AuraNamePresent(C_Spell.GetSpellName(sid))
                 local nm = (byName == true) and " name:yes" or (byName == false and " name:no" or " name:?")
                 print("  " .. key .. " " .. (C_Spell.GetSpellName(sid) or "?") .. ": " .. d .. perm .. nm)
+            end
+            -- Checklist items (with ~ when "Similar" is on) and the live buff
+            -- NAMES, so similar-match problems are visible (food/flask names vary).
+            local clcfg = ChecklistCfg()
+            if clcfg then
+                chatPrint("checklist items (~ = similar on):")
+                for sidStr in pairs(clcfg.ids or {}) do
+                    local s = AuraCueDB.seen and AuraCueDB.seen[sidStr]
+                    local nm = C_Spell.GetSpellName(tonumber(sidStr)) or (s and s.name) or "?"
+                    local sim = (clcfg.similar and clcfg.similar[sidStr]) and "~" or " "
+                    print("  " .. sim .. " " .. sidStr .. " \"" .. nm .. "\"")
+                end
+                local names = {}
+                if AuraUtil and AuraUtil.ForEachAura then
+                    AuraUtil.ForEachAura("player", "HELPFUL", nil, function(data)
+                        local n = data and Reveal(data.name)
+                        if n and n ~= "" then names[#names + 1] = n end
+                        return false
+                    end, true)
+                end
+                chatPrint("current buffs: " .. table.concat(names, " | "))
             end
 
         elseif cmd == "status" then
