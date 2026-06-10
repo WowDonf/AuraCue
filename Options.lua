@@ -373,16 +373,21 @@ local function NewPanel(name)
 
     local LEFT = 18
     local widgets = {}
-    local ctx = { panel = panel, content = content, widgets = widgets, LEFT = LEFT, y = -14 }
+    -- Helpers build into `target` (the page content by default). A page can
+    -- redirect it to a sub-container with ctx.SetTarget (e.g. to put a section
+    -- behind a tab), then restore it with ctx.SetTarget(nil).
+    local target = content
+    local ctx = { panel = panel, content = content, target = content, widgets = widgets, LEFT = LEFT, y = -14 }
+    function ctx.SetTarget(f) target = f or content; ctx.target = target end
 
     function ctx.Header(text)
         ctx.y = ctx.y - 8
-        local fs = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+        local fs = target:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         fs:SetPoint("TOPLEFT", LEFT, ctx.y)
         fs:SetText(text)
         fs:SetTextColor(1, 0.82, 0)
         ctx.y = ctx.y - 22
-        local line = content:CreateTexture(nil, "ARTWORK")
+        local line = target:CreateTexture(nil, "ARTWORK")
         line:SetColorTexture(1, 1, 1, 0.12)
         line:SetHeight(1)
         line:SetPoint("TOPLEFT", LEFT, ctx.y)
@@ -391,7 +396,7 @@ local function NewPanel(name)
     end
 
     function ctx.Desc(text)
-        local fs = content:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+        local fs = target:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
         fs:SetPoint("TOPLEFT", LEFT, ctx.y)
         fs:SetWidth(520)
         fs:SetJustifyH("LEFT")
@@ -405,10 +410,10 @@ local function NewPanel(name)
 
     -- A checkbox at a given x on the current row (doesn't advance y).
     local function checkAt(x, label, getter, setter)
-        local cb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+        local cb = CreateFrame("CheckButton", nil, target, "UICheckButtonTemplate")
         cb:SetPoint("TOPLEFT", x, ctx.y)
         cb:SetSize(26, 26)
-        local fs = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        local fs = target:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         fs:SetPoint("LEFT", cb, "RIGHT", 4, 1)
         fs:SetText(label)
         cb:SetScript("OnClick", function(self) setter(self:GetChecked() and true or false) end)
@@ -432,12 +437,12 @@ local function NewPanel(name)
 
     function ctx.Slider(label, minV, maxV, step, fmt, getter, setter)
         ctx.y = ctx.y - 4
-        local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        local titleFS = target:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         titleFS:SetPoint("TOPLEFT", LEFT, ctx.y)
         titleFS:SetText(label)
-        local valFS = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        local valFS = target:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         ctx.y = ctx.y - 18
-        local s = CreateFrame("Slider", nil, content)
+        local s = CreateFrame("Slider", nil, target)
         s:SetPoint("TOPLEFT", LEFT + 4, ctx.y)
         s:SetOrientation("HORIZONTAL")
         s:SetSize(360, 18)
@@ -469,11 +474,11 @@ local function NewPanel(name)
     end
 
     function ctx.Dropdown(label, width)
-        local titleFS = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        local titleFS = target:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         titleFS:SetPoint("TOPLEFT", LEFT, ctx.y)
         titleFS:SetText(label)
         ctx.y = ctx.y - 22
-        local dd = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+        local dd = CreateFrame("DropdownButton", nil, target, "WowStyle1DropdownTemplate")
         dd:SetPoint("TOPLEFT", LEFT + 6, ctx.y)
         dd:SetSize(width or 280, 30)
         ctx.y = ctx.y - 40
@@ -486,9 +491,9 @@ local function NewPanel(name)
         local col2 = LEFT + width + 50
         local topY = ctx.y
         local function one(label, x)
-            local lbl = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+            local lbl = target:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
             lbl:SetPoint("TOPLEFT", x, topY); lbl:SetText(label)
-            local dd = CreateFrame("DropdownButton", nil, content, "WowStyle1DropdownTemplate")
+            local dd = CreateFrame("DropdownButton", nil, target, "WowStyle1DropdownTemplate")
             dd:SetPoint("TOPLEFT", x + 6, topY - 22); dd:SetSize(width, 30)
             return dd
         end
@@ -499,7 +504,7 @@ local function NewPanel(name)
     end
 
     function ctx.Button(label, width, onClick)
-        local b = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+        local b = CreateFrame("Button", nil, target, "UIPanelButtonTemplate")
         b:SetPoint("TOPLEFT", LEFT + 6, ctx.y)
         b:SetSize(width or 160, 24)
         b:SetText(label)
@@ -511,11 +516,11 @@ local function NewPanel(name)
     -- A labeled text field bound to a getter/setter (commit on focus loss).
     -- `placeholder` (optional) shows as greyed text while the box is empty.
     function ctx.EditLine(label, getter, setter, width, placeholder)
-        local lbl = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        local lbl = target:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         lbl:SetPoint("TOPLEFT", LEFT, ctx.y)
         lbl:SetText(label)
         ctx.y = ctx.y - 20
-        local eb = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+        local eb = CreateFrame("EditBox", nil, target, "InputBoxTemplate")
         eb:SetPoint("TOPLEFT", LEFT + 6, ctx.y)
         eb:SetSize(width or 240, 22)
         eb:SetAutoFocus(false)
@@ -566,7 +571,7 @@ local function NewPanel(name)
         for i = 1, #args / 2 do
             local label = args[(i - 1) * 2 + 1]
             local onClick = args[(i - 1) * 2 + 2]
-            local b = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+            local b = CreateFrame("Button", nil, target, "UIPanelButtonTemplate")
             b:SetPoint("TOPLEFT", x, ctx.y)
             b:SetSize(180, 24)
             b:SetText(label)
@@ -644,9 +649,10 @@ end
 -- Two colour-swatch buttons on a single row.
 local function AddColorPair(ctx, getA, labelA, getB, labelB, onChange)
     local W = 210
-    local a = MakeColorButton(ctx.content, getA, labelA, W, onChange)
+    local parent = ctx.target or ctx.content
+    local a = MakeColorButton(parent, getA, labelA, W, onChange)
     a:SetPoint("TOPLEFT", ctx.LEFT + 6, ctx.y)
-    local b = MakeColorButton(ctx.content, getB, labelB, W, onChange)
+    local b = MakeColorButton(parent, getB, labelB, W, onChange)
     b:SetPoint("TOPLEFT", ctx.LEFT + 6 + W + 12, ctx.y)
     ctx.widgets[#ctx.widgets + 1] = a
     ctx.widgets[#ctx.widgets + 1] = b
@@ -1995,43 +2001,85 @@ do
     titleFS:SetPoint("TOPLEFT", LEFT, appearancePanel.y)
     titleFS:SetText("Appearance")
     appearancePanel.y = appearancePanel.y - 24
-    appearancePanel.Desc("How the on-screen flash looks for each kind. Use \"Move window\" to drag a " ..
-        "window into place and \"Test this window\" to preview it.")
-    BuildAppearanceSection(appearancePanel, "buff")
-    BuildAppearanceSection(appearancePanel, "debuff")
+    appearancePanel.Desc("Look and placement of the on-screen flash and the missing-buff box. " ..
+        "Pick a tab below; use \"Move\" to drag a window into place and \"Test\" to preview it.")
 
-    -- Missing-buff box + ticker look / placement (which buffs go in them is set
-    -- on the Missing Buffs page).
-    appearancePanel.Header("Missing Buffs box")
-    appearancePanel.Slider("Icon size", 16, 80, 2, "%d",
-        function() return (ns.P().checklist and ns.P().checklist.size) or 40 end,
-        function(v) if ns.P().checklist then ns.P().checklist.size = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
-    appearancePanel.Slider("Icons per row", 1, 20, 1, "%d",
-        function() return (ns.P().checklist and ns.P().checklist.perRow) or 8 end,
-        function(v) if ns.P().checklist then ns.P().checklist.perRow = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
-    appearancePanel.SideBySide(
-        "Move box", function() if ns.SetChecklistReposition then ns.SetChecklistReposition(true) end end,
-        "Lock box", function() if ns.SetChecklistReposition then ns.SetChecklistReposition(false) end end,
-        "Test", function() if ns.TestChecklist then ns.TestChecklist() end end)
-    local function ClTicker() return ns.P().checklist and ns.P().checklist.ticker end
-    appearancePanel.Slider("Ticker width", 120, 800, 10, "%d",
-        function() return (ClTicker() and ClTicker().width) or 320 end,
-        function(v) if ClTicker() then ClTicker().width = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
-    local clRowY = appearancePanel.y
-    local function clRowBtn(label, x, fn)
-        local b = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
-        b:SetPoint("TOPLEFT", x, clRowY); b:SetSize(120, 24); b:SetText(label); b:SetScript("OnClick", fn)
+    -- Builds the missing-buff box/ticker controls into `cont` (the active tab's
+    -- container). The custom buttons are parented to it directly.
+    local function BuildMissingSection(cont)
+        appearancePanel.Header("Missing buffs")
+        appearancePanel.Slider("Icon size", 16, 80, 2, "%d",
+            function() return (ns.P().checklist and ns.P().checklist.size) or 40 end,
+            function(v) if ns.P().checklist then ns.P().checklist.size = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
+        appearancePanel.Slider("Icons per row", 1, 20, 1, "%d",
+            function() return (ns.P().checklist and ns.P().checklist.perRow) or 8 end,
+            function(v) if ns.P().checklist then ns.P().checklist.perRow = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
+        appearancePanel.SideBySide(
+            "Move box", function() if ns.SetChecklistReposition then ns.SetChecklistReposition(true) end end,
+            "Lock box", function() if ns.SetChecklistReposition then ns.SetChecklistReposition(false) end end,
+            "Test", function() if ns.TestChecklist then ns.TestChecklist() end end)
+        local function ClTicker() return ns.P().checklist and ns.P().checklist.ticker end
+        appearancePanel.Slider("Ticker width", 120, 800, 10, "%d",
+            function() return (ClTicker() and ClTicker().width) or 320 end,
+            function(v) if ClTicker() then ClTicker().width = v end; if ns.UpdateChecklist then ns.UpdateChecklist() end end)
+        local clRowY = appearancePanel.y
+        local function clRowBtn(label, x, fn)
+            local b = CreateFrame("Button", nil, cont, "UIPanelButtonTemplate")
+            b:SetPoint("TOPLEFT", x, clRowY); b:SetSize(120, 24); b:SetText(label); b:SetScript("OnClick", fn)
+        end
+        clRowBtn("Move ticker", LEFT + 6, function() if ns.SetChecklistTickerReposition then ns.SetChecklistTickerReposition(true) end end)
+        clRowBtn("Lock ticker", LEFT + 6 + 128, function() if ns.SetChecklistTickerReposition then ns.SetChecklistTickerReposition(false) end end)
+        local clFlashColor = MakeColorButton(cont,
+            function() return ns.P().checklist.flashColor end, "Flash color…", 130,
+            function() if ns.ApplyChecklistFlashColor then ns.ApplyChecklistFlashColor() end end)
+        clFlashColor:SetPoint("TOPLEFT", LEFT + 6 + 256, clRowY)
+        appearancePanel.widgets[#appearancePanel.widgets + 1] = clFlashColor
+        appearancePanel.y = appearancePanel.y - 32
     end
-    clRowBtn("Move ticker", LEFT + 6, function() if ns.SetChecklistTickerReposition then ns.SetChecklistTickerReposition(true) end end)
-    clRowBtn("Lock ticker", LEFT + 6 + 128, function() if ns.SetChecklistTickerReposition then ns.SetChecklistTickerReposition(false) end end)
-    local clFlashColor = MakeColorButton(content,
-        function() return ns.P().checklist.flashColor end, "Flash color…", 130,
-        function() if ns.ApplyChecklistFlashColor then ns.ApplyChecklistFlashColor() end end)
-    clFlashColor:SetPoint("TOPLEFT", LEFT + 6 + 256, clRowY)
-    appearancePanel.widgets[#appearancePanel.widgets + 1] = clFlashColor
-    appearancePanel.y = appearancePanel.y - 32
 
-    content:SetHeight(-appearancePanel.y + 20)
+    -- One tab per window: its section is built into its own container and only
+    -- the active one is shown, so the page never scrolls a long combined list.
+    local TABS = {
+        { key = "buff",    label = "Buffs",         build = function() BuildAppearanceSection(appearancePanel, "buff") end },
+        { key = "debuff",  label = "Debuffs",       build = function() BuildAppearanceSection(appearancePanel, "debuff") end },
+        { key = "missing", label = "Missing buffs", build = function(c) BuildMissingSection(c) end },
+    }
+    local tabBtns, containers = {}, {}
+    local tabX = LEFT
+    for _, t in ipairs(TABS) do
+        local tb = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+        tb:SetSize(120, 24); tb:SetPoint("TOPLEFT", tabX, appearancePanel.y); tb:SetText(t.label)
+        tabBtns[t.key] = tb
+        tabX = tabX + 124
+    end
+    appearancePanel.y = appearancePanel.y - 32
+    local sectionTop = appearancePanel.y
+
+    for _, t in ipairs(TABS) do
+        local cont = CreateFrame("Frame", nil, content)
+        cont:SetPoint("TOPLEFT", content, "TOPLEFT", 0, sectionTop)
+        cont:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, sectionTop)
+        appearancePanel.SetTarget(cont)
+        appearancePanel.y = -8
+        t.build(cont)
+        cont.h = -appearancePanel.y + 8
+        cont:SetHeight(cont.h)
+        cont:Hide()
+        containers[t.key] = cont
+        appearancePanel.SetTarget(nil)
+    end
+
+    local function ShowTab(key)
+        for k, c in pairs(containers) do c:SetShown(k == key) end
+        for k, tb in pairs(tabBtns) do
+            if k == key then tb:LockHighlight() else tb:UnlockHighlight() end
+        end
+        content:SetHeight(-sectionTop + (containers[key].h or 0) + 30)
+    end
+    for _, t in ipairs(TABS) do
+        tabBtns[t.key]:SetScript("OnClick", function() ShowTab(t.key) end)
+    end
+    ShowTab("buff")
 end
 
 -- ---------------------------------------------------------------------
