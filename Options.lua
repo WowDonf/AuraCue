@@ -3512,7 +3512,8 @@ function ns.ShowWelcome(force)
         body:SetPoint("TOPLEFT", 26, -62); body:SetPoint("TOPRIGHT", -26, -62)
         body:SetJustifyH("LEFT"); body:SetSpacing(3)
         body:SetText("AuraCue turns your own buffs and debuffs into a sound, a spoken name, an "
-            .. "on-screen flash, or a timer bar — and can warn you about missing buffs.\n\n"
+            .. "on-screen flash, or a timer bar — it can also alert you when spells come off "
+            .. "cooldown and warn you about missing buffs.\n\n"
             .. "To get started:\n"
             .. "1.  Add the auras you want to watch on the |cffffd200Buffs/Skills|r page.\n"
             .. "2.  Give each one a sound / speech / flash from its row.\n"

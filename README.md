@@ -5,7 +5,9 @@
 A personal aura-alert addon for World of Warcraft (Midnight, 12.x). AuraCue
 turns your own buffs and debuffs into a **sound**, a **spoken name**, and/or
 an **on-screen flash** — for proc alerts, cooldown windows, and debuff
-warnings.
+warnings. It can also announce the moment your spells come off **cooldown**
+(see [Cooldown-ready alerts](#cooldown-ready-alerts)) and flag **missing
+buffs** (see [Missing-buff checklist](#missing-buff-checklist)).
 
 Each watched aura can cue when it's **gained**, when it's **lost**, or both:
 
@@ -138,6 +140,11 @@ spell and its talented proc version. AuraCue can treat them as one cue:
   same-named aura drive a single alert and merges duplicate rows.
 - Or a watched row's **Edit** menu lets you combine just that one by name, or
   add specific extra spell IDs by hand.
+- **Match similar names** (also in the Edit menu) goes a step further and folds
+  in variant names where one contains the other — so "Hearty Well Fed" satisfies
+  a "Well Fed" alert, and "Fleeting Flask of the Magisters" counts for "Flask of
+  the Magisters". The same option is available on the Missing Buffs and Cooldowns
+  pages.
 
 ## Timer bars
 
@@ -151,6 +158,19 @@ minutes / hours for long buffs.
 
 ![Timer bars on screen](assets/screenshots/bars-in-action.png)
 
+## Cooldown-ready alerts
+
+The **Cooldowns** page watches your spells and fires a cue — a sound, a spoken
+name, and/or a flash — the instant each one comes off **cooldown**, so you know
+a key ability is ready again without watching the action bar. Each spell's
+spoken text is editable (blank says "*name* ready"), and a per-row **Edit** menu
+can combine same- or similar-named ability IDs into one watch so it follows an
+ability across its talent / override variants. Charge spells are handled (ready
+as soon as a charge is available) and the global cooldown is ignored. Your own
+spell cooldowns are never hidden from addons, so these fire reliably in any
+content — raids, Mythic+, anywhere. Each row has its own **Test** button, and the
+picker has a live search box.
+
 ## Missing-buff checklist
 
 The **Missing Buffs** page builds a list of the buffs you want kept up; a
@@ -160,7 +180,12 @@ Temporary weapon enchants (oils / sharpening stones) aren't auras, so they get
 their own "warn if missing" row. Per item you can also tick **Flash** (a pulsing
 screen-edge glow, in a color you choose, while it's missing) and **Ticker** (a
 scrolling marquee of the missing names). Matching is by name, so a different
-rank of the same flask still counts as present.
+rank of the same flask still counts as present, and a per-item **Similar** tick
+also accepts variant names (e.g. "Hearty Well Fed" for "Well Fed").
+
+During combat the game hides your auras from addons, so the box **holds its
+last-known state** — kept current by the buffs you cast — instead of falsely
+flagging everything as missing the moment a fight starts.
 
 ![The missing-buff box and scrolling ticker on screen](assets/screenshots/missing-buffs-box.png)
 

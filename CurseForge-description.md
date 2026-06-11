@@ -1,5 +1,5 @@
 <!-- Project Summary (~150 chars, paste into the separate "Summary" field, NOT the description):
-Turn your own buffs and debuffs into sound, speech, on-screen flashes, and timer bars — proc alerts, cooldown timers, and a missing-buff checklist.
+Turn your own buffs and debuffs into sound, speech, on-screen flashes, and timer bars — proc alerts, cooldown-ready alerts, and a missing-buff checklist.
 -->
 
 # AuraCue
@@ -10,7 +10,8 @@ Turn your own buffs and debuffs into sound, speech, on-screen flashes, and timer
 
 AuraCue watches the auras *you* choose and fires a cue when each one is
 **gained** or **lost** — handy for proc alerts, cooldown windows, and debuff
-warnings. Pick any combination of:
+warnings. It can also alert you the instant a spell comes off **cooldown** and
+flag the **buffs you're missing**. Pick any combination of:
 
 - **Sound** — a distinct tone on the audio channel you pick (separate sounds
   for gained and lost), including matched open/close pairs where the gained
@@ -65,8 +66,15 @@ is your choice** (and always reversible).
 
 ## More
 
+- **Cooldown-ready alerts** (the **Cooldowns** page) — watch your spells and get
+  a sound, spoken name, and/or flash the moment each comes off cooldown. Handles
+  charge spells, ignores the global cooldown, and fires reliably in any content
+  (your own cooldowns are never hidden from addons). Each spell's spoken text is
+  editable, with a per-row Test button and a live search picker.
 - **Combine variants** — make a base spell and its proc version (different
-  spell IDs) fire one alert, by name or by hand.
+  spell IDs) fire one alert, by name or by hand. **Match similar names** also
+  folds in variants where one name contains the other (e.g. "Hearty Well Fed"
+  counts as "Well Fed"); it works for cues, missing buffs, and cooldowns.
 - **Timer bars** — optional depleting duration bars for your cooldowns/buffs,
   in one movable window with selectable bar texture, font, and colors.
 - **Missing-buff checklist** (the **Missing Buffs** page) — list the buffs you
