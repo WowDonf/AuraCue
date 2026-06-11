@@ -1181,6 +1181,11 @@ local function catalogHandler(data)
     return false
 end
 local function CatalogVisibleAuras()
+    -- Pointless in combat: aura spellIds are secret, so the sweep catalogues
+    -- nothing — it would just allocate a packed table per aura for no gain. Skip
+    -- it (matches RefreshGateStates), which kills that churn during open-world
+    -- combat. Auras still on you afterward get catalogued on the next OOC tick.
+    if InCombatLockdown() or UnitAffectingCombat("player") then return end
     local now = GetTime()
     if now - lastCatalog < CATALOG_INTERVAL then return end
     lastCatalog = now
@@ -1591,6 +1596,13 @@ local function EnsurePlayerNameSet()
         AuraUtil.ForEachAura("player", "HARMFUL", nil, _clNameCollect, true)
     end
 end
+-- The packed ForEachAura sweep above allocates a table per aura, so we keep the
+-- built set and only mark it stale when the player's auras actually change (see
+-- the UNIT_AURA / cast / transition handlers). Without this the set was rebuilt
+-- on every UpdateChecklist — including the silent 2s weapon-enchant poll — which
+-- churned memory out of combat for no reason.
+local function InvalidatePlayerNameSet() clNameSetReady = false end
+ns.InvalidatePlayerNameSet = InvalidatePlayerNameSet
 
 -- Best-effort present check for a checklist buff, reusing the combat-masking
 -- handling: returns true (up), false (confirmed missing), or nil (can't tell).
@@ -1750,7 +1762,9 @@ local function UpdateChecklist()
     if not cfg or (not ns.checklistTest and not next(cfg.ids or {}) and not cfg.weaponEnchant) then
         checklistContainer:Hide(); SetChecklistFlashActive(false); return
     end
-    clNameSetReady = false   -- rebuild the aura-name set at most once this pass
+    -- The aura-name set is cached across updates and invalidated on aura change
+    -- (InvalidatePlayerNameSet), so a routine refresh that changed nothing — e.g.
+    -- the 2s weapon poll — reuses it instead of re-sweeping every aura.
     local showAll = ns.checklistTest and true or false   -- test: show every entry
     local size, perRow = cfg.size or 40, cfg.perRow or 8
     local boxed = cfg.box or {}
@@ -1839,6 +1853,9 @@ ns.UpdateChecklist = UpdateChecklist
 -- every aura tick in combat generated a lot of churn.
 local clPending = false
 local function ScheduleChecklistUpdate()
+    -- An aura changed (this is called from UNIT_AURA and casts), so the cached
+    -- name set is now stale — rebuild it on the next update.
+    InvalidatePlayerNameSet()
     if clPending or not C_Timer then return end
     clPending = true
     C_Timer.After(0.35, function() clPending = false; UpdateChecklist() end)
@@ -1846,11 +1863,21 @@ end
 ns.ScheduleChecklistUpdate = ScheduleChecklistUpdate
 
 -- Weapon enchants expire silently (no event), so poll while they're being
--- watched so the "missing" icon appears when an oil/stone runs out.
+-- watched so the "missing" icon appears when an oil/stone runs out. The poll
+-- itself is cheap (GetWeaponEnchantInfo returns booleans, no allocation); we
+-- only run the full, table-allocating UpdateChecklist when the enchant state
+-- actually changes — otherwise this fired a complete checklist rebuild every
+-- 2s forever, churning memory while idle.
 if C_Timer and C_Timer.NewTicker then
+    local lastWeaponSig
     C_Timer.NewTicker(2, function()
         local cfg = ChecklistCfg()
-        if cfg and cfg.weaponEnchant and not ns.checklistMoving then
+        if not (cfg and cfg.weaponEnchant and not ns.checklistMoving) then return end
+        if not GetWeaponEnchantInfo then return end
+        local hasMH, _, _, _, hasOH = GetWeaponEnchantInfo()
+        local sig = (hasMH and 1 or 0) + (hasOH and 2 or 0)
+        if sig ~= lastWeaponSig then
+            lastWeaponSig = sig
             UpdateChecklist()
         end
     end)
@@ -2063,21 +2090,41 @@ local function CdCfg() return activeProfile and activeProfile.cooldowns end
 local cdOnCooldown = {}   -- id(number) -> true while on its own cooldown
 local cdReadyAt    = {}   -- id -> the ready time we've currently scheduled for
 local cdToken      = {}   -- id -> latest timer token (stale fires are ignored)
+local cdPolling    = {}   -- id -> true while a fallback poll chain is running
 
 -- ready(bool), readyAt(time it next becomes ready, or nil if ready now). Ignores
 -- the GCD (a short shared cooldown) and treats a charge spell as ready when it
 -- has at least one charge available.
+-- The cooldown table's startTime/duration are SECRET in combat for some spells
+-- (e.g. Avenging Wrath) — touching them with arithmetic taints and errors. So we
+-- decide ready/on-cooldown from the non-secret isActive/isOnGCD booleans and only
+-- read the timing through Reveal; when it's hidden we report on-cooldown with no
+-- known expiry (the caller then polls instead of scheduling an exact timer).
 local function CooldownReadyInfoOne(id)
     local GC = C_Spell and C_Spell.GetSpellCharges and C_Spell.GetSpellCharges(id)
-    if GC and (GC.maxCharges or 0) > 1 then
-        if (GC.currentCharges or 0) >= 1 then return true end
-        return false, (GC.cooldownStartTime or 0) + (GC.cooldownDuration or 0)
+    if GC and (GC.maxCharges or 0) > 1 and not IsSecret(GC.currentCharges) then
+        if (Reveal(GC.currentCharges, 0) or 0) >= 1 then return true end
+        local cs, cd = Reveal(GC.cooldownStartTime), Reveal(GC.cooldownDuration)
+        if cs and cd then return false, cs + cd end
+        return false                                         -- on cooldown, expiry hidden
     end
     local CD = C_Spell and C_Spell.GetSpellCooldown and C_Spell.GetSpellCooldown(id)
     if not CD then return true end
-    local dur = CD.duration or 0
-    if dur <= 1.6 then return true end                       -- off cooldown (or just the GCD)
-    local at = (CD.startTime or 0) + dur
+    if CD.isActive ~= nil then                               -- 12.x: non-secret state flags
+        if not CD.isActive then return true end              -- not on any cooldown
+        if CD.isOnGCD then return true end                   -- only the global cooldown
+        local st, dur = Reveal(CD.startTime), Reveal(CD.duration)
+        if st and dur and dur > 1.6 then
+            local at = st + dur
+            if at - GetTime() <= 0.05 then return true end
+            return false, at
+        end
+        return false                                         -- on cooldown, expiry hidden
+    end
+    -- Older field set without isActive: numeric path, but Reveal-guarded.
+    local dur = Reveal(CD.duration)
+    if not dur or dur <= 1.6 then return true end            -- off cooldown (or just the GCD)
+    local at = Reveal(CD.startTime, 0) + dur
     if at - GetTime() <= 0.05 then return true end
     return false, at
 end
@@ -2085,7 +2132,7 @@ end
 -- The spell IDs a cooldown entry covers: itself, hand-added alts, and (when
 -- combining) catalogued spells with the same / similar name. Lets one entry
 -- follow an ability across its talent/override variants.
-local function CooldownEntryIds(id)
+local function BuildCooldownEntryIds(id)
     local cfg = CdCfg()
     if not cfg then return { id } end
     local idStr = tostring(id)
@@ -2109,15 +2156,32 @@ local function CooldownEntryIds(id)
     return list
 end
 
+-- Cached so the hot eval path (cooldown event, cast backstop, the 0.5s combat
+-- poll) doesn't rebuild a table and rescan the whole `seen` catalog with
+-- NamesSimilar every call — that churn was a real memory leak. Invalidated
+-- whenever the cooldown watch/alts/combine settings change.
+local cdEntryCache = {}
+local function InvalidateCdEntries() wipe(cdEntryCache) end
+local function CooldownEntryIds(id)
+    local cached = cdEntryCache[id]
+    if cached then return cached end
+    cached = BuildCooldownEntryIds(id)
+    cdEntryCache[id] = cached
+    return cached
+end
+
 -- Combined readiness: on cooldown if ANY covered spell is, ready only when all
 -- are; readyAt is the latest of the ones still on cooldown.
 local function CooldownReadyInfo(id)
-    local latest
+    local anyOn, latest = false, nil
     for _, sid in ipairs(CooldownEntryIds(id)) do
         local ready, at = CooldownReadyInfoOne(sid)
-        if not ready and (not latest or (at and at > latest)) then latest = at end
+        if not ready then
+            anyOn = true
+            if at and (not latest or at > latest) then latest = at end
+        end
     end
-    if latest then return false, latest end
+    if anyOn then return false, latest end   -- latest may be nil (combat-masked)
     return true
 end
 
@@ -2140,22 +2204,47 @@ EvalCooldown = function(id)
     local ready, at = CooldownReadyInfo(id)
     if ready then
         cdReadyAt[id] = nil
+        cdPolling[id] = nil
+        cdToken[id] = (cdToken[id] or 0) + 1   -- invalidate any pending timer/poll
         if cdOnCooldown[id] then
             cdOnCooldown[id] = nil
             FireCooldownReady(id)
         end
-    else
+    elseif at then
+        -- Exact expiry known: schedule one timer for it, re-arming only when the
+        -- ready time actually moved so the frequent cooldown event doesn't churn.
         cdOnCooldown[id] = true
-        -- Only (re)schedule when the ready time actually changed, so the
-        -- frequent cooldown event doesn't churn a timer every fire.
-        if not (cdReadyAt[id] and math.abs(cdReadyAt[id] - (at or 0)) < 0.1) then
+        cdPolling[id] = nil
+        if not (cdReadyAt[id] and math.abs(cdReadyAt[id] - at) < 0.1) then
             cdReadyAt[id] = at
             local token = (cdToken[id] or 0) + 1
             cdToken[id] = token
             if C_Timer then
-                C_Timer.After(math.max(0.05, (at or GetTime()) - GetTime() + 0.05),
+                C_Timer.After(math.max(0.05, at - GetTime() + 0.05),
                     function() if cdToken[id] == token then EvalCooldown(id) end end)
             end
+        end
+    else
+        -- On cooldown but the expiry is hidden (combat-masked numbers): we can't
+        -- time it, so run a single self-sustaining poll until it reads ready. The
+        -- guard keeps re-entrant events from starting a second chain.
+        cdOnCooldown[id] = true
+        cdReadyAt[id] = nil
+        if not cdPolling[id] and C_Timer then
+            cdPolling[id] = true
+            local token = (cdToken[id] or 0) + 1
+            cdToken[id] = token
+            local function poll()
+                if cdToken[id] ~= token then return end
+                local r2, at2 = CooldownReadyInfo(id)
+                if r2 or at2 then
+                    cdPolling[id] = nil
+                    EvalCooldown(id)               -- fire, or hand to the timed path
+                else
+                    C_Timer.After(0.5, poll)
+                end
+            end
+            C_Timer.After(0.5, poll)
         end
     end
 end
@@ -2173,7 +2262,8 @@ ns.EvalAllCooldowns = EvalAllCooldowns
 
 -- Drop all transition state (used on spec change, where the watched set differs).
 function ns.ResyncCooldowns()
-    wipe(cdOnCooldown); wipe(cdReadyAt); wipe(cdToken)
+    wipe(cdOnCooldown); wipe(cdReadyAt); wipe(cdToken); wipe(cdPolling)
+    InvalidateCdEntries()
     EvalAllCooldowns()
 end
 
@@ -2194,6 +2284,7 @@ function ns.SetCooldownWatch(id, on)
         if cfg.alts then cfg.alts[idStr] = nil end
         if cfg.speak then cfg.speak[idStr] = nil end
     end
+    InvalidateCdEntries()   -- covered-ID set may have changed
     local n = tonumber(id)
     cdOnCooldown[n] = nil; cdReadyAt[n] = nil   -- reset so re-adding can't double-fire
     if on and n then EvalCooldown(n) end
@@ -3320,12 +3411,14 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         SeedPresent()
         RestoreChecklistPosition()
         RestoreChecklistTickerPosition()
+        InvalidatePlayerNameSet()
         ns.UpdateChecklist()
         EvalAllCooldowns()
         if C_Timer then
             C_Timer.After(2, function()
                 zoneSettling = false
                 SeedPresent()
+                InvalidatePlayerNameSet()
                 ns.UpdateChecklist()
                 EvalAllCooldowns()
             end)
@@ -3346,7 +3439,12 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         -- Combat ended: reads are reliable again. Re-sync silently (no cues)
         -- so we don't fire a burst for changes that happened while masked.
         SeedPresent()
+        InvalidatePlayerNameSet()   -- auras may have changed while masked; re-sweep once
         ns.UpdateChecklist()
+        -- Cooldown timing is unmasked again now, so re-evaluate: any spell that
+        -- was being polled (its expiry hidden in combat) converts to a single
+        -- precise timer here instead of spinning the 0.5s poll out of combat.
+        EvalAllCooldowns()
 
     elseif event == "UNIT_AURA" then
         ScanPlayerAuras()
@@ -3375,6 +3473,12 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             -- works in and out of combat — so buffs/debuffs you cast in a fight
             -- still make it into the picker (when the aura shares the cast id).
             C_Timer.After(0.1, function()
+                -- Re-evaluate cooldowns off the cast: SPELL_UPDATE_COOLDOWN's
+                -- timing is unreliable in a busy fight (it can fire before the
+                -- new cooldown registers, so the on-cooldown sample is missed and
+                -- the ready timer never arms). The cast is never masked, and by
+                -- now GetSpellCooldown reflects the started cooldown.
+                EvalAllCooldowns()
                 local seen = AuraCueDB and AuraCueDB.seen
                 if not seen then return end
                 local key = tostring(spellID)
@@ -3874,6 +3978,25 @@ SlashCmdList["AURACUE"] = function(msg)
                     end, true)
                 end
                 chatPrint("current buffs: " .. table.concat(names, " | "))
+            end
+            -- Cooldown watch state: our tracked on-cooldown flag vs. the live
+            -- read, so a "not firing in combat" report shows whether the
+            -- on-cooldown sample was caught (held=yes) and when it's due.
+            local cdcfg = CdCfg()
+            if cdcfg and cdcfg.ids and next(cdcfg.ids) then
+                chatPrint("cooldowns (combat=" .. tostring(InCombatLockdown()) .. "):")
+                for idStr in pairs(cdcfg.ids) do
+                    local cid = tonumber(idStr)
+                    if cid then
+                        local ready, at = CooldownReadyInfo(cid)
+                        local rem = (not ready and at) and string.format("%.1fs", at - GetTime()) or "-"
+                        local held = cdOnCooldown[cid] and "yes" or "no"
+                        local poll = cdPolling[cid] and " |cffff6060POLLING|r" or ""
+                        print("  " .. idStr .. " " .. (C_Spell.GetSpellName(cid) or "?")
+                            .. ": " .. (ready and "|cff60ff60ready|r" or "|cffffd200on cd|r")
+                            .. " rem=" .. rem .. " held=" .. held .. poll)
+                    end
+                end
             end
 
         elseif cmd == "status" then

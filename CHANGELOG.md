@@ -40,6 +40,22 @@
   longer exists, so it never ran.
 - Fixed cues set to **"only in combat"** so they evaluate combat the same way
   the rest of the addon does, avoiding mis-fires at the edges of a fight.
+- Fixed **cooldown-ready alerts not firing in combat** (and a hidden Lua error).
+  In combat the game returns some spells' cooldown timing as protected values
+  (e.g. Avenging Wrath); reading them was erroring out the cooldown check every
+  update, so nothing was ever tracked. It now reads that timing safely and falls
+  back to the spell's non-protected active/ready state, polling for the exact
+  ready moment when the time itself is hidden. Cooldown starts are also now
+  registered off your cast as a backstop. `/cue debug` dumps each watched
+  cooldown's state.
+- **Memory: cut steady churn in and out of combat.** The missing-buff check
+  re-scanned every one of your auras on every refresh and the silent 2-second
+  weapon-enchant poll ran a full rebuild every time — so it allocated constantly
+  while idle. Now the aura scan is cached and only redone when your auras change,
+  and the weapon poll only does the full update when an enchant actually expires
+  or is reapplied. The background aura cataloguing no longer sweeps during combat
+  (where it can read nothing anyway), and the cooldown checks no longer rebuild
+  their lookup tables on every tick. Together these stop the gradual memory climb.
 
 ## v0.72.1
 
